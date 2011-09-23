@@ -44,7 +44,7 @@ class WindowManager(EventHandler):
         if window in self.clients:
             return self.clients[window]
         else:
-            info('Managing window 0x%x' % window)
+            debug("Managing window 0x%x" % window)
 
             # Add the client window to the server's save-set so that it gets
             # reparented when we die. The server automatically removes windows
@@ -56,6 +56,7 @@ class WindowManager(EventHandler):
             return client
             
     def unmanage(self, window):
+        debug("Unmanaging window 0x%x" % window)
         return self.clients.pop(window, None)
 
     def event_loop(self):
@@ -63,12 +64,15 @@ class WindowManager(EventHandler):
             self.handle_event(self.conn.wait_for_event())
 
     def unhandled_event(self, event):
+        debug("Ignoring unhandled %s" % event.__class__.__name__)
         pass
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
         if event.window not in self.clients:
             # Just grant the request.
+            debug("Granting ConfigureWindow request for unmanaged window 0x%x" %
+                  event.window)
             self.conn.core.ConfigureWindowChecked(event.window,
                 event.value_mask,
                 select_values(event.value_mask,
@@ -81,6 +85,7 @@ class WindowManager(EventHandler):
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
         if self.manage(event.window):
+            debug("Granting MapRequest from client 0x%x" % event.window)
             self.conn.core.MapWindowChecked(event.window).check()
             self.conn.flush()
 
