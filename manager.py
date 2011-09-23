@@ -75,6 +75,7 @@ class Manager(EventHandler):
                                event.border_width,
                                event.sibling,
                                event.stack_mode])).check()
+
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
         if event.window in self.clients or self.manage(event.window):
