@@ -1,7 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-"""A manager is a concrete implementation of a window management strategy for
-a particular screen."""
+"""A window manager manages the children of the root window of a screen."""
 
 from logging import basicConfig as logconfig, debug, info, warning, error
 
@@ -12,7 +11,7 @@ from client import *
 from event import *
 from xutil import *
 
-class Manager(EventHandler):
+class WindowManager(EventHandler):
     def __init__(self, conn, screen=None):
         self.conn = conn
         self.clients = {} # managed clients, indexed by window ID
@@ -121,5 +120,5 @@ if __name__ == "__main__":
                     logging.WARNING,
               format="%(levelname)s: %(message)s")
 
-    manager = Manager(xcb.connect(options.display))
+    manager = WindowManager(xcb.connect(options.display))
     manager.event_loop()
