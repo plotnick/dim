@@ -15,7 +15,7 @@ class AtomCache(object):
     def prime_cache(self, names):
         cookies = [self.conn.core.InternAtom(False, len(name), name)
                    for name in names]
-        for (name, cookie) in zip(names, cookies):
+        for name, cookie in zip(names, cookies):
             self.atoms[name] = cookie.reply().atom
 
     def __getitem__(self, name):
@@ -87,7 +87,7 @@ def value_list(flag_class, **kwargs):
                                        else flag_class)
     
     values = [(value, flags[name.replace("_", "").lower()])
-              for (name, value) in kwargs.items()]
+              for name, value in kwargs.items()]
     return (reduce(operator.or_, map(operator.itemgetter(1), values), 0),
             map(operator.itemgetter(0),
                 sorted(values, key=operator.itemgetter(1))))
