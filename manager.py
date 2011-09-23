@@ -1,3 +1,5 @@
+# -*- mode: Python; coding: utf-8 -*-
+
 """A manager is a concrete implementation of a window management strategy for
 a particular screen."""
 
@@ -6,10 +8,11 @@ from logging import basicConfig as logconfig, debug, info, warning, error
 import xcb
 from xcb.xproto import *
 
-from client import ClientWindow
+from client import *
+from event import *
 from xutil import *
 
-class Manager(object):
+class Manager(EventHandler):
     def __init__(self, conn, screen=None):
         self.conn = conn
         self.managed = {} # managed clients, indexed by window ID
@@ -55,28 +58,44 @@ class Manager(object):
 
     def event_loop(self):
         while True:
-            event = self.conn.wait_for_event()
-            dump_event(event)
-            if isinstance(event, MapRequestEvent):
-                if event.window in self.managed or self.manage(event.window):
-                    self.conn.core.MapWindowChecked(event.window).check()
-                    self.conn.flush()
-            elif isinstance(event, ConfigureRequestEvent):
-                if event.window not in self.managed:
-                    # Just grant the request.
-                    self.conn.core.ConfigureWindowChecked(event.window,
-                        event.value_mask,
-                        select_values(event.value_mask,
-                                      [event.x, event.y,
-                                       event.width, event.height,
-                                       event.border_width,
-                                       event.sibling,
-                                       event.stack_mode])).check()
+            self.handle_event(self.conn.wait_for_event())
 
-def dump_event(event):
-    print event.__class__.__name__
-    for attr, value in event.__dict__.items():
-        print "  %s: %s" % (attr, value)
+    def unhandled_event(self, event):
+        pass
+
+    @handler(ConfigureRequestEvent)
+    def handle_configure_request(self, event):
+        if event.window not in self.managed:
+            # Just grant the request.
+            self.conn.core.ConfigureWindowChecked(event.window,
+                event.value_mask,
+                select_values(event.value_mask,
+                              [event.x, event.y,
+                               event.width, event.height,
+                               event.border_width,
+                               event.sibling,
+                               event.stack_mode])).check()
+    @handler(MapRequestEvent)
+    def handle_map_request(self, event):
+        if event.window in self.managed or self.manage(event.window):
+            self.conn.core.MapWindowChecked(event.window).check()
+            self.conn.flush()
+
+    @handler(UnmapNotifyEvent)
+    def handle_unmap_notify(self, event):
+        if event.window in self.managed:
+            # See ICCCM §4.1.3.1 and 4.1.4. It's entirely possible
+            # that by the time we receive the UnmapNotify event,
+            # the window will already have been destroyed, but
+            # that's fine; we'll just ignore any BadWindow errors.
+            try:
+                self.managed[event.window].wm_state = WMState.WithdrawnState
+            except BadWindow:
+                pass
+
+    @handler(DestroyNotifyEvent)
+    def handle_destroy_notify(self, event):
+        self.unmanage(event.window)
 
 if __name__ == "__main__":
     from optparse import OptionParser
