@@ -15,7 +15,7 @@ from xutil import *
 class Manager(EventHandler):
     def __init__(self, conn, screen=None):
         self.conn = conn
-        self.managed = {} # managed clients, indexed by window ID
+        self.clients = {} # managed clients, indexed by window ID
         self.atoms = AtomCache(conn)
         self.screen = conn.get_setup().roots[screen if screen is not None
                                                     else conn.pref_screen]
@@ -47,14 +47,14 @@ class Manager(EventHandler):
         # from the save-set when they are destroyed.
         self.conn.core.ChangeSaveSet(SetMode.Insert, window)
 
-        if window not in self.managed:
+        if window not in self.clients:
             info('Managing window 0x%x' % window)
             client = ClientWindow(window, self)
-            self.managed[window] = client
+            self.clients[window] = client
             return client
             
     def unmanage(self, window):
-        return self.managed.pop(window, None)
+        return self.clients.pop(window, None)
 
     def event_loop(self):
         while True:
@@ -65,7 +65,7 @@ class Manager(EventHandler):
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
-        if event.window not in self.managed:
+        if event.window not in self.clients:
             # Just grant the request.
             self.conn.core.ConfigureWindowChecked(event.window,
                 event.value_mask,
@@ -77,19 +77,19 @@ class Manager(EventHandler):
                                event.stack_mode])).check()
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
-        if event.window in self.managed or self.manage(event.window):
+        if event.window in self.clients or self.manage(event.window):
             self.conn.core.MapWindowChecked(event.window).check()
             self.conn.flush()
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        if event.window in self.managed:
+        if event.window in self.clients:
             # See ICCCM §4.1.3.1 and 4.1.4. It's entirely possible
             # that by the time we receive the UnmapNotify event,
             # the window will already have been destroyed, but
             # that's fine; we'll just ignore any BadWindow errors.
             try:
-                self.managed[event.window].wm_state = WMState.WithdrawnState
+                self.clients[event.window].wm_state = WMState.WithdrawnState
             except BadWindow:
                 pass
 
