@@ -41,13 +41,16 @@ class WindowManager(EventHandler):
         if attrs.override_redirect:
             return None
 
-        # Add the client window to the server's save-set so that it gets
-        # reparented when we die. The server automatically removes windows
-        # from the save-set when they are destroyed.
-        self.conn.core.ChangeSaveSet(SetMode.Insert, window)
-
-        if window not in self.clients:
+        if window in self.clients:
+            return self.clients[window]
+        else:
             info('Managing window 0x%x' % window)
+
+            # Add the client window to the server's save-set so that it gets
+            # reparented when we die. The server automatically removes windows
+            # from the save-set when they are destroyed.
+            self.conn.core.ChangeSaveSet(SetMode.Insert, window)
+
             client = ClientWindow(window, self)
             self.clients[window] = client
             return client
@@ -77,18 +80,18 @@ class WindowManager(EventHandler):
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
-        if event.window in self.clients or self.manage(event.window):
+        if self.manage(event.window):
             self.conn.core.MapWindowChecked(event.window).check()
             self.conn.flush()
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         if event.window in self.clients:
-            # See ICCCM §4.1.3.1 and 4.1.4. It's entirely possible
-            # that by the time we receive the UnmapNotify event,
-            # the window will already have been destroyed, but
+            # It's entirely possible that by the time we receive this
+            # event, the window will already have been destroyed. But
             # that's fine; we'll just ignore any BadWindow errors.
             try:
+                # See ICCCM §4.1.3.1, 4.1.4.
                 self.clients[event.window].wm_state = WMState.WithdrawnState
             except BadWindow:
                 pass
