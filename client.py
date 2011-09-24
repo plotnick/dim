@@ -7,9 +7,10 @@ from array import array
 from codecs import decode
 from fractions import Fraction
 from struct import unpack_from
+
 from xcb.xproto import *
 
-from xutil import MAX_CARD32
+from xutil import MAX_CARD32, Geometry
 
 class WMState(object):
     """A representation of the WM_STATE type (ICCCM §5.1.1.3)"""
@@ -114,6 +115,12 @@ class ClientWindow(object):
         self.window = window
         self.manager = manager
         self.decorator = decorator
+
+        reply = self.manager.conn.core.GetGeometry(window).reply()
+        self.geometry = Geometry(reply.x, reply.y,
+                                 reply.width, reply.height,
+                                 reply.border_width)
+
         self.wm_state = WMState.NormalState
 
     def atom(self, x):

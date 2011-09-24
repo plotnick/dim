@@ -1,7 +1,36 @@
+# -*- mode: Python; coding: utf-8 -*-
+
+from collections import namedtuple
 import operator
+from struct import pack
+
 from xcb.xproto import *
 
 MAX_CARD32 = 2**32 - 1
+
+Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
+Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
+    (self.width, self.height, self.x, self.y)
+
+def is_move_only(old_geometry, new_geometry):
+    """Returns True if the new geometry represents a move without a resize
+    of the old geometry.
+
+    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(1, 1, 1, 1, 1))
+    False
+    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(2, 2, 1, 1, 1))
+    True
+    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(2, 2, 2, 2, 1))
+    False
+    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(2, 2, 1, 1, 2))
+    False
+    """
+    return (old_geometry and new_geometry and
+            (new_geometry.x != old_geometry.x or
+             new_geometry.y != old_geometry.y) and
+            new_geometry.width == old_geometry.width and
+            new_geometry.height == old_geometry.height and
+            new_geometry.border_width == old_geometry.border_width)
 
 class AtomCache(object):
     """A simple cache for X atoms."""
@@ -91,6 +120,25 @@ def value_list(flag_class, **kwargs):
     return (reduce(operator.or_, map(operator.itemgetter(1), values), 0),
             map(operator.itemgetter(0),
                 sorted(values, key=operator.itemgetter(1))))
+
+def configure_notify(connection, window, x, y, width, height, border_width,
+                     override_redirect=False):
+    """Send a synthetic ConfigureNotify event to a window, as per ICCCM §4.1.5
+    and §4.2.3."""
+    event = pack("bx2xIIIhhHHHB5x",
+                 22, # code
+                 window, # event
+                 window, # window
+                 0, # above-sibling: None
+                 x + border_width, # x
+                 y + border_width, # y
+                 width, # width
+                 height, # height
+                 border_width, # border-width
+                 override_redirect) # override-redirect
+    assert len(event) == 32
+    connection.core.SendEventChecked(False, window,
+                                     EventMask.StructureNotify, event).check()
 
 if __name__ == "__main__":
     import doctest

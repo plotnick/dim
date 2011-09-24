@@ -59,6 +59,23 @@ class WindowManager(EventHandler):
         debug("Unmanaging window 0x%x" % window)
         return self.clients.pop(window, None)
 
+    def place(self, client, geometry):
+        """Place a client window and return the geometry actually configured,
+        which may or may not be influenced or determined by the requested
+        geometry. The geometry recorded in the client instance will be updated
+        only when we receive the corresponding ConfigureNotify event."""
+        if geometry == client.geometry:
+            return
+        debug("Placing client 0x%x at %s" % (client.window, geometry))
+        self.conn.core.ConfigureWindowChecked(client.window,
+                                              (ConfigWindow.X |
+                                               ConfigWindow.Y |
+                                               ConfigWindow.Width |
+                                               ConfigWindow.Height |
+                                               ConfigWindow.BorderWidth),
+                                              geometry).check()
+        return geometry
+
     def event_loop(self):
         while True:
             self.handle_event(self.conn.wait_for_event())
@@ -69,7 +86,23 @@ class WindowManager(EventHandler):
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
-        if event.window not in self.clients:
+        """Handle a ConfigureWindow request from a top-level window.
+        See ICCCM §4.1.5 for details."""
+        if event.window in self.clients:
+            client = self.clients[event.window]
+            requested_geometry = Geometry(event.x, event.y,
+                                          event.width, event.height,
+                                          event.border_width)
+            debug("Client 0x%x requested geometry %s" %
+                  (client.window, requested_geometry))
+            old_geometry = client.geometry
+            new_geometry = self.place(client, requested_geometry)
+            if (new_geometry == old_geometry or
+                is_move_only(old_geometry, new_geometry)):
+                debug("Sending synthetic ConfigureNotify to client 0x%x" %
+                      client.window)
+                configure_notify(self.conn, client.window, *client.geometry)
+        else:
             # Just grant the request.
             debug("Granting ConfigureWindow request for unmanaged window 0x%x" %
                   event.window)
@@ -81,6 +114,19 @@ class WindowManager(EventHandler):
                                event.border_width,
                                event.sibling,
                                event.stack_mode])).check()
+
+    @handler(ConfigureNotifyEvent)
+    def handle_configure_notify(self, event):
+        """Update our record of a client's geometry."""
+        if event.override_redirect:
+            return
+        if event.window in self.clients:
+            client = self.clients[event.window]
+            client.geometry = Geometry(event.x, event.y,
+                                       event.width, event.height,
+                                       event.border_width)
+            debug("Noting geometry for client 0x%x as %s" %
+                  (client.window, client.geometry))
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
