@@ -12,6 +12,16 @@ from event import *
 from xutil import *
 
 class WindowManager(EventHandler):
+    """A window manager for one X screen.
+
+    This class provides only the most basic window management functionality.
+    Subclasses are expected to override or augment many of its methods and
+    add their own management protocols."""
+
+    ROOT_EVENT_MASK = (EventMask.StructureNotify |
+                       EventMask.SubstructureNotify |
+                       EventMask.SubstructureRedirect)
+
     def __init__(self, conn, screen=None):
         self.conn = conn
         self.clients = {} # managed clients, indexed by window ID
@@ -19,17 +29,20 @@ class WindowManager(EventHandler):
         self.screen = conn.get_setup().roots[screen if screen is not None
                                                     else conn.pref_screen]
 
-        # Make this client a window manager by selecting SubstructureRedirect
-        # events on the root window. If another client has already done so
-        # (i.e., there's already a window manager running on this screen),
-        # the check will raise an exception.
+        # Make this client a window manager by selecting (at least)
+        # SubstructureRedirect events on the root window. If another client
+        # has already done so (i.e., there's already a window manager
+        # running on this screen), the check will raise an exception.
+        assert self.ROOT_EVENT_MASK & EventMask.SubstructureRedirect, \
+            "A window manager must select for SubstructureRedirect."
         self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
-            CW.EventMask,
-            [EventMask.StructureNotify |
-             EventMask.SubstructureNotify |
-             EventMask.SubstructureRedirect]).check()
+            CW.EventMask, [self.ROOT_EVENT_MASK]).check()
 
-        # Adopt any extant top-level windows.
+        # Adopt any suitable top-level windows.
+        self.scan()
+
+    def scan(self):
+        """Scan for top-level windows to manage."""
         tree = self.conn.core.QueryTree(self.screen.root).reply()
         for child in tree.children:
             self.manage(child)
