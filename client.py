@@ -10,7 +10,7 @@ from struct import unpack_from
 
 from xcb.xproto import *
 
-from xutil import MAX_CARD32, Geometry
+from xutil import MAX_CARD32
 
 class WMState(object):
     """A representation of the WM_STATE type (ICCCM §5.1.1.3)"""
@@ -115,11 +115,7 @@ class ClientWindow(object):
         self.window = window
         self.manager = manager
         self.decorator = decorator
-
-        reply = self.manager.conn.core.GetGeometry(window).reply()
-        self.geometry = Geometry(reply.x, reply.y,
-                                 reply.width, reply.height,
-                                 reply.border_width)
+        self.geometry = None
 
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x
