@@ -132,12 +132,12 @@ class WindowManager(EventHandler):
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
-        """Map a top-level window on behalf of a client. If the client was not
-        already managed, manage it."""
-        if self.manage(event.window):
-            debug("Granting MapRequest from client 0x%x" % event.window)
-            self.conn.core.MapWindowChecked(event.window).check()
-            self.conn.flush()
+        """Map a top-level window."""
+        debug("Granting MapRequest from client 0x%x" % event.window)
+        self.conn.core.MapWindowChecked(event.window).check()
+        client = self.manage(event.window)
+        if client:
+            client.wm_state = WMState.NormalState
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):

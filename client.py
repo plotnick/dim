@@ -121,8 +121,6 @@ class ClientWindow(object):
                                  reply.width, reply.height,
                                  reply.border_width)
 
-        self.wm_state = WMState.NormalState
-
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x
 
