@@ -14,17 +14,7 @@ Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
 
 def is_move_only(old_geometry, new_geometry):
     """Returns True if the new geometry represents a move without a resize
-    of the old geometry.
-
-    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(1, 1, 1, 1, 1))
-    False
-    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(2, 2, 1, 1, 1))
-    True
-    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(2, 2, 2, 2, 1))
-    False
-    >>> is_move_only(Geometry(1, 1, 1, 1, 1), Geometry(2, 2, 1, 1, 2))
-    False
-    """
+    of the old geometry."""
     return (old_geometry and new_geometry and
             (new_geometry.x != old_geometry.x or
              new_geometry.y != old_geometry.y) and
@@ -69,19 +59,7 @@ def select_values(value_mask, values):
     return [values[i] for i in range(len(values)) if value_mask & (1 << i)]
 
 def power_of_2(x):
-    """Check whether x is a power of 2.
-
-    >>> power_of_2(0)
-    False
-    >>> power_of_2(1)
-    True
-    >>> power_of_2(2)
-    True
-    >>> power_of_2(3)
-    False
-    >>> power_of_2(4)
-    True
-    """
+    """Check whether x is a power of 2."""
     return isinstance(x, int) and x > 0 and x & (x - 1) == 0
 
 def popcount(x):
@@ -91,19 +69,7 @@ def popcount(x):
 def value_list(flag_class, **kwargs):
     """Construct and return a value-mask and value-list from the supplied
     keyword arguments. The flag_class should be an object with attributes
-    that define the flags for the possible values.
-
-    >>> value_list(ConfigWindow, x="X", y="Y", stack_mode="Above")
-    (67, ['X', 'Y', 'Above'])
-    >>> value_list(ConfigWindow, x="X", y="Y", z="Z")
-    Traceback (most recent call last):
-      ...
-    KeyError: 'z'
-    >>> value_list(type('Foo', (object,), dict(a=1, b=1)), a="a", b="b")
-    Traceback (most recent call last):
-      ...
-    AssertionError: Duplicate flags in Foo
-    """
+    that define the flags for the possible values."""
     flags = {}
     for attr in dir(flag_class):
         if not attr.startswith("_"):
@@ -139,7 +105,3 @@ def configure_notify(connection, window, x, y, width, height, border_width,
     assert len(event) == 32
     connection.core.SendEventChecked(False, window,
                                      EventMask.StructureNotify, event).check()
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
