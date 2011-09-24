@@ -3,6 +3,7 @@
 """A window manager manages the children of the root window of a screen."""
 
 from logging import basicConfig as logconfig, debug, info, warning, error
+from select import select
 
 import xcb
 from xcb.xproto import *
@@ -92,8 +93,24 @@ class WindowManager(EventHandler):
         return geometry
 
     def event_loop(self):
+        """The main event loop of the window manager."""
+        self.conn.flush()
+
+        # We use a select-based loop instead of XCB's wait_for_event because
+        # (a) select handles signals correctly, and (b) wait_for_event blocks
+        # the entire interpreter, not just the current thread.
+        rlist = [self.conn.get_file_descriptor()]
+        wlist = []
+        xlist = []
         while True:
-            self.handle_event(self.conn.wait_for_event())
+            while True:
+                # Process all pending events from XCB.
+                event = self.conn.poll_for_event()
+                if event:
+                    self.handle_event(event)
+                else:
+                    break
+            select(rlist, wlist, xlist)
 
     def unhandled_event(self, event):
         debug("Ignoring unhandled %s" % event.__class__.__name__)
