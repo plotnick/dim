@@ -26,6 +26,7 @@ class AtomCache(object):
     """A simple cache for X atoms."""
 
     def __init__(self, conn, names=[]):
+        assert isinstance(conn, xcb.Connection)
         self.conn = conn
         self.atoms = {}
         if names:
