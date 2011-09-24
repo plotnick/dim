@@ -90,16 +90,15 @@ class WindowManager(EventHandler):
         which may or may not be influenced or determined by the requested
         geometry. The geometry recorded in the client instance will be updated
         only when we receive the corresponding ConfigureNotify event."""
-        if geometry == client.geometry:
-            return
-        debug("Placing client 0x%x at %s" % (client.window, geometry))
-        self.conn.core.ConfigureWindowChecked(client.window,
-                                              (ConfigWindow.X |
-                                               ConfigWindow.Y |
-                                               ConfigWindow.Width |
-                                               ConfigWindow.Height |
-                                               ConfigWindow.BorderWidth),
-                                              geometry).check()
+        if geometry != client.geometry:
+            debug("Placing client 0x%x at %s" % (client.window, geometry))
+            self.conn.core.ConfigureWindowChecked(client.window,
+                                                  (ConfigWindow.X |
+                                                   ConfigWindow.Y |
+                                                   ConfigWindow.Width |
+                                                   ConfigWindow.Height |
+                                                   ConfigWindow.BorderWidth),
+                                                  geometry).check()
         return geometry
 
     def event_loop(self):
