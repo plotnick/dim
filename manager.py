@@ -35,6 +35,7 @@ class WindowManager(EventHandler):
             self.manage(child)
 
     def manage(self, window):
+        """Manage a window and return the client instance."""
         # Since we're not a compositing manager, we can simply ignore
         # override-redirect windows.
         attrs = self.conn.core.GetWindowAttributes(window).reply()
@@ -56,6 +57,7 @@ class WindowManager(EventHandler):
             return client
             
     def unmanage(self, window):
+        """Unmanage the client with the given top-level window."""
         debug("Unmanaging window 0x%x" % window)
         return self.clients.pop(window, None)
 
@@ -130,6 +132,8 @@ class WindowManager(EventHandler):
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
+        """Map a top-level window on behalf of a client. If the client was not
+        already managed, manage it."""
         if self.manage(event.window):
             debug("Granting MapRequest from client 0x%x" % event.window)
             self.conn.core.MapWindowChecked(event.window).check()
@@ -137,6 +141,8 @@ class WindowManager(EventHandler):
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
+        """Note the withdraw of a top-level window and update the client's
+        state appropriately."""
         if event.window in self.clients:
             # It's entirely possible that by the time we receive this
             # event, the window will already have been destroyed. But
@@ -149,6 +155,8 @@ class WindowManager(EventHandler):
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
+        """Note the destruction of a top-level window, and unmanage the
+        corresponding client."""
         self.unmanage(event.window)
 
 if __name__ == "__main__":
