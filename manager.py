@@ -50,25 +50,35 @@ class WindowManager(EventHandler):
 
     def manage(self, window):
         """Manage a window and return the client instance."""
+        attrs = self.conn.core.GetWindowAttributes(window).reply()
+        if not attrs:
+            return None
+
         # Since we're not a compositing manager, we can simply ignore
         # override-redirect windows.
-        attrs = self.conn.core.GetWindowAttributes(window).reply()
         if attrs.override_redirect:
             return None
 
         if window in self.clients:
             return self.clients[window]
-        else:
-            debug("Managing window 0x%x" % window)
 
-            # Add the client window to the server's save-set so that it gets
-            # reparented when we die. The server automatically removes windows
-            # from the save-set when they are destroyed.
-            self.conn.core.ChangeSaveSet(SetMode.Insert, window)
+        debug("Managing window 0x%x" % window)
 
-            client = ClientWindow(window, self)
-            self.clients[window] = client
-            return client
+        # Add the window to the server's save-set so that it gets
+        # reparented when we die. The server automatically removes
+        # windows from the save-set when they are destroyed.
+        self.conn.core.ChangeSaveSet(SetMode.Insert, window)
+
+        client = ClientWindow(window, self)
+        self.clients[window] = client
+
+        # ICCCM §4.1.3.1: "The window manager will place a WM_STATE
+        # property ... on each top-level client window that is not in
+        # the Withdrawn state."
+        if attrs.map_state != MapState.Unmapped:
+            client.wm_state = WMState.NormalState
+
+        return client
             
     def unmanage(self, window):
         """Unmanage the client with the given top-level window."""
