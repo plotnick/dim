@@ -166,27 +166,29 @@ class TestWMStartup(WMTestCase):
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):
         super(TestWMClientMoveResize, self).setUp()
-        self.initial_geometry = Geometry(0, 0, 100, 100, 0)
+        self.initial_geometry = Geometry(0, 0, 100, 100, 5)
         self.w = self.add_window(TestWindow(self.conn, self.initial_geometry))
         self.w.map()
         
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
         self.w.resize(self.initial_geometry)
-        self.event_loop(lambda: (self.w.geometry == self.initial_geometry and
+        geometry = self.initial_geometry.translate(5, 5) # adjust for border
+        self.event_loop(lambda: (self.w.geometry == geometry and
                                  self.w.synthetic_configure_notify))
 
     def test_move(self):
         """Move a top-level window without changing its size"""
-        geometry = self.initial_geometry._replace(x=5, y=5)
-        self.w.resize(geometry)
+        self.w.resize(self.initial_geometry.translate(5, 5))
+        geometry = self.initial_geometry.translate(10, 10) # adjust for border
         self.event_loop(lambda: (self.w.geometry == geometry and
                                  self.w.synthetic_configure_notify))
 
     def test_resize(self):
         """Resize and move a top-level window"""
-        geometry = self.initial_geometry._replace(x=5, y=5, width=50, height=50)
+        geometry = Geometry(5, 5, 50, 50, 5)
         self.w.resize(geometry)
+        # The real ConfigureNotify event reflects the actual border width.
         self.event_loop(lambda: (self.w.geometry == geometry and
                                  not self.w.synthetic_configure_notify))
 
