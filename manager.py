@@ -171,8 +171,8 @@ class WindowManager(EventHandler):
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
-        """Map a top-level window."""
-        debug("Granting MapRequest from client 0x%x" % event.window)
+        """Map a top-level window on behalf of a client."""
+        debug("Granting MapRequest for client 0x%x" % event.window)
         self.conn.core.MapWindowChecked(event.window).check()
         client = self.manage(event.window)
         if client:
