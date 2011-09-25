@@ -191,4 +191,7 @@ class TestWMClientMoveResize(WMTestCase):
                                  not self.w.synthetic_configure_notify))
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.WARNING)
+
     unittest.main()
