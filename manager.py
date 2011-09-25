@@ -176,24 +176,28 @@ class WindowManager(EventHandler):
     def handle_map_request(self, event):
         """Map a top-level window on behalf of a client."""
         debug("Granting MapRequest for client 0x%x" % event.window)
-        self.conn.core.MapWindowChecked(event.window).check()
-        client = self.manage(event.window)
-        if client:
-            client.wm_state = WMState.NormalState
+        self.conn.core.MapWindow(event.window)
+        self.manage(event.window)
+
+    @handler(MapNotifyEvent)
+    def handle_map_notify(self, event):
+        """Note completion of the transition from Withdrawn → Normal state."""
+        if event.window not in self.clients:
+            return
+        try:
+            self.clients[event.window].wm_state = WMState.NormalState
+        except BadWindow:
+            pass
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        """Note the withdraw of a top-level window and update the client's
-        state appropriately."""
-        if event.window in self.clients:
-            # It's entirely possible that by the time we receive this
-            # event, the window will already have been destroyed. But
-            # that's fine; we'll just ignore any BadWindow errors.
-            try:
-                # See ICCCM §4.1.3.1, 4.1.4.
-                self.clients[event.window].wm_state = WMState.WithdrawnState
-            except BadWindow:
-                pass
+        """Note transition of a client window to the Withdrawn state."""
+        if event.window not in self.clients:
+            return
+        try:
+            self.clients[event.window].wm_state = WMState.WithdrawnState
+        except BadWindow:
+            pass
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
