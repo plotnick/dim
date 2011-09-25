@@ -104,5 +104,4 @@ def configure_notify(connection, window, x, y, width, height, border_width,
                  border_width, # border-width
                  override_redirect) # override-redirect
     assert len(event) == 32
-    connection.core.SendEventChecked(False, window,
-                                     EventMask.StructureNotify, event).check()
+    connection.core.SendEvent(False, window, EventMask.StructureNotify, event)

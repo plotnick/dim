@@ -140,12 +140,13 @@ class ClientWindow(object):
             data = value.encode("UTF-8")
         else:
             data = array(format_map[format], value)
-        self.manager.conn.core.ChangePropertyChecked(mode, self.window,
-                                                     self.atom(name),
-                                                     self.atom(type),
-                                                     format,
-                                                     len(data),
-                                                     data.tostring()).check()
+        self.manager.conn.core.ChangeProperty(mode,
+                                              self.window,
+                                              self.atom(name),
+                                              self.atom(type),
+                                              format,
+                                              len(data),
+                                              data.tostring())
 
     def get_ewmh_name(self, name):
         """The EWMH specification defines two application window properties,

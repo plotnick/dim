@@ -92,13 +92,13 @@ class WindowManager(EventHandler):
         only when we receive the corresponding ConfigureNotify event."""
         if geometry != client.geometry:
             debug("Placing client 0x%x at %s" % (client.window, geometry))
-            self.conn.core.ConfigureWindowChecked(client.window,
-                                                  (ConfigWindow.X |
-                                                   ConfigWindow.Y |
-                                                   ConfigWindow.Width |
-                                                   ConfigWindow.Height |
-                                                   ConfigWindow.BorderWidth),
-                                                  geometry).check()
+            self.conn.core.ConfigureWindow(client.window,
+                                           (ConfigWindow.X |
+                                            ConfigWindow.Y |
+                                            ConfigWindow.Width |
+                                            ConfigWindow.Height |
+                                            ConfigWindow.BorderWidth),
+                                           geometry)
         return geometry
 
     def event_loop(self):
@@ -147,14 +147,17 @@ class WindowManager(EventHandler):
             # Just grant the request.
             debug("Granting ConfigureWindow request for unmanaged window 0x%x" %
                   event.window)
-            self.conn.core.ConfigureWindowChecked(event.window,
-                event.value_mask,
-                select_values(event.value_mask,
-                              [event.x, event.y,
-                               event.width, event.height,
-                               event.border_width,
-                               event.sibling,
-                               event.stack_mode])).check()
+            self.conn.core.ConfigureWindow(event.window,
+                                           event.value_mask,
+                                           select_values(event.value_mask,
+                                                         [event.x,
+                                                          event.y,
+                                                          event.width,
+                                                          event.height,
+                                                          event.border_width,
+                                                          event.sibling,
+                                                          event.stack_mode]))
+        self.conn.flush()
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
