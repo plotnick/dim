@@ -24,6 +24,12 @@ def is_move_only(old_geometry, new_geometry):
             new_geometry.height == old_geometry.height and
             new_geometry.border_width == old_geometry.border_width)
 
+def is_synthetic_event(event):
+    """Returns True if the given event was produced via a SendEvent request."""
+    # Events begin with an 8-bit type code; synthetic events have the
+    # most-significant bit of this code set.
+    return (ord(event[0]) & 0x80) != 0
+
 class AtomCache(object):
     """A simple cache for X atoms."""
 

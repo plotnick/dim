@@ -8,7 +8,7 @@ from xcb.xproto import *
 
 from event import *
 from manager import WindowManager
-from xutil import Geometry, AtomCache
+from xutil import *
 
 class WindowManagerThread(Thread):
     def __init__(self):
@@ -91,7 +91,7 @@ class TestWindow(EventHandler):
                                  event.border_width)
         self.above_sibling = event.above_sibling
         self.override_redirect = event.override_redirect
-        self.synthetic_configure_notify = unpack("B", event[0])[0] & 0x80
+        self.synthetic_configure_notify = is_synthetic_event(event)
 
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
