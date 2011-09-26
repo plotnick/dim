@@ -25,6 +25,9 @@ class WindowManagerThread(Thread):
             pass
 
     def stop(self):
+        """Abort the window manager by closing its connection. This method
+        must not be called from the WM's thread, as it calls join."""
+        self.conn.flush()
         self.conn.disconnect()
         self.join()
 
@@ -114,7 +117,7 @@ class WMTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.wm_thread.stop()
-        self.conn.disconnect()
+        self.conn.flush()
 
     def add_window(self, window):
         assert isinstance(window, TestWindow)
