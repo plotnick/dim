@@ -60,6 +60,7 @@ class MoveResize(WindowManager):
                                             ConfigWindow.Height),
                                            (int16(max(1, delta_x + g.width)),
                                             int16(max(1, delta_y + g.height))))
+        self.conn.flush()
 
     def end_move_resize(self):
         debug("Ending move/resize")
