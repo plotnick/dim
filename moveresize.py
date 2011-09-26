@@ -18,33 +18,52 @@ class MoveResize(WindowManager):
                        EventMask.ButtonMotion |
                        EventMask.PointerMotionHint)
 
-    def __init__(self, conn, screen=None, mod_key=8):
+    def __init__(self, conn, screen=None,
+                 mod_key=8, move_button=1, resize_button=3):
+        assert mod_key != 0, "Invalid modifier key for move/resize"
+        assert move_button != resize_button, \
+            "Can't have move and resize on the same button"
+
         super(MoveResize, self).__init__(conn, screen)
 
         self.moving = None
+        self.move_button = move_button
+        self.resize_button = resize_button
 
-        for button in (1, 2, 3):
+        for button in (move_button, resize_button):
             self.conn.core.GrabButtonChecked(False, self.screen.root,
                                              self.GRAB_EVENT_MASK,
                                              GrabMode.Async, GrabMode.Async,
                                              self.screen.root, Cursor._None,
                                              button, mod_key).check()
 
-    def begin_move(self, client, x, y):
-        debug("Beginning move of client 0x%x" % client.window)
-        geometry = self.conn.core.GetGeometry(client.window).reply()
-        if geometry:
-            self.offset = (x - geometry.x, y - geometry.y)
-            self.moving = client
+    def begin_move_resize(self, client, x, y, move=True):
+        debug("Beginning %s of client 0x%x" % \
+                  ("move" if move else "resize", client.window))
+        self.starting_position = (x, y)
+        self.starting_geometry = client.geometry
+        self.moving, self.resizing = (client, None) if move else (None, client)
 
-    def move(self, x, y):
-        self.conn.core.ConfigureWindow(self.moving.window,
-            ConfigWindow.X | ConfigWindow.Y,
-            (int16(x - self.offset[0]), int16(y - self.offset[1])))
+    def move_resize(self, x, y):
+        delta_x = x - self.starting_position[0]
+        delta_y = y - self.starting_position[1]
+        g = self.starting_geometry
+        if self.moving:
+            self.conn.core.ConfigureWindow(self.moving.window,
+                                           (ConfigWindow.X |
+                                            ConfigWindow.Y),
+                                           (int16(delta_x + g.x),
+                                            int16(delta_y + g.y)))
+        else:
+            self.conn.core.ConfigureWindow(self.resizing.window,
+                                           (ConfigWindow.Width |
+                                            ConfigWindow.Height),
+                                           (int16(max(1, delta_x + g.width)),
+                                            int16(max(1, delta_y + g.height))))
 
-    def end_move(self):
-        debug("Ending move of client 0x%x" % self.moving.window)
-        self.moving = None
+    def end_move_resize(self):
+        debug("Ending move/resize")
+        self.moving = self.resizing = None
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
@@ -59,21 +78,25 @@ class MoveResize(WindowManager):
             return
         debug("Button %d pressed in window 0x%x at (%d, %d)" %
               (button, event.child, event.root_x, event.root_y))
-        if button == 1:
-            self.begin_move(client, event.root_x, event.root_y)
+        if button == self.move_button:
+            self.begin_move_resize(client, event.root_x, event.root_y, True)
+        elif button == self.resize_button:
+            self.begin_move_resize(client, event.root_x, event.root_y, False)
+        else:
+            debug.warn("Ignoring button %d press")
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
         debug("Button %d released" % event.detail)
-        if self.moving:
-            self.end_move()
+        if self.moving or self.resizing:
+            self.end_move_resize()
 
     @handler(MotionNotifyEvent)
     def handle_motion_notify(self, event):
-        if self.moving:
+        if self.moving or self.resizing:
             if event.detail == Motion.Hint:
                 pointer = self.conn.core.QueryPointer(self.screen.root).reply()
-                if pointer:
-                    self.move(pointer.root_x, pointer.root_y)
+                x, y = (pointer.root_x, pointer.root_y)
             else:
-                self.move(event.root_x, event.root_y)
+                x, y = (event.root_x, event.root_y)
+            self.move_resize(x, y)
