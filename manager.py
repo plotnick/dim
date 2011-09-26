@@ -3,6 +3,7 @@
 """A window manager manages the children of the root window of a screen."""
 
 from logging import debug, info, warning, error
+from functools import wraps
 from select import select
 
 import xcb
@@ -215,6 +216,18 @@ class WindowManager(EventHandler):
         """Note the destruction of a top-level window, and unmanage the
         corresponding client."""
         self.unmanage(event.window)
+
+def compress(handler):
+    """Decorator factory that wraps an event handler method with compression.
+    That is, if the next event is available and of the same type as the current
+    event, it is handled by simply returning and waiting for the next event.
+    Otherwise, the normal handler is invoked as usual."""
+    @wraps(handler)
+    def compressed_handler(self, event):
+        if isinstance(self.peek_next_event(), type(event)):
+            return
+        return handler(self, event)
+    return compressed_handler
 
 if __name__ == "__main__":
     from optparse import OptionParser
