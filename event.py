@@ -44,9 +44,10 @@ class EventHandler(object):
         """Dispatch an event to the registered handler. Subclasses may, but
         generally should not, override this method."""
         try:
-            return self.__handlers__[type(event)](self, event)
+            handler = self.__handlers__[type(event)]
         except KeyError:
             return self.unhandled_event(event)
+        return handler(self, event)
 
     def unhandled_event(self, event):
         """Handle an event for which no specific handler has been registered.
