@@ -120,11 +120,13 @@ class WMTestCase(unittest.TestCase):
         self.conn.flush()
 
     def add_window(self, window):
+        """Create and return a new client window."""
         assert isinstance(window, TestWindow)
         self.windows[window.id] = window
         return window
 
     def event_loop(self, test=lambda: False):
+        """Client event loop."""
         self.conn.flush()
         for i in range(5):
             # Process pending events from XCB.
