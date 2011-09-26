@@ -6,6 +6,7 @@ classes and routines for dealing with those as such."""
 from array import array
 from codecs import decode
 from fractions import Fraction
+from logging import debug, info, warning, error
 from struct import unpack_from
 
 from xcb.xproto import *
@@ -115,12 +116,23 @@ class ClientWindow(object):
         self.window = window
         self.manager = manager
         self.decorator = decorator
+        self._geometry = None
 
-        reply = self.manager.conn.core.GetGeometry(window).reply()
-        if reply:
-            self.geometry = Geometry(reply.x, reply.y,
-                                     reply.width, reply.height,
-                                     reply.border_width)
+    @property
+    def geometry(self):
+        if self._geometry is None:
+            debug("Fetching geometry for client 0x%x" % self.window)
+            geometry = self.manager.conn.core.GetGeometry(self.window).reply()
+            if geometry:
+                self._geometry = Geometry(geometry.x, geometry.y,
+                                          geometry.width, geometry.height,
+                                          geometry.border_width)
+        return self._geometry
+
+    @geometry.setter
+    def geometry(self, geometry):
+        assert isinstance(geometry, Geometry), "Invalid geometry %r" % geometry
+        self._geometry = geometry
 
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x
