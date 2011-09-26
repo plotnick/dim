@@ -98,7 +98,11 @@ class WindowManager(EventHandler):
                                             ConfigWindow.Width |
                                             ConfigWindow.Height |
                                             ConfigWindow.BorderWidth),
-                                           geometry)
+                                           (int16(geometry.x),
+                                            int16(geometry.y),
+                                            int16(geometry.width),
+                                            int16(geometry.height),
+                                            int16(geometry.border_width)))
         return geometry
 
     def event_loop(self):
@@ -147,16 +151,15 @@ class WindowManager(EventHandler):
             # Just grant the request.
             debug("Granting ConfigureWindow request for unmanaged window 0x%x" %
                   event.window)
-            self.conn.core.ConfigureWindow(event.window,
-                                           event.value_mask,
-                                           select_values(event.value_mask,
-                                                         [event.x,
-                                                          event.y,
-                                                          event.width,
-                                                          event.height,
-                                                          event.border_width,
-                                                          event.sibling,
-                                                          event.stack_mode]))
+            self.conn.core.ConfigureWindow(event.window, event.value_mask,
+                select_values(event.value_mask,
+                              [int16(event.x),
+                               int16(event.y),
+                               int16(event.width),
+                               int16(event.height),
+                               int16(event.border_width),
+                               event.sibling,
+                               event.stack_mode]))
         self.conn.flush()
 
     @handler(ConfigureNotifyEvent)

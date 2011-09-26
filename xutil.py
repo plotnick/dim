@@ -6,10 +6,23 @@ from struct import pack
 
 from xcb.xproto import *
 
-__all__ = ["MAX_CARD32", "Geometry", "is_move_only", "is_synthetic_event",
+__all__ = ["MAX_CARD32", "power_of_2", "popcount", "int16",
+           "Geometry", "is_move_only", "is_synthetic_event",
            "AtomCache", "select_values", "value_list", "configure_notify"]
 
 MAX_CARD32 = 2**32 - 1
+
+def power_of_2(x):
+    """Check whether x is a power of 2."""
+    return isinstance(x, int) and x > 0 and x & (x - 1) == 0
+
+def popcount(x):
+    """Count the number of 1 bits in the binary representation of x."""
+    return bin(x).count("1")
+
+def int16(x):
+    """Truncate an integer to 16 bits, ignoring sign."""
+    return x & 0xffff
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
 Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
@@ -69,14 +82,6 @@ def select_values(value_mask, values):
     """Create a value-list from the supplied possible values according to the
     bits in the given value-mask."""
     return [values[i] for i in range(len(values)) if value_mask & (1 << i)]
-
-def power_of_2(x):
-    """Check whether x is a power of 2."""
-    return isinstance(x, int) and x > 0 and x & (x - 1) == 0
-
-def popcount(x):
-    """Count the number of 1 bits in the binary representation of x."""
-    return bin(x).count("1")
 
 def value_list(flag_class, **kwargs):
     """Construct and return a value-mask and value-list from the supplied
