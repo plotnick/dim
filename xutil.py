@@ -6,6 +6,9 @@ from struct import pack
 
 from xcb.xproto import *
 
+__all__ = ["MAX_CARD32", "Geometry", "is_move_only", "is_synthetic_event",
+           "AtomCache", "select_values", "value_list", "configure_notify"]
+
 MAX_CARD32 = 2**32 - 1
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
