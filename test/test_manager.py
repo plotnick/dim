@@ -33,11 +33,10 @@ class WindowManagerThread(Thread):
         self.join()
 
 class TestWindow(EventHandler):
-    """Create a simple top-level window."""
+    """A simple top-level window."""
 
     def __init__(self, conn, geometry, event_mask=0):
-        event_mask |= (EventMask.StructureNotify |
-                       EventMask.PropertyChange)
+        event_mask |= (EventMask.StructureNotify | EventMask.PropertyChange)
 
         self.conn = conn
         self.atoms = AtomCache(conn, ["WM_STATE"])
