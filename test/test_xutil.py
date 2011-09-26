@@ -1,3 +1,5 @@
+# -*- mode: Python; coding: utf-8 -*-
+
 import unittest
 
 from xutil import *

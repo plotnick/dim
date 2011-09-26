@@ -1,3 +1,5 @@
+# -*- mode: Python; coding: utf-8 -*-
+
 from struct import unpack
 from select import select
 from threading import Thread
