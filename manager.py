@@ -8,8 +8,8 @@ from select import select
 import xcb
 from xcb.xproto import *
 
-from client import *
-from event import *
+from client import ClientWindow, WMState
+from event import handler, EventHandler
 from xutil import *
 
 class WindowManager(EventHandler):
