@@ -92,6 +92,8 @@ class MoveResize(WindowManager):
 
     @handler(MotionNotifyEvent)
     def handle_motion_notify(self, event):
+        if isinstance(self.peek_next_event(), MotionNotifyEvent):
+            return
         if self.moving or self.resizing:
             if event.detail == Motion.Hint:
                 pointer = self.conn.core.QueryPointer(self.screen.root).reply()

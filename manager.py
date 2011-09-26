@@ -106,8 +106,11 @@ class WindowManager(EventHandler):
         return geometry
 
     def event_loop(self):
-        """The main event loop of the window manager."""
+        """The main event loop of the window manager. We keep a one-event
+        lookahead (accessible via peek_next_event) in order to support event
+        compression."""
         self.conn.flush()
+        self.next_event = None
 
         # We use a select-based loop instead of XCB's wait_for_event because
         # (a) select handles signals correctly, and (b) wait_for_event blocks
@@ -117,13 +120,18 @@ class WindowManager(EventHandler):
         xlist = []
         while True:
             while True:
-                # Process all pending events from XCB.
-                event = self.conn.poll_for_event()
+                event = self.peek_next_event()
                 if event:
+                    self.next_event = None
                     self.handle_event(event)
                 else:
                     break
             select(rlist, wlist, xlist)
+
+    def peek_next_event(self):
+        if not self.next_event:
+            self.next_event = self.conn.poll_for_event()
+        return self.next_event
 
     def unhandled_event(self, event):
         debug("Ignoring unhandled %s" % event.__class__.__name__)
