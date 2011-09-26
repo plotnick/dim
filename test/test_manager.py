@@ -1,26 +1,27 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from random import randint
 from struct import unpack
 from select import select
-from threading import Thread
+from threading import Thread, Lock
 import unittest
 
 import xcb
 from xcb.xproto import *
 
 from event import *
-from manager import WindowManager
+from manager import WindowManager, compress
 from xutil import *
 
 class WindowManagerThread(Thread):
-    def __init__(self):
+    def __init__(self, wm_class=WindowManager):
         super(WindowManagerThread, self).__init__()
         self.conn = xcb.connect()
-        self.manager = WindowManager(self.conn)
+        self.wm = wm_class(self.conn)
 
     def run(self):
         try:
-            self.manager.event_loop()
+            self.wm.event_loop()
         except:
             pass
 
@@ -78,6 +79,9 @@ class TestWindow(EventHandler):
                                               geometry).check()
         return geometry
 
+    def destroy(self):
+        self.conn.core.DestroyWindowChecked(self.id).check()
+
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         assert event.window == self.id
@@ -109,15 +113,19 @@ class WMTestCase(unittest.TestCase):
     """A test fixture that establishes an X connection and starts the WM in
     a separate thread."""
 
+    wm_class = WindowManager
+
     def setUp(self):
         self.conn = xcb.connect()
-        self.windows = {}
-        self.wm_thread = WindowManagerThread()
+        self.windows = {} # test windows, indexed by id
+        self.wm_thread = WindowManagerThread(self.wm_class)
         self.wm_thread.start()
 
     def tearDown(self):
-        self.wm_thread.stop()
+        for window in self.windows.values():
+            window.destroy()
         self.conn.flush()
+        self.wm_thread.stop()
 
     def add_window(self, window):
         """Create and return a new client window."""
@@ -125,10 +133,14 @@ class WMTestCase(unittest.TestCase):
         self.windows[window.id] = window
         return window
 
-    def event_loop(self, test=lambda: False):
-        """Client event loop."""
+    def event_loop(self, test=lambda: False, max_timeouts=5):
+        """A simple client event loop."""
         self.conn.flush()
-        for i in range(5):
+        timeouts = 0
+        rlist = [self.conn.get_file_descriptor()]
+        wlist = []
+        xlist = []
+        while timeouts < max_timeouts:
             # Process pending events from XCB.
             while True:
                 event = self.conn.poll_for_event()
@@ -139,10 +151,12 @@ class WMTestCase(unittest.TestCase):
                 except KeyError:
                     self.fail("Event received for unknown window")
             if test():
-                break
+                return True
             # Wait for more events, but only for a second.
-            select([self.conn.get_file_descriptor()], [], [], 1)
-        self.assertTrue(test())
+            r, w, x = select(rlist, wlist, xlist, 1)
+            if not r and not w and not x:
+                timeouts += 1
+        self.fail()
 
 class TestWMStartup(WMTestCase):
     # We'll override WMTestCase's setUp method so that it doesn't start the
@@ -198,6 +212,52 @@ class TestWMClientMoveResize(WMTestCase):
         # The real ConfigureNotify event reflects the actual border width.
         self.event_loop(lambda: (self.w.geometry == geometry and
                                  not self.w.synthetic_configure_notify))
+
+class EventLoopTester(WindowManager):
+    """A window manager that records the number of ConfigureNotify events
+    that it receives on its client windows."""
+
+    def __init__(self, *args, **kwargs):
+        super(EventLoopTester, self).__init__(*args, **kwargs)
+        self.events_received = 0
+
+    @handler(ConfigureNotifyEvent)
+    def handle_configure_notify(self, event):
+        self.events_received += 1
+
+class TestWMEventLoop(WMTestCase):
+    wm_class = EventLoopTester
+
+    def jiggle_window(self, n=100):
+        # Realize a client window.
+        g = Geometry(0, 0, 100, 100, 5)
+        w = self.add_window(TestWindow(self.conn, g))
+        w.map()
+
+        # Move the window around a bunch of times.
+        for i in range(n):
+            w.resize(g.translate(randint(1, 100), randint(1, 100)))
+
+    def test_event_loop(self):
+        """Test the window manager's event loop"""
+        n = 100
+        self.jiggle_window(n)
+        self.event_loop(lambda: self.wm_thread.wm.events_received == n)
+
+class EventCompressionTester(EventLoopTester):
+    @handler(ConfigureNotifyEvent)
+    @compress
+    def handle_configure_notify(self, event):
+        raise UnhandledEvent(event) # decline; pass to the next handler
+
+class TestWMEventLoopWithCompression(TestWMEventLoop):
+    wm_class = EventCompressionTester
+
+    def test_event_loop(self):
+        """Test event compression"""
+        n = 100
+        self.jiggle_window(n)
+        self.event_loop(lambda: self.wm_thread.wm.events_received == 1)
 
 if __name__ == "__main__":
     import logging
