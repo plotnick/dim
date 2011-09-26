@@ -1,3 +1,5 @@
+# -*- mode: Python; coding: utf-8 -*-
+
 """Event handling utilities."""
 
 class UnhandledEvent(Exception):
