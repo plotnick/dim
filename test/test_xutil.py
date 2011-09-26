@@ -27,7 +27,7 @@ class TestPowerOf2(unittest.TestCase):
         self.assertFalse(power_of_2(2**32 - 1))
 
     def test_powers_of_2(self):
-        for i in range(0, 32):
+        for i in range(0, 31):
             self.assertTrue(power_of_2(2**i))
 
 class TestValueList(unittest.TestCase):
