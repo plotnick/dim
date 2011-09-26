@@ -2,7 +2,7 @@
 
 """A window manager manages the children of the root window of a screen."""
 
-from logging import basicConfig as logconfig, debug, info, warning, error
+from logging import debug, info, warning, error
 from select import select
 
 import xcb
@@ -226,10 +226,10 @@ if __name__ == "__main__":
     if options.version:
         print "Python Window Manager version 0.0"
         sys.exit(0)
-    logconfig(level=logging.DEBUG if options.debug else \
-                    logging.INFO if options.verbose else \
-                    logging.WARNING,
-              format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.DEBUG if options.debug else \
+                              logging.INFO if options.verbose else \
+                              logging.WARNING,
+                        format="%(levelname)s: %(message)s")
 
     manager = WindowManager(xcb.connect(options.display))
     manager.event_loop()
