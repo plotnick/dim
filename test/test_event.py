@@ -11,6 +11,7 @@ class Event(object):
 class FooEvent(Event): pass
 class BarEvent(Event): pass
 class BazEvent(Event): pass
+class QuxEvent(Event): pass
 
 class FooHandler(EventHandler):
     @handler(FooEvent)
@@ -25,8 +26,18 @@ class BarHandler(FooHandler):
         return event
 
 class BazHandler(BarHandler):
+    @handler(BarEvent)
+    def decline_handle_bar(self, event):
+        event.declined = True
+        raise UnhandledEvent(event)
+
+    @handler(QuxEvent)
+    def decline_handle_qux(self, event):
+        event.declined = True
+        raise UnhandledEvent(event)
+
     def unhandled_event(self, event):
-        return None
+        return False
 
 class TestEventHandler(unittest.TestCase):
     def test_base_handler(self):
@@ -45,9 +56,25 @@ class TestEventHandler(unittest.TestCase):
     def test_default_event_handler(self):
         """Test default event handler"""
         baz_handler = BazHandler()
-        baz_event = BazEvent()
-        self.assertEqual(baz_handler.handle_event(baz_event), None)
-        self.assertFalse(baz_event.handled)
+        baz = BazEvent()
+        self.assertEqual(baz_handler.handle_event(baz), False)
+        self.assertFalse(baz.handled)
+
+    def test_declined_handler(self):
+        """Test declined handler"""
+        baz_handler = BazHandler()
+        bar = BarEvent()
+        self.assertEqual(baz_handler.handle_event(bar), bar)
+        self.assertTrue(bar.declined)
+        self.assertTrue(bar.handled)
+
+    def test_unhandled_decline(self):
+        """Test decline of last applicable handler"""
+        baz_handler = BazHandler()
+        qux = QuxEvent()
+        self.assertEqual(baz_handler.handle_event(qux), False)
+        self.assertTrue(qux.declined)
+        self.assertFalse(qux.handled)
 
 if __name__ == "__main__":
     unittest.main()

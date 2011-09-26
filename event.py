@@ -14,7 +14,10 @@ def handler(event_class):
             @handler(FooEvent)
             def handle_foo(self, event):
                 ...
-    """
+    If a handler method returns normally, it is assumed to have handled the
+    event. A handler may decline to handle an event by raising an UnhandledEvent
+    exception. In that case, the next registered handler (or the default handler
+    if no more handlers are available) will be invoked."""
     def set_handler(method):
         method.__handler_for__ = event_class
         return method
@@ -32,7 +35,8 @@ class EventHandlerClass(type):
         for x in namespace.values():
             event_class = getattr(x, "__handler_for__", None)
             if event_class:
-                cls.__handlers__[event_class] = x
+                cls.__handlers__[event_class] = [x] + \
+                    cls.__handlers__.get(event_class, [])
         return cls
 
 class EventHandler(object):
@@ -44,12 +48,19 @@ class EventHandler(object):
         """Dispatch an event to the registered handler. Subclasses may, but
         generally should not, override this method."""
         try:
-            handler = self.__handlers__[type(event)]
+            handlers = self.__handlers__[type(event)]
         except KeyError:
             return self.unhandled_event(event)
-        return handler(self, event)
+        for handler in handlers:
+            try:
+                return handler(self, event)
+            except UnhandledEvent:
+                # Handler declined to handle the event; try the next one.
+                pass
+        else:
+            return self.unhandled_event(event)
 
     def unhandled_event(self, event):
         """Handle an event for which no specific handler has been registered.
         Subclasses may freely override this method."""
-        raise UnhandledEvent, event
+        raise UnhandledEvent(event)

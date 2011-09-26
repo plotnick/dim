@@ -8,7 +8,7 @@ import xcb
 from xcb.xproto import *
 
 from client import ClientWindow
-from event import handler, EventHandler
+from event import handler, EventHandler, UnhandledEvent
 from manager import WindowManager
 from xutil import *
 
@@ -70,26 +70,24 @@ class MoveResize(WindowManager):
         button = event.detail
         if not event.child:
             debug("Ignoring button %d press in root window" % button)
-            return
+            raise UnhandledEvent(event)
         try:
             client = self.clients[event.child]
         except KeyError:
-            debug("Ignoring button %d press in non-managed window" % button)
-            return
-        debug("Button %d pressed in window 0x%x at (%d, %d)" %
-              (button, event.child, event.root_x, event.root_y))
+            raise UnhandledEvent(event)
         if button == self.move_button:
             self.begin_move_resize(client, event.root_x, event.root_y, True)
         elif button == self.resize_button:
             self.begin_move_resize(client, event.root_x, event.root_y, False)
         else:
-            debug.warn("Ignoring button %d press")
+            raise UnhandledEvent(event)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
-        debug("Button %d released" % event.detail)
         if self.moving or self.resizing:
             self.end_move_resize()
+        else:
+            raise UnhandledEvent(event)
 
     @handler(MotionNotifyEvent)
     def handle_motion_notify(self, event):
@@ -100,3 +98,5 @@ class MoveResize(WindowManager):
             else:
                 x, y = (event.root_x, event.root_y)
             self.move_resize(x, y)
+        else:
+            raise UnhandledEvent(event)
