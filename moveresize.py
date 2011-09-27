@@ -2,7 +2,6 @@
 
 from logging import basicConfig as logconfig, debug, info, warning, error
 from select import select
-from struct import pack, unpack
 
 import xcb
 from xcb.xproto import *
