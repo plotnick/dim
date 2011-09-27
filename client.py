@@ -53,10 +53,10 @@ class WMSizeHints(object):
          base_width, base_height,
          win_gravity) = prop_struct.unpack_from(buf)
         min_aspect = Fraction(min_aspect_numerator, min_aspect_denominator) \
-            if flags & self.PAspect and min_aspect_denominator != 0 \
+            if flags & cls.PAspect and min_aspect_denominator != 0 \
             else None
         max_aspect = Fraction(max_aspect_numerator, max_aspect_denominator) \
-            if flags & self.PAspect and max_aspect_denominator != 0 \
+            if flags & cls.PAspect and max_aspect_denominator != 0 \
             else None
         return cls(flags, min_width, min_height, max_width, max_height,
                    width_inc, height_inc, min_aspect, max_aspect,
