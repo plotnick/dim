@@ -52,12 +52,12 @@ class WMSizeHints(object):
          max_aspect_numerator, max_aspect_denominator,
          base_width, base_height,
          win_gravity) = prop_struct.unpack_from(buf)
-
         min_aspect = Fraction(min_aspect_numerator, min_aspect_denominator) \
-            if min_aspect_denominator else None
+            if flags & self.PAspect and min_aspect_denominator != 0 \
+            else None
         max_aspect = Fraction(max_aspect_numerator, max_aspect_denominator) \
-            if max_aspect_denominator else None
-
+            if flags & self.PAspect and max_aspect_denominator != 0 \
+            else None
         return cls(flags, min_width, min_height, max_width, max_height,
                    width_inc, height_inc, min_aspect, max_aspect,
                    base_width, base_height, win_gravity)
@@ -66,17 +66,24 @@ class WMSizeHints(object):
                  width_inc, height_inc, min_aspect, max_aspect,
                  base_width, base_height, win_gravity):
         self.flags = flags
-        self.min_width = min_width if min_width else base_width
-        self.min_height = min_height if min_height else base_height
-        self.max_width = max_width
-        self.max_height = max_height
-        self.width_inc = width_inc
-        self.height_inc = height_inc
-        self.min_aspect = min_aspect
-        self.max_aspect = max_aspect
-        self.base_width = base_width if base_width else min_width
-        self.base_height = base_height if base_height else min_height
-        self.win_gravity = win_gravity
+        self.min_width = min_width if self.flags & self.PMinSize \
+            else base_width if self.flags & self.PBaseSize \
+            else 0
+        self.min_height = min_height if self.flags & self.PMinSize \
+            else base_height if self.flags & self.PBaseSize \
+            else 0
+        self.max_width = max_width if self.flags & self.PMaxSize else None
+        self.max_height = max_height if self.flags & self.PMaxSize else None
+        self.width_inc = width_inc if self.flags & self.PResizeInc else 1
+        self.height_inc = height_inc if self.flags & self.PResizeInc else 1
+        self.min_aspect = min_aspect if self.flags & self.PAspect else None
+        self.max_aspect = max_aspect if self.flags & self.PAspect else None
+        self.base_width = base_width if self.flags & self.PBaseSize \
+            else self.min_width
+        self.base_height = base_height if self.flags & self.PBaseSize \
+            else self.min_height
+        self.win_gravity = win_gravity if self.flags & self.PWinGravity \
+            else Gravity.NorthWest
 
 class WMHints(object):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
@@ -100,14 +107,22 @@ class WMHints(object):
                  icon_pixmap, icon_window, icon_x, icon_y, icon_mask,
                  window_group):
         self.flags = flags
-        self.input = input
-        self.initial_state = initial_state
-        self.icon_pixmap = icon_pixmap
-        self.icon_window = icon_window
-        self.icon_x = icon_x
-        self.icon_y = icon_y
-        self.icon_mask = icon_mask
-        self.window_group = window_group
+        self.input = bool(input) if self.flags & self.InputHint \
+            else None
+        self.initial_state = initial_state if self.flags & self.StateHint \
+            else None
+        self.icon_pixmap = icon_pixmap if self.flags & self.IconPixmapHint \
+            else None
+        self.icon_window = icon_window if self.flags & self.IconWindowHint \
+            else None
+        self.icon_x = icon_x if self.flags & self.IconPositionHint \
+            else None
+        self.icon_y = icon_y if self.flags & self.IconPositionHint \
+            else None
+        self.icon_mask = icon_mask if self.flags & self.IconMaskHint \
+            else None
+        self.window_group = window_group if self.flags & self.WindowGroupHint \
+            else None
 
 class ClientWindow(object):
     """All top-level windows (other than those with override-redirect set) will
