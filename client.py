@@ -7,7 +7,7 @@ from array import array
 from codecs import decode
 from fractions import Fraction
 from logging import debug, info, warning, error
-from struct import unpack_from
+from struct import Struct
 
 from xcb.xproto import *
 
@@ -22,8 +22,8 @@ class WMState(object):
     InactiveState = 4
 
     @classmethod
-    def unpack_property(cls, buf):
-        return cls(*unpack_from("=II", buf))
+    def unpack_property(cls, buf, prop_struct=Struct("=II")):
+        return cls(*prop_struct.unpack_from(buf))
 
     def __init__(self, state, icon):
         (self.state, self.icon) = (state, icon)
@@ -44,13 +44,14 @@ class WMSizeHints(object):
     PWinGravity = 512
 
     @classmethod
-    def unpack_property(cls, buf):
-        (flags, min_width, min_height, max_width, max_height,
+    def unpack_property(cls, buf, prop_struct=Struct("=I16xiiiiiiiiiiiii")):
+        (flags,
+         min_width, min_height, max_width, max_height,
          width_inc, height_inc,
          min_aspect_numerator, min_aspect_denominator,
          max_aspect_numerator, max_aspect_denominator,
          base_width, base_height,
-         win_gravity) = unpack_from("=I16xiiiiiiiiiiiii", buf)
+         win_gravity) = prop_struct.unpack_from(buf)
 
         min_aspect = Fraction(min_aspect_numerator, min_aspect_denominator) \
             if min_aspect_denominator else None
@@ -92,8 +93,8 @@ class WMHints(object):
     UrgencyHint = 256
 
     @classmethod
-    def unpack_property(cls, buf):
-        return cls(*unpack_from("=IIIIIIIII", buf))
+    def unpack_property(cls, buf, prop_struct=Struct("=IIIIIIIII")):
+        return cls(*prop_struct.unpack_from(buf))
 
     def __init__(self, flags, input, initial_state,
                  icon_pixmap, icon_window, icon_x, icon_y, icon_mask,
@@ -215,11 +216,11 @@ class ClientWindow(object):
             return (class_and_instance[0:i], class_and_instance[i+1:j])
 
     @property
-    def wm_transient_for(self):
+    def wm_transient_for(self, prop_struct=Struct("=I")):
         """Retrieve the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)."""
         window = self.get_property("WM_TRANSIENT_FOR", "WINDOW")
         if window:
-            return unpack_from("=I", window)[0]
+            return prop_struct.unpack_from(window)[0]
 
     @property
     def wm_state(self):

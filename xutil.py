@@ -2,7 +2,7 @@
 
 from collections import namedtuple
 import operator
-from struct import pack
+from struct import Struct
 
 from xcb.xproto import *
 
@@ -105,19 +105,21 @@ def value_list(flag_class, **kwargs):
                 sorted(values, key=operator.itemgetter(1))))
 
 def configure_notify(connection, window, x, y, width, height, border_width,
-                     override_redirect=False):
+                     override_redirect=False,
+                     event_struct=Struct("bx2xIIIhhHHHB5x")):
     """Send a synthetic ConfigureNotify event to a window, as per ICCCM §4.1.5
     and §4.2.3."""
-    event = pack("bx2xIIIhhHHHB5x",
-                 22, # code
-                 window, # event
-                 window, # window
-                 0, # above-sibling: None
-                 x + border_width, # x
-                 y + border_width, # y
-                 width, # width
-                 height, # height
-                 border_width, # border-width
-                 override_redirect) # override-redirect
-    assert len(event) == 32
-    connection.core.SendEvent(False, window, EventMask.StructureNotify, event)
+    assert event_struct.size == 32
+    connection.core.SendEvent(False,
+                              window,
+                              EventMask.StructureNotify,
+                              event_struct.pack(22, # code
+                                                window, # event
+                                                window, # window
+                                                0, # above-sibling: None
+                                                x + border_width,
+                                                y + border_width,
+                                                width,
+                                                height,
+                                                border_width,
+                                                override_redirect))
