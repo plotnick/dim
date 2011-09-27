@@ -36,29 +36,37 @@ class MoveResize(WindowManager):
                                              self.screen.root, Cursor._None,
                                              button, mod_key).check()
 
+    def begin_move(self, client, x, y):
+        self.moving, self.resizing = (client, None)
+        self.begin_move_resize(client, x, y)
+
+    def begin_resize(self, client, x, y):
+        self.moving, self.resizing = (None, client)
+        self.size_hints = client.wm_normal_hints
+        self.begin_move_resize(client, x, y)
+
     def begin_move_resize(self, client, x, y, move=True):
-        debug("Beginning %s of client 0x%x" % \
-                  ("move" if move else "resize", client.window))
+        """Shared initialization for move and resize."""
         self.starting_position = (x, y)
         self.starting_geometry = client.geometry
-        self.moving, self.resizing = (client, None) if move else (None, client)
 
     def move_resize(self, x, y):
         delta_x = x - self.starting_position[0]
         delta_y = y - self.starting_position[1]
         g = self.starting_geometry
         if self.moving:
+            x = int16(delta_x + g.x)
+            y = int16(delta_y + g.y)
             self.conn.core.ConfigureWindow(self.moving.window,
-                                           (ConfigWindow.X |
-                                            ConfigWindow.Y),
-                                           (int16(delta_x + g.x),
-                                            int16(delta_y + g.y)))
+                                           (ConfigWindow.X | ConfigWindow.Y),
+                                           (x, y))
         else:
+            width = int16(max(self.size_hints.min_width, delta_x + g.width))
+            height = int16(max(self.size_hints.min_height, delta_y + g.height))
             self.conn.core.ConfigureWindow(self.resizing.window,
                                            (ConfigWindow.Width |
                                             ConfigWindow.Height),
-                                           (int16(max(1, delta_x + g.width)),
-                                            int16(max(1, delta_y + g.height))))
+                                           (width, height))
         self.conn.flush()
 
     def end_move_resize(self):
@@ -76,9 +84,9 @@ class MoveResize(WindowManager):
         except KeyError:
             raise UnhandledEvent(event)
         if button == self.move_button:
-            self.begin_move_resize(client, event.root_x, event.root_y, True)
+            self.begin_move(client, event.root_x, event.root_y)
         elif button == self.resize_button:
-            self.begin_move_resize(client, event.root_x, event.root_y, False)
+            self.begin_resize(client, event.root_x, event.root_y)
         else:
             raise UnhandledEvent(event)
 
