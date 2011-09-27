@@ -85,6 +85,8 @@ class WMSizeHints(object):
         self.win_gravity = win_gravity if self.flags & self.PWinGravity \
             else Gravity.NorthWest
 
+_default_size_hints = WMSizeHints(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
 class WMHints(object):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
 
@@ -123,6 +125,8 @@ class WMHints(object):
             else None
         self.window_group = window_group if self.flags & self.WindowGroupHint \
             else None
+
+_default_wm_hints = WMHints(0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 class ClientWindow(object):
     """All top-level windows (other than those with override-redirect set) will
@@ -210,6 +214,8 @@ class ClientWindow(object):
         wm_normal_hints = self.get_property("WM_NORMAL_HINTS", "WM_SIZE_HINTS")
         if wm_normal_hints:
             return WMSizeHints.unpack_property(wm_normal_hints)
+        else:
+            return _default_size_hints
 
     @property
     def wm_hints(self):
@@ -217,6 +223,8 @@ class ClientWindow(object):
         wm_hints = self.get_property("WM_HINTS", "WM_HINTS")
         if wm_hints:
             return WMHints.unpack_property(wm_hints)
+        else:
+            return _default_wm_hints
 
     @property
     def wm_class(self):
@@ -229,6 +237,8 @@ class ClientWindow(object):
             i = class_and_instance.find("\0")
             j = class_and_instance.find("\0", i+1)
             return (class_and_instance[0:i], class_and_instance[i+1:j])
+        else:
+            return (None, None)
 
     @property
     def wm_transient_for(self, prop_struct=Struct("=I")):
