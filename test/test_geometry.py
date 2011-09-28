@@ -4,6 +4,35 @@ import unittest
 
 from geometry import *
 
+class TestGeometryClasses(unittest.TestCase):
+    def test_position(self):
+        p = Position(x=100, y=-50)
+        self.assertTrue(p)
+        self.assertEqual(p, (100, -50))
+        self.assertEqual(str(p), "+100-50")
+        self.assertFalse(Position(0, 0))
+
+    def test_geometry(self):
+        g = Geometry(x=100, y=-50, width=3, height=5, border_width=1)
+        self.assertTrue(g)
+        self.assertEqual(g, (100, -50, 3, 5, 1))
+        self.assertEqual(str(g), "3x5+100-50")
+        self.assertFalse(Geometry(0, 0, 0, 0, 0))
+
+    def test_rectangle(self):
+        r = Rectangle(width=3, height=5)
+        self.assertTrue(r)
+        self.assertEqual(r, (3, 5))
+        self.assertEqual(str(r), "3x5")
+        self.assertFalse(Rectangle(0, 0))
+
+    def test_aspect_ratio(self):
+        a = AspectRatio(16, 9)
+        self.assertTrue(a)
+        self.assertEqual(a, (16, 9))
+        self.assertEqual(str(a), "16/9")
+        self.assertFalse(AspectRatio(0, 100))
+
 class TestIsMoveOnly(unittest.TestCase):
     """Test case for the is_move_only function."""
 

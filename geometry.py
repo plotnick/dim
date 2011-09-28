@@ -6,21 +6,28 @@ __all__ = ["Position", "Geometry", "Rectangle", "AspectRatio",
            "is_move_only"]
 
 Position = namedtuple("Position", "x, y")
+Position.__nonzero__ = lambda self: self.x != 0 or self.y != 0
 Position.__str__ = lambda self: "%+d%+d" % self
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
+Geometry.translate = lambda self, x, y: \
+    self._replace(x=self.x + x, y=self.y + y)
+Geometry.__nonzero__ = lambda self: \
+    (self.x != 0 or self.y != 0 or
+     self.width != 0 or self.height != 0 or
+     self.border_width != 0)
 Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
     (self.width, self.height, self.x, self.y)
 Geometry.__unicode__ = lambda self: u"%u×%u%+d%+d" % \
     (self.width, self.height, self.x, self.y)
-Geometry.translate = lambda self, x, y: \
-    self._replace(x=self.x + x, y=self.y + y)
 
 Rectangle = namedtuple("Rectangle", "width, height")
+Rectangle.__nonzero__ = lambda self: self.width != 0 or self.height != 0
 Rectangle.__str__ = lambda self: "%ux%u" % self
-Rectangle.__str__ = lambda self: u"%u×%u" % self
+Rectangle.__unicode__ = lambda self: u"%u×%u" % self
 
 AspectRatio = namedtuple("AspectRatio", "numerator, denominator")
+AspectRatio.__nonzero__ = lambda self: self.numerator != 0
 AspectRatio.__str__ = lambda self: "%u/%u" % self
 AspectRatio.__unicode__ = lambda self: u"%u⁄%u" % self
 
