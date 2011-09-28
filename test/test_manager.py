@@ -194,14 +194,14 @@ class TestWMClientMoveResize(WMTestCase):
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
         self.w.resize(self.initial_geometry)
-        geometry = self.initial_geometry.translate(5, 5) # adjust for border
+        geometry = self.initial_geometry + (5, 5) # adjust for border
         self.event_loop(lambda: (self.w.geometry == geometry and
                                  self.w.synthetic_configure_notify))
 
     def test_move(self):
         """Move a top-level window without changing its size"""
-        self.w.resize(self.initial_geometry.translate(5, 5))
-        geometry = self.initial_geometry.translate(10, 10) # adjust for border
+        self.w.resize(self.initial_geometry + (5, 5))
+        geometry = self.initial_geometry + (10, 10) # adjust for border
         self.event_loop(lambda: (self.w.geometry == geometry and
                                  self.w.synthetic_configure_notify))
 
@@ -236,7 +236,7 @@ class TestWMEventLoop(WMTestCase):
 
         # Move the window around a bunch of times.
         for i in range(n):
-            w.resize(g.translate(randint(1, 100), randint(1, 100)))
+            w.resize(g + (randint(1, 100), randint(1, 100)))
 
     def test_event_loop(self):
         """Test the window manager's event loop"""
