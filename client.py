@@ -11,122 +11,8 @@ from struct import Struct
 
 from xcb.xproto import *
 
-from xutil import MAX_CARD32, Geometry
-
-class WMState(object):
-    """A representation of the WM_STATE type (ICCCM §5.1.1.3)"""
-    WithdrawnState = 0
-    NormalState = 1
-    ZoomState = 2
-    IconicState = 3
-    InactiveState = 4
-
-    @classmethod
-    def unpack_property(cls, buf, prop_struct=Struct("=II")):
-        return cls(*prop_struct.unpack_from(buf))
-
-    def __init__(self, state, icon):
-        (self.state, self.icon) = (state, icon)
-
-class WMSizeHints(object):
-    """A representation of the WM_SIZE_HINTS type (ICCCM §4.1.2.3)."""
-
-    # Flags
-    USPosition = 1
-    USSize = 2
-    PPosition = 4
-    PSize = 8
-    PMinSize = 16
-    PMaxSize = 32
-    PResizeInc = 64
-    PAspect = 128
-    PBaseSize = 256
-    PWinGravity = 512
-
-    @classmethod
-    def unpack_property(cls, buf, prop_struct=Struct("=I16xiiiiiiiiiiiii")):
-        (flags,
-         min_width, min_height, max_width, max_height,
-         width_inc, height_inc,
-         min_aspect_numerator, min_aspect_denominator,
-         max_aspect_numerator, max_aspect_denominator,
-         base_width, base_height,
-         win_gravity) = prop_struct.unpack_from(buf)
-        min_aspect = Fraction(min_aspect_numerator, min_aspect_denominator) \
-            if flags & cls.PAspect and min_aspect_denominator != 0 \
-            else None
-        max_aspect = Fraction(max_aspect_numerator, max_aspect_denominator) \
-            if flags & cls.PAspect and max_aspect_denominator != 0 \
-            else None
-        return cls(flags, min_width, min_height, max_width, max_height,
-                   width_inc, height_inc, min_aspect, max_aspect,
-                   base_width, base_height, win_gravity)
-
-    def __init__(self, flags, min_width, min_height, max_width, max_height,
-                 width_inc, height_inc, min_aspect, max_aspect,
-                 base_width, base_height, win_gravity):
-        self.flags = flags
-        self.min_width = min_width if self.flags & self.PMinSize \
-            else base_width if self.flags & self.PBaseSize \
-            else 0
-        self.min_height = min_height if self.flags & self.PMinSize \
-            else base_height if self.flags & self.PBaseSize \
-            else 0
-        self.max_width = max_width if self.flags & self.PMaxSize else None
-        self.max_height = max_height if self.flags & self.PMaxSize else None
-        self.width_inc = width_inc if self.flags & self.PResizeInc else 1
-        self.height_inc = height_inc if self.flags & self.PResizeInc else 1
-        self.min_aspect = min_aspect if self.flags & self.PAspect else None
-        self.max_aspect = max_aspect if self.flags & self.PAspect else None
-        self.base_width = base_width if self.flags & self.PBaseSize \
-            else self.min_width
-        self.base_height = base_height if self.flags & self.PBaseSize \
-            else self.min_height
-        self.win_gravity = win_gravity if self.flags & self.PWinGravity \
-            else Gravity.NorthWest
-
-_default_size_hints = WMSizeHints(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-
-class WMHints(object):
-    """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
-
-    # Flags
-    InputHint = 1
-    StateHint = 2
-    IconPixmapHint = 4
-    IconWindowHint = 8
-    IconPositionHint = 16
-    IconMaskHint = 32
-    WindowGroupHint = 64
-    MessageHint = 128
-    UrgencyHint = 256
-
-    @classmethod
-    def unpack_property(cls, buf, prop_struct=Struct("=IIIIIIIII")):
-        return cls(*prop_struct.unpack_from(buf))
-
-    def __init__(self, flags, input, initial_state,
-                 icon_pixmap, icon_window, icon_x, icon_y, icon_mask,
-                 window_group):
-        self.flags = flags
-        self.input = bool(input) if self.flags & self.InputHint \
-            else None
-        self.initial_state = initial_state if self.flags & self.StateHint \
-            else None
-        self.icon_pixmap = icon_pixmap if self.flags & self.IconPixmapHint \
-            else None
-        self.icon_window = icon_window if self.flags & self.IconWindowHint \
-            else None
-        self.icon_x = icon_x if self.flags & self.IconPositionHint \
-            else None
-        self.icon_y = icon_y if self.flags & self.IconPositionHint \
-            else None
-        self.icon_mask = icon_mask if self.flags & self.IconMaskHint \
-            else None
-        self.window_group = window_group if self.flags & self.WindowGroupHint \
-            else None
-
-_default_wm_hints = WMHints(0, 0, 0, 0, 0, 0, 0, 0, 0)
+from properties import *
+from xutil import *
 
 class ClientWindow(object):
     """All top-level windows (other than those with override-redirect set) will
@@ -151,7 +37,7 @@ class ClientWindow(object):
 
     @geometry.setter
     def geometry(self, geometry):
-        assert isinstance(geometry, Geometry), "Invalid geometry %r" % geometry
+        assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
         self._geometry = geometry
 
     def atom(self, x):
@@ -161,24 +47,26 @@ class ClientWindow(object):
         reply = self.manager.conn.core.GetProperty(False, self.window,
                                                    self.atom(name),
                                                    self.atom(type),
-                                                   0, MAX_CARD32).reply()
+                                                   0, 0xffffffff).reply()
         if reply.type:
             return reply.value.buf()
 
-    def set_property(self, name, type, format, value, mode=PropMode.Replace,
-                     format_map={32: "I", 16: "H", 8: "B"}):
+    def set_property(self, name, type, value, mode=PropMode.Replace):
         if isinstance(value, unicode):
-            assert format == 8
+            format = 8
             data = value.encode("UTF-8")
+            data_len = len(data)
+        elif isinstance(value, PropertyValue):
+            (format, data_len, data) = value.change_property_args()
         else:
-            data = array(format_map[format], value)
+            raise ValueError("unknown property value type")
         self.manager.conn.core.ChangeProperty(mode,
                                               self.window,
                                               self.atom(name),
                                               self.atom(type),
                                               format,
-                                              len(data),
-                                              data.tostring())
+                                              data_len,
+                                              data)
 
     def get_ewmh_name(self, name):
         """The EWMH specification defines two application window properties,
@@ -209,22 +97,22 @@ class ClientWindow(object):
         return self.get_ewmh_name("_NET_WM_ICON_NAME")
 
     @property
-    def wm_normal_hints(self):
+    def wm_normal_hints(self, default_size_hints=WMSizeHints()):
         """Retrieve the WM_NORMAL_HINTS property (ICCCM §4.1.2.3)."""
-        wm_normal_hints = self.get_property("WM_NORMAL_HINTS", "WM_SIZE_HINTS")
-        if wm_normal_hints:
-            return WMSizeHints.unpack_property(wm_normal_hints)
+        size_hints = self.get_property("WM_NORMAL_HINTS", "WM_SIZE_HINTS")
+        if size_hints:
+            return WMSizeHints.unpack(size_hints)
         else:
-            return _default_size_hints
+            return default_size_hints
 
     @property
-    def wm_hints(self):
+    def wm_hints(self, default_hints=WMHints()):
         """Retrieve the WM_HINTS property (ICCCM §4.1.2.4)."""
         wm_hints = self.get_property("WM_HINTS", "WM_HINTS")
         if wm_hints:
-            return WMHints.unpack_property(wm_hints)
+            return WMHints.unpack(wm_hints)
         else:
-            return _default_wm_hints
+            return default_hints
 
     @property
     def wm_class(self):
@@ -241,24 +129,22 @@ class ClientWindow(object):
             return (None, None)
 
     @property
-    def wm_transient_for(self, prop_struct=Struct("=I")):
+    def wm_transient_for(self, formatter=Struct("=I")):
         """Retrieve the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)."""
         window = self.get_property("WM_TRANSIENT_FOR", "WINDOW")
         if window:
-            return prop_struct.unpack_from(window)[0]
+            return formatter.unpack_from(window)[0]
 
     @property
     def wm_state(self):
         """Retrieve the WM_STATE property (ICCCM §4.1.3.1)."""
         wm_state = self.get_property("WM_STATE", "WM_STATE")
         if wm_state:
-            return WMState.unpack_property(wm_state)
+            return WMState.unpack(wm_state)
 
     @wm_state.setter
-    def wm_state(self, wm_state):
+    def wm_state(self, state):
         """Set the WM_STATE property (ICCCM §4.1.3.1)."""
-        assert isinstance(wm_state, (WMState, int))
-        self.set_property("WM_STATE", "WM_STATE", 32,
-                          [wm_state.state, wm_state.icon] \
-                              if isinstance(wm_state, WMState) \
-                              else [wm_state, 0])
+        self.set_property("WM_STATE", "WM_STATE",
+                          state if isinstance(state, WMState) \
+                              else WMState(state))

@@ -4,21 +4,8 @@ import unittest
 
 from xutil import *
 
-class TestIsMoveOnly(unittest.TestCase):
-    def test_null_geometry(self):
-        self.assertFalse(is_move_only(None, None))
-        self.assertFalse(is_move_only(None, Geometry(1, 1, 1, 1, 1)))
-        self.assertFalse(is_move_only(Geometry(1, 1, 1, 1, 1), None))
-
-    def test_is_move_only(self):
-        g = Geometry(1, 1, 1, 1, 1)
-        self.assertFalse(is_move_only(g, Geometry(1, 1, 1, 1, 1)))
-        self.assertFalse(is_move_only(g, Geometry(2, 2, 2, 2, 1)))
-        self.assertFalse(is_move_only(g, Geometry(2, 2, 1, 1, 2)))
-        self.assertTrue(is_move_only(g, Geometry(2, 2, 1, 1, 1)))
-
 class TestPowerOf2(unittest.TestCase):
-    def test_non_powers_of_2(self):
+    def test_powers_of_2(self):
         self.assertFalse(power_of_2(None))
         self.assertFalse(power_of_2("2"))
         self.assertFalse(power_of_2(-1))
@@ -26,7 +13,6 @@ class TestPowerOf2(unittest.TestCase):
         self.assertFalse(power_of_2(3))
         self.assertFalse(power_of_2(2**32 - 1))
 
-    def test_powers_of_2(self):
         for i in range(0, 31):
             self.assertTrue(power_of_2(2**i))
 
