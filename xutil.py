@@ -7,7 +7,6 @@ from struct import Struct
 from xcb.xproto import *
 
 __all__ = ["power_of_2", "popcount", "int16",
-           "Position", "Geometry", "Rectangle", "AspectRatio",
            "is_synthetic_event", "configure_notify",
            "select_values", "value_list",
            "AtomCache"]
@@ -23,21 +22,6 @@ def popcount(x):
 def int16(x):
     """Truncate an integer to 16 bits, ignoring sign."""
     return x & 0xffff
-
-Position = namedtuple("Position", "x, y")
-Position.__str__ = lambda self: "%+d%+d" % self
-
-Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
-Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
-    (self.width, self.height, self.x, self.y)
-Geometry.translate = lambda self, x, y: \
-    self._replace(x=self.x + x, y=self.y + y)
-
-Rectangle = namedtuple("Rectangle", "width, height")
-Rectangle.__str__ = lambda self: "%ux%u" % self
-
-AspectRatio = namedtuple("AspectRatio", "numerator, denominator")
-Rectangle.__str__ = lambda self: "%u/%u" % self
 
 def is_synthetic_event(event):
     """Returns True if the given event was produced via a SendEvent request."""

@@ -11,6 +11,7 @@ from struct import Struct
 
 from xcb.xproto import *
 
+from geometry import *
 from properties import *
 from xutil import *
 

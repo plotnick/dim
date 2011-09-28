@@ -6,7 +6,7 @@ from struct import Struct
 
 from xcb.xproto import *
 
-from xutil import *
+from geometry import *
 
 __all__ = ["PropertyValue", "WMState", "WMSizeHints", "WMHints"]
 

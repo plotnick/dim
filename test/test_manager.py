@@ -10,6 +10,7 @@ import xcb
 from xcb.xproto import *
 
 from event import *
+from geometry import *
 from manager import WindowManager, compress
 from xutil import *
 

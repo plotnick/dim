@@ -11,17 +11,9 @@ from xcb.xproto import *
 
 from client import ClientWindow, WMState
 from event import handler, EventHandler
+from geometry import *
 from properties import *
 from xutil import *
-
-def is_move_only(old, new):
-    """Returns True if the new geometry represents a move without a resize
-    of the old geometry."""
-    return ((old and new) and
-            (new.x != old.x or new.y != old.y) and
-            (new.width == old.width) and
-            (new.height == old.height) and
-            (new.border_width == old.border_width))
 
 class WindowManager(EventHandler):
     """A window manager for one X screen.
