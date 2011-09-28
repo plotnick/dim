@@ -11,6 +11,7 @@ from xcb.xproto import *
 
 from client import ClientWindow, WMState
 from event import handler, EventHandler
+from properties import *
 from xutil import *
 
 def is_move_only(old, new):
