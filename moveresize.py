@@ -61,7 +61,7 @@ class MoveResize(WindowManager):
                                            (ConfigWindow.X | ConfigWindow.Y),
                                            (x, y))
         else:
-            min_size = self.size_hints.min_width
+            min_size = self.size_hints.min_size
             width = int16(max(min_size.width, delta_x + g.width))
             height = int16(max(min_size.height, delta_y + g.height))
             self.conn.core.ConfigureWindow(self.resizing.window,
