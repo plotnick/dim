@@ -30,6 +30,12 @@ class TestPropertyValue(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: prop.b)
         self.assertEqual(prop.c, 3)
 
+    def test_prop_set(self):
+        prop = TestProp()
+        self.assertRaises(AttributeError, lambda: prop.a)
+        prop.a = 1
+        self.assertEqual(prop.a, 1)
+
     def test_equality(self):
         self.assertEqual(TestProp(a=1, b=2, c=3), TestProp(a=1, b=2, c=3))
         self.assertNotEqual(TestProp(a=1), TestProp(a=1, b=2, c=3))
@@ -70,11 +76,24 @@ class TestWMSizeHints(unittest.TestCase):
         self.assertEqual(hints.base_size, self.min_size)
 
     def test_base_and_min_size(self):
-        hints = WMSizeHints(min_size=self.min_size, base_size=self.base_size)
+        # Start with just a base size; min size will default to that.
+        hints = WMSizeHints(base_size=self.base_size)
+        self.assertEqual(hints.flags, WMSizeHints.PBaseSize)
+        self.assertEqual(hints.base_size, self.base_size)
+        self.assertEqual(hints.min_size, self.base_size)
+
+        # Decouple them by adding a min size.
+        hints.min_size = self.min_size
         self.assertEqual(hints.flags,
                          WMSizeHints.PMinSize | WMSizeHints.PBaseSize)
-        self.assertEqual(hints.min_size, self.min_size)
         self.assertEqual(hints.base_size, self.base_size)
+        self.assertEqual(hints.min_size, self.min_size)
+
+        # Deleting the base size should now cause it to default to min size.
+        del hints.base_size
+        self.assertEqual(hints.flags, WMSizeHints.PMinSize)
+        self.assertEqual(hints.base_size, self.min_size)
+        self.assertEqual(hints.min_size, self.min_size)
 
     def test_resize_inc(self):
         hints = WMSizeHints(resize_inc=self.resize_inc)
