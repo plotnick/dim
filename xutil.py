@@ -45,6 +45,52 @@ def is_synthetic_event(event):
     # most-significant bit of this code set.
     return (ord(event[0]) & 0x80) != 0
 
+def configure_notify(connection, window, x, y, width, height, border_width,
+                     override_redirect=False,
+                     formatter=Struct("bx2xIIIhhHHHB5x")):
+    """Send a synthetic ConfigureNotify event to a window, as per ICCCM §4.1.5
+    and §4.2.3."""
+    assert formatter.size == 32
+    connection.core.SendEvent(False,
+                              window,
+                              EventMask.StructureNotify,
+                              formatter.pack(22, # code
+                                             window, # event
+                                             window, # window
+                                             0, # above-sibling: None
+                                             x + border_width,
+                                             y + border_width,
+                                             width,
+                                             height,
+                                             border_width,
+                                             override_redirect))
+
+def select_values(value_mask, values):
+    """Create a value-list from the supplied possible values according to the
+    bits in the given value-mask."""
+    return [values[i] for i in range(len(values)) if value_mask & (1 << i)]
+
+def value_list(flag_class, **kwargs):
+    """Construct and return a value-mask and value-list from the supplied
+    keyword arguments. The flag_class should be an object with attributes
+    that define the flags for the possible values."""
+    flags = {}
+    for attr in dir(flag_class):
+        if not attr.startswith("_"):
+            value = getattr(flag_class, attr, None)
+            if power_of_2(value):
+                flags[attr.lower()] = value
+    assert len(set(flags.values())) == len(flags), \
+        "Duplicate flags in %s" % (flag_class.__name__ \
+                                       if hasattr(flag_class, "__name__")
+                                       else flag_class)
+    
+    values = [(value, flags[name.replace("_", "").lower()])
+              for name, value in kwargs.items()]
+    return (reduce(operator.or_, map(operator.itemgetter(1), values), 0),
+            map(operator.itemgetter(0),
+                sorted(values, key=operator.itemgetter(1))))
+
 class AtomCache(object):
     """A simple cache for X atoms."""
 
@@ -76,49 +122,3 @@ class AtomCache(object):
         atom = self.conn.core.InternAtom(False, len(name), name).reply().atom
         self.atoms[name] = atom
         return atom
-
-def select_values(value_mask, values):
-    """Create a value-list from the supplied possible values according to the
-    bits in the given value-mask."""
-    return [values[i] for i in range(len(values)) if value_mask & (1 << i)]
-
-def value_list(flag_class, **kwargs):
-    """Construct and return a value-mask and value-list from the supplied
-    keyword arguments. The flag_class should be an object with attributes
-    that define the flags for the possible values."""
-    flags = {}
-    for attr in dir(flag_class):
-        if not attr.startswith("_"):
-            value = getattr(flag_class, attr, None)
-            if power_of_2(value):
-                flags[attr.lower()] = value
-    assert len(set(flags.values())) == len(flags), \
-        "Duplicate flags in %s" % (flag_class.__name__ \
-                                       if hasattr(flag_class, "__name__")
-                                       else flag_class)
-    
-    values = [(value, flags[name.replace("_", "").lower()])
-              for name, value in kwargs.items()]
-    return (reduce(operator.or_, map(operator.itemgetter(1), values), 0),
-            map(operator.itemgetter(0),
-                sorted(values, key=operator.itemgetter(1))))
-
-def configure_notify(connection, window, x, y, width, height, border_width,
-                     override_redirect=False,
-                     event_struct=Struct("bx2xIIIhhHHHB5x")):
-    """Send a synthetic ConfigureNotify event to a window, as per ICCCM §4.1.5
-    and §4.2.3."""
-    assert event_struct.size == 32
-    connection.core.SendEvent(False,
-                              window,
-                              EventMask.StructureNotify,
-                              event_struct.pack(22, # code
-                                                window, # event
-                                                window, # window
-                                                0, # above-sibling: None
-                                                x + border_width,
-                                                y + border_width,
-                                                width,
-                                                height,
-                                                border_width,
-                                                override_redirect))
