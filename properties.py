@@ -20,9 +20,8 @@ class PropertyValueClass(type):
         cls = super(PropertyValueClass, metaclass).__new__(metaclass, name,
                                                            bases, namespace)
 
-        # Properties are always encoded as arrays of 8, 16, or 32-bit values.
-        # We'll use the declared property format in conjunction with the names
-        # of the fields to produce a Struct object which can pack and unpack
+        # Use the declared property format in conjunction with the names of
+        # the fields to produce a Struct object which can pack and unpack
         # the property data.
         try:
             fields = namespace["__slots__"]
@@ -34,10 +33,17 @@ class PropertyValueClass(type):
         return cls
 
 class PropertyValue(object):
-    """Base class for representations of X property values. Subclassess
-    should set their __propformat__ attribute to either 8, 16, or 32, and
-    their __slots__ attribute to a sequence of attribute names whose values
-    comprise the property data."""
+    """Base class for representations of X property values.
+
+    X property values are treated by the server as lists of 8-bit, 16-bit,
+    or 32-bit quantities. This class provides a representation of such
+    lists as instances with named attributes (i.e., fields or slots),
+    and offers convenience methods for translating to and from the
+    binary representation.
+
+    Subclassess should set their __propformat__ attribute to either 8, 16,
+    or 32, and their __slots__ attribute to a sequence of attribute names
+    whose values comprise the property data."""
 
     __metaclass__ = PropertyValueClass
     __slots__ = ()
@@ -66,7 +72,7 @@ class PropertyValue(object):
         return cls(*cls._formatter.unpack_from(data))
 
     def pack(self):
-        """Return the property data."""
+        """Return the property data as a byte string."""
         data = self._formatter.pack(*(getattr(self, slot, 0)
                                       for slot in self.__slots__))
         assert len(self.__slots__) == len(data) / (self.__propformat__ / 8), \
