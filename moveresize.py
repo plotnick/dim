@@ -87,9 +87,9 @@ class MoveResize(WindowManager):
 
         self.button_press = Position(event.root_x, event.root_y)
         if button == self.move_button:
-            self.configuring = MoveClient(client)
+            self.moveresize = MoveClient(client)
         elif button == self.resize_button:
-            self.configuring = ResizeClient(client)
+            self.moveresize = ResizeClient(client)
         else:
             raise UnhandledEvent(event)
         self.conn.core.GrabKeyboard(False, self.screen.root, Time.CurrentTime,
@@ -97,35 +97,35 @@ class MoveResize(WindowManager):
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
-        if self.configuring:
-            try:
-                self.configuring.commit()
-            except:
-                self.configuring.rollback()
-            finally:
-                self.configuring = None
-                self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
-        else:
+        if not self.moveresize:
             raise UnhandledEvent(event)
+        try:
+            self.moveresize.commit()
+        except:
+            self.moveresize.rollback()
+        finally:
+            self.moveresize = None
+            self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
 
     @handler(MotionNotifyEvent)
     @compress
     def handle_motion_notify(self, event):
-        if self.configuring:
-            if event.detail == Motion.Hint:
-                q = self.conn.core.QueryPointer(self.screen.root).reply()
-                p = Position(q.root_x, q.root_y)
-            else:
-                p = Position(event.root_x, event.root_y)
-            self.configuring.update(p - self.button_press)
-        else:
+        if not self.moveresize:
             raise UnhandledEvent(event)
+        if event.detail == Motion.Hint:
+            q = self.conn.core.QueryPointer(self.screen.root).reply()
+            p = Position(q.root_x, q.root_y)
+        else:
+            p = Position(event.root_x, event.root_y)
+        self.moveresize.update(p - self.button_press)
 
     @handler(KeyPressEvent)
     def handle_key_press(self, event):
+        if not self.moveresize:
+            raise UnhandledEvent(event)
         if self.keymap[event.detail] == XK_Escape:
             try:
-                self.configuring.rollback()
+                self.moveresize.rollback()
             finally:
-                self.configuring = None
+                self.moveresize = None
                 self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
