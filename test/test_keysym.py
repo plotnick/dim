@@ -12,7 +12,7 @@ class TestKeysym(unittest.TestCase):
     def test_string_to_keysym(self):
         self.assertEqual(string_to_keysym(" "), XK_space)
         self.assertEqual(string_to_keysym(u"\N{LOGICAL OR}"), XK_logicalor)
-        self.assertRaises(KeyError, lambda: string_to_keysym("\0"))
+        self.assertRaises(KeyError, lambda: string_to_keysym("\x00"))
 
     def test_keysym_to_string(self):
         self.assertEqual(keysym_to_string(XK_space), "space")
