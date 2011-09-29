@@ -1,20 +1,21 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from collections import namedtuple
+from operator import add, sub
 
 __all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
            "is_move_only"]
 
-def add_tuple(self, other):
-    """Add a named tuple to another tuple or a scalar."""
-    if isinstance(other, Geometry):
-        return other._replace(x=self.x + other.x, y=self.y + other.y)
-    elif isinstance(other, tuple):
-        return self._make(x + y for x, y in zip(self, other))
-    elif isinstance(other, (int, float)):
-        return self._make(x + other for x in self)
-    else:
-        return NotImplemented
+def make_tuple_adder(op):
+    def add_sub_tuple(self, other):
+        """Add or subtract two named tuples or a named tuple and a scalar."""
+        if isinstance(other, tuple):
+            return self._make(map(op, self, other))
+        elif isinstance(other, (int, float)):
+            return self._make(op(field, other) for field in self)
+        else:
+            return NotImplemented
+    return add_sub_tuple
 
 def multiply_tuple(self, other):
     """Multiply the components of a named tuple by a scalar."""
@@ -23,30 +24,35 @@ def multiply_tuple(self, other):
     else:
         return NotImplemented
 
-def translate_geometry(self, other):
-    """Translate a geometry by a relative position or a scalar."""
-    if isinstance(other, tuple):
-        return self._replace(x=self.x + other[0], y=self.y + other[1])
-    elif isinstance(other, (int, float)):
-        return self._replace(x=self.x + other, y=self.y + other)
-    else:
-        return NotImplemented
+def make_translater(op):
+    def translate_geometry(self, other):
+        """Translate a geometry by a relative position or a scalar."""
+        if isinstance(other, tuple):
+            return self._replace(x=op(self.x, other[0]), y=op(self.y, other[1]))
+        elif isinstance(other, (int, float)):
+            return self._replace(x=op(self.x, other), y=op(self.y, other))
+        else:
+            return NotImplemented
+    return translate_geometry
 
 Position = namedtuple("Position", "x, y")
-Position.__add__ = Position.__radd__ = add_tuple
+Position.__add__ = Position.__radd__ = make_tuple_adder(add)
+Position.__sub__ = make_tuple_adder(sub)
 Position.__mul__ = Position.__rmul__ = multiply_tuple
 Position.__nonzero__ = lambda self: self.x != 0 or self.y != 0
 Position.__str__ = lambda self: "%+d%+d" % self
 
 Rectangle = namedtuple("Rectangle", "width, height")
-Rectangle.__add__ = Rectangle.__radd__ = add_tuple
+Rectangle.__add__ = Rectangle.__radd__ = make_tuple_adder(add)
+Rectangle.__sub__ = make_tuple_adder(sub)
 Rectangle.__mul__ = Rectangle.__rmul__ = multiply_tuple
 Rectangle.__nonzero__ = lambda self: self.width != 0 or self.height != 0
 Rectangle.__str__ = lambda self: "%ux%u" % self
 Rectangle.__unicode__ = lambda self: u"%u×%u" % self
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
-Geometry.__add__ = Geometry.__radd__ = translate_geometry
+Geometry.__add__ = Geometry.__radd__ = make_translater(add)
+Geometry.__sub__ = make_translater(sub)
 Geometry.__nonzero__ = lambda self: \
     (self.x != 0 or self.y != 0 or
      self.width != 0 or self.height != 0 or
