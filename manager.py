@@ -110,6 +110,13 @@ class WindowManager(EventHandler):
                                             int16(geometry.border_width)))
         return geometry
 
+    def grab_keyboard(self):
+        self.conn.core.GrabKeyboard(False, self.screen.root, Time.CurrentTime,
+                                    GrabMode.Async, GrabMode.Async)
+
+    def ungrab_keyboard(self):
+        self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
+
     def event_loop(self):
         """The main event loop of the window manager. We keep a one-event
         lookahead (accessible via peek_next_event) in order to support event

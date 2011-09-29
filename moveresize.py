@@ -14,21 +14,25 @@ from manager import WindowManager, compress
 from xutil import *
 
 class ConfigureClient(object):
-    def __init__(self, client):
+    """A transactional client configuration change."""
+
+    def __init__(self, client, start=lambda: None, end=lambda: None):
         self.client = client
+        self.end = end
+        start()
 
     def update(self, delta):
         pass
             
     def commit(self):
-        pass
+        self.end()
 
     def rollback(self):
-        pass
+        self.end()
 
 class MoveClient(ConfigureClient):
-    def __init__(self, client):
-        super(MoveClient, self).__init__(client)
+    def __init__(self, client, *args):
+        super(MoveClient, self).__init__(client, *args)
         self.position = Position(client.geometry.x, client.geometry.y)
 
     def update(self, delta):
@@ -36,10 +40,11 @@ class MoveClient(ConfigureClient):
 
     def rollback(self):
         self.client.move(self.position)
+        super(MoveClient, self).rollback()
 
 class ResizeClient(ConfigureClient):
-    def __init__(self, client):
-        super(ResizeClient, self).__init__(client)
+    def __init__(self, client, *args):
+        super(ResizeClient, self).__init__(client, *args)
         self.size = Rectangle(client.geometry.width, client.geometry.height)
         self.size_hints = client.wm_normal_hints
 
@@ -48,6 +53,7 @@ class ResizeClient(ConfigureClient):
 
     def rollback(self):
         self.client.resize(self.size)
+        super(ResizeClient, self).rollback()
 
 class MoveResize(WindowManager):
     GRAB_EVENT_MASK = (EventMask.ButtonPress |
@@ -87,13 +93,15 @@ class MoveResize(WindowManager):
 
         self.button_press = Position(event.root_x, event.root_y)
         if button == self.move_button:
-            self.moveresize = MoveClient(client)
+            self.moveresize = MoveClient(client,
+                                         self.grab_keyboard,
+                                         self.ungrab_keyboard)
         elif button == self.resize_button:
-            self.moveresize = ResizeClient(client)
+            self.moveresize = ResizeClient(client,
+                                           self.grab_keyboard,
+                                           self.ungrab_keyboard)
         else:
             raise UnhandledEvent(event)
-        self.conn.core.GrabKeyboard(False, self.screen.root, Time.CurrentTime,
-                                    GrabMode.Async, GrabMode.Async)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
@@ -105,7 +113,6 @@ class MoveResize(WindowManager):
             self.moveresize.rollback()
         finally:
             self.moveresize = None
-            self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
 
     @handler(MotionNotifyEvent)
     @compress
@@ -128,4 +135,3 @@ class MoveResize(WindowManager):
                 self.moveresize.rollback()
             finally:
                 self.moveresize = None
-                self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
