@@ -8,6 +8,7 @@ from xcb.xproto import *
 
 from client import ClientWindow
 from event import handler, EventHandler, UnhandledEvent
+from geometry import *
 from manager import WindowManager, compress
 from xutil import *
 
@@ -36,43 +37,40 @@ class MoveResize(WindowManager):
                                              self.screen.root, Cursor._None,
                                              button, mod_key).check()
 
-    def begin_move(self, client, x, y):
-        self.moving, self.resizing = (client, None)
-        self.begin_move_resize(client, x, y)
+    def begin_move(self, client):
+        self.moving = client
+        self.initial_position = Position(client.geometry.x,
+                                         client.geometry.y)
 
-    def begin_resize(self, client, x, y):
-        self.moving, self.resizing = (None, client)
+    def begin_resize(self, client):
+        self.resizing = client
         self.size_hints = client.wm_normal_hints
-        self.begin_move_resize(client, x, y)
+        self.initial_size = Rectangle(client.geometry.width,
+                                      client.geometry.height)
 
-    def begin_move_resize(self, client, x, y, move=True):
-        """Shared initialization for move and resize."""
-        self.starting_position = (x, y)
-        self.starting_geometry = client.geometry
-
-    def move_resize(self, x, y):
-        delta_x = x - self.starting_position[0]
-        delta_y = y - self.starting_position[1]
-        g = self.starting_geometry
+    def move_resize(self, delta):
         if self.moving:
-            x = int16(delta_x + g.x)
-            y = int16(delta_y + g.y)
+            new_position = self.initial_position + delta
             self.conn.core.ConfigureWindow(self.moving.window,
                                            (ConfigWindow.X | ConfigWindow.Y),
-                                           (x, y))
-        else:
-            min_size = self.size_hints.min_size
-            width = int16(max(min_size.width, delta_x + g.width))
-            height = int16(max(min_size.height, delta_y + g.height))
+                                           map(int16, new_position))
+        elif self.resizing:
+            new_size = constrain_size(self.initial_size + delta,
+                                      self.size_hints)
             self.conn.core.ConfigureWindow(self.resizing.window,
                                            (ConfigWindow.Width |
                                             ConfigWindow.Height),
-                                           (width, height))
+                                           map(int16, new_size))
+        else:
+            warning("Neither moving nor resizing, but in move_resize.")
         self.conn.flush()
 
     def end_move_resize(self):
         debug("Ending move/resize")
         self.moving = self.resizing = None
+        self.initial_position = None
+        self.initial_size = None
+        self.size_hints = None
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
@@ -84,10 +82,12 @@ class MoveResize(WindowManager):
             client = self.clients[event.child]
         except KeyError:
             raise UnhandledEvent(event)
+
+        self.button_press = Position(event.root_x, event.root_y)
         if button == self.move_button:
-            self.begin_move(client, event.root_x, event.root_y)
+            self.begin_move(client)
         elif button == self.resize_button:
-            self.begin_resize(client, event.root_x, event.root_y)
+            self.begin_resize(client)
         else:
             raise UnhandledEvent(event)
 
@@ -103,10 +103,10 @@ class MoveResize(WindowManager):
     def handle_motion_notify(self, event):
         if self.moving or self.resizing:
             if event.detail == Motion.Hint:
-                pointer = self.conn.core.QueryPointer(self.screen.root).reply()
-                x, y = (pointer.root_x, pointer.root_y)
+                q = self.conn.core.QueryPointer(self.screen.root).reply()
+                p = Position(q.root_x, q.root_y)
             else:
-                x, y = (event.root_x, event.root_y)
-            self.move_resize(x, y)
+                p = Position(event.root_x, event.root_y)
+            self.move_resize(p - self.button_press)
         else:
             raise UnhandledEvent(event)
