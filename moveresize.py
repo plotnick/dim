@@ -55,8 +55,8 @@ class MoveResize(WindowManager):
                        EventMask.PointerMotionHint)
 
     def __init__(self, conn, screen=None,
-                 mod_key=8, move_button=1, resize_button=3):
-        assert mod_key != 0, "Invalid modifier key for move/resize"
+                 modifier=ModMask._1, move_button=1, resize_button=3):
+        assert modifier != 0, "Invalid modifier key for move/resize"
         assert move_button != resize_button, \
             "Can't have move and resize on the same button"
 
@@ -71,7 +71,7 @@ class MoveResize(WindowManager):
                                              self.GRAB_EVENT_MASK,
                                              GrabMode.Async, GrabMode.Async,
                                              self.screen.root, Cursor._None,
-                                             button, mod_key).check()
+                                             button, modifier).check()
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
