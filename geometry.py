@@ -4,7 +4,7 @@ from collections import namedtuple
 from operator import add, sub
 
 __all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
-           "is_move_only"]
+           "is_move_only", "constrain_size"]
 
 def make_tuple_adder(op):
     def add_sub_tuple(self, other):
@@ -75,3 +75,16 @@ def is_move_only(old, new):
             (new.width == old.width) and
             (new.height == old.height) and
             (new.border_width == old.border_width))
+
+def constrain_size(size, hints):
+    """Given a window's potential size and size hints, return the closest
+    allowable size.
+
+    This function does not yet handle aspect ratios."""
+    base = hints.base_size
+    min_size = hints.min_size
+    inc = hints.resize_inc
+    def constrain(size, i):
+        return max((((size[i] - base[i]) // inc[i]) * inc[i]) + base[i],
+                   min_size[i])
+    return Rectangle(constrain(size, 0), constrain(size, 1))
