@@ -41,6 +41,16 @@ class ClientWindow(object):
         assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
         self._geometry = geometry
 
+    def move(self, position):
+        self.manager.conn.core.ConfigureWindowChecked(self.window,
+            (ConfigWindow.X | ConfigWindow.Y),
+            map(int16, position)).check()
+
+    def resize(self, size):
+        self.manager.conn.core.ConfigureWindowChecked(self.window,
+            (ConfigWindow.Width | ConfigWindow.Height),
+            map(int16, size)).check()
+
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x
 
