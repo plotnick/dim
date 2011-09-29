@@ -9,6 +9,7 @@ from xcb.xproto import *
 from client import ClientWindow
 from event import handler, EventHandler, UnhandledEvent
 from geometry import *
+from keysym import *
 from manager import WindowManager, compress
 from xutil import *
 
@@ -91,6 +92,8 @@ class MoveResize(WindowManager):
             self.configuring = ResizeClient(client)
         else:
             raise UnhandledEvent(event)
+        self.conn.core.GrabKeyboard(False, self.screen.root, Time.CurrentTime,
+                                    GrabMode.Async, GrabMode.Async)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
@@ -101,6 +104,7 @@ class MoveResize(WindowManager):
                 self.configuring.rollback()
             finally:
                 self.configuring = None
+                self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
         else:
             raise UnhandledEvent(event)
 
@@ -116,3 +120,12 @@ class MoveResize(WindowManager):
             self.configuring.update(p - self.button_press)
         else:
             raise UnhandledEvent(event)
+
+    @handler(KeyPressEvent)
+    def handle_key_press(self, event):
+        if self.keymap[event.detail] == XK_Escape:
+            try:
+                self.configuring.rollback()
+            finally:
+                self.configuring = None
+                self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
