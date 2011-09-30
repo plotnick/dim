@@ -1,7 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from keysymdef import *
-from keysymdef import _keysyms, _names, _legacy_codes
+from keysymdef import _names, _keysyms, _legacy_codes
 
 NoSymbol = 0
 
