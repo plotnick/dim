@@ -39,6 +39,12 @@ class BazHandler(BarHandler):
     def unhandled_event(self, event):
         return False
 
+class MultiHandler(EventHandler):
+    @handler((FooEvent, BarEvent, BazEvent))
+    def handle_foo_bar_baz(self, event):
+        event.handled = True
+        return event
+
 class TestEventHandler(unittest.TestCase):
     def test_base_handler(self):
         """Test basic event dispatch and handling"""
@@ -75,6 +81,15 @@ class TestEventHandler(unittest.TestCase):
         self.assertEqual(baz_handler.handle_event(qux), False)
         self.assertTrue(qux.declined)
         self.assertFalse(qux.handled)
+
+    def test_multi_handler(self):
+        """Test multi-class handler"""
+        multi_handler = MultiHandler()
+        self.assertTrue(multi_handler.handle_event(FooEvent()).handled)
+        self.assertTrue(multi_handler.handle_event(BarEvent()).handled)
+        self.assertTrue(multi_handler.handle_event(BazEvent()).handled)
+        self.assertRaises(UnhandledEvent,
+                          lambda: multi_handler.handle_event(QuxEvent()))
 
 if __name__ == "__main__":
     unittest.main()

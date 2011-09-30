@@ -5,7 +5,7 @@
 class UnhandledEvent(Exception):
     pass
 
-def handler(event_class):
+def handler(event_classes):
     """A decorator factory for event handling methods. Requires that the
     metaclass be EventHandler or a subclass thereof.
 
@@ -19,7 +19,9 @@ def handler(event_class):
     exception. In that case, the next registered handler (or the default handler
     if no more handlers are available) will be invoked."""
     def set_handler(method):
-        method.__handler_for__ = event_class
+        method.__handler_for__ = event_classes \
+            if isinstance(event_classes, (list, tuple)) \
+            else (event_classes,)
         return method
     return set_handler
 
@@ -33,8 +35,8 @@ class EventHandlerClass(type):
         for base in bases:
             cls.__handlers__.update(getattr(base, "__handlers__", dict()))
         for x in namespace.values():
-            event_class = getattr(x, "__handler_for__", None)
-            if event_class:
+            event_classes = getattr(x, "__handler_for__", ())
+            for event_class in event_classes:
                 cls.__handlers__[event_class] = [x] + \
                     cls.__handlers__.get(event_class, [])
         return cls
