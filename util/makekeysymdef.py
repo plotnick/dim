@@ -49,37 +49,37 @@ def keysymdef(input, output):
         output.write("# Automatically generated from %s.\n\n" % input.name)
 
     names = {} # keysym code → name map
-    keysyms = {} # Unicode character → keysym code map
+    keysyms = {} # Unicode character → keysym map
     legacy_codes = {} # legacy keysym code → Unicode character
 
     for line in input:
         for pattern in mnemonic_patterns:
-            m = pattern.match(line)
-            if m:
-                name = m.group("name")
-                code = int(m.group("code"), 16)
+            match = pattern.match(line)
+            if match:
+                name = match.group("name")
+                keysym = int(match.group("code"), 16)
                 try:
-                    code_point = int(m.group("code_point"), 16)
+                    code_point = int(match.group("code_point"), 16)
                 except IndexError:
                     code_point = None
                 break
         else:
             continue # skip this line of input
 
-        output.write("XK_%s = 0x%x\n" % (name, code))
-        if "0x%x" % code not in names:
-            names["0x%x" % code] = repr(name)
+        output.write("XK_%s = 0x%x\n" % (name, keysym))
+        if "0x%x" % keysym not in names:
+            names["0x%x" % keysym] = repr(name)
 
-        if is_unicode_keysym(code):
+        if is_unicode_keysym(keysym):
             # For Unicode keysyms, the keysym code is authoritative.
             # These should agree with the code points in the comments,
             # but there are bugs: e.g.,
             #     XK_approxeq = 0x1002248  /* U+2245 ALMOST EQUAL TO */
-            keysyms[repr(unichr(code & 0x00ffffff))] = "XK_%s" % name
+            keysyms[repr(unichr(keysym & 0x00ffffff))] = "XK_%s" % name
         elif code_point:
             char = unichr(code_point)
-            if is_legacy_keysym(code):
-                legacy_codes["0x%x" % code] = repr(char)
+            if is_legacy_keysym(keysym):
+                legacy_codes["0x%x" % keysym] = repr(char)
             keysyms[repr(char)] = "XK_%s" % name
 
     def pprint_dict(name, d):
