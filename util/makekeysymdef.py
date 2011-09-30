@@ -9,7 +9,7 @@ We generate four kinds of definitions from the C header file. The first is
 mnemonic names: for each mnemonic macro definition XK_foo in keysymdef.h,
 we generate a Python variable with the same name and code.
 
-The second is a map from keysym codes to names, whic we represent as a
+The second is a map from keysym codes to names, which we represent as a
 Python dictionary named "_names". These names should be the same as the
 mnemonics with the prefix "XK_" removed. In the case when more than one
 mnemonic is defined for the same keysym, the one that occurs first in the
