@@ -28,14 +28,14 @@ import re
 # Adapted from keysymdef.h comment.
 mnemonic_patterns = map(lambda pattern: re.compile(pattern, re.VERBOSE),
     (r"""^\#define\ XK_(?P<name>[a-zA-Z_0-9]+)\s+
-                    0x(?P<code>[0-9a-f]+)\s*
+                    (?P<code>0x[0-9a-f]+)\s*
                     /\*\ U\+(?P<code_point>[0-9A-F]{4,6})\ .*\ \*/\s*$""",
      r"""^\#define\ XK_(?P<name>[a-zA-Z_0-9]+)\s+
-                    0x(?P<code>[0-9a-f]+)\s*
+                    (?P<code>0x[0-9a-f]+)\s*
                     # Don't bother assigning code points to deprecated keysyms.
                     /\*\(U\+[0-9A-F]{4,6}\ .*\)\*/\s*$""",
      r"""^\#define\ XK_(?P<name>[a-zA-Z_0-9]+)\s+
-                    0x(?P<code>[0-9a-f]+)\s*
+                    (?P<code>0x[0-9a-f]+)\s*
                     (?:/\*\s*.*\s*\*/)?\s*$"""))
 
 def is_legacy_keysym(keysym):
@@ -48,16 +48,23 @@ def keysymdef(input, output):
     if input.name:
         output.write("# Automatically generated from %s.\n\n" % input.name)
 
-    names = {} # keysym code → name map
-    keysyms = {} # Unicode character → keysym map
-    legacy_codes = {} # legacy keysym code → Unicode character
+    # The following dictionaries are used to generate the corresponding
+    # dictionaries in the output file, but they are not quite the same.
+    # In particular, all of the keys and values here are strings. When the
+    # generated file is interpreted, the mnemonics will be read as variable
+    # references and so will become keysyms (i.e., integers).
+    names = {} # mnemonic (keysym code) → name map
+    keysyms = {} # Unicode character → mnemonic (keysym code) map
+    legacy_codes = {} # legacy keysym mnemonic (code) → Unicode character
 
     for line in input:
         for pattern in mnemonic_patterns:
             match = pattern.match(line)
             if match:
                 name = match.group("name")
-                keysym = int(match.group("code"), 16)
+                code = match.group("code")
+                mnemonic = "XK_%s" % name
+                keysym = int(code, 16)
                 try:
                     code_point = int(match.group("code_point"), 16)
                 except IndexError:
@@ -66,21 +73,21 @@ def keysymdef(input, output):
         else:
             continue # skip this line of input
 
-        output.write("XK_%s = 0x%x\n" % (name, keysym))
-        if "0x%x" % keysym not in names:
-            names["0x%x" % keysym] = repr(name)
+        output.write("%s = %s\n" % (mnemonic, code))
+        if code not in names:
+            names[mnemonic] = repr(name)
 
         if is_unicode_keysym(keysym):
             # For Unicode keysyms, the keysym code is authoritative.
             # These should agree with the code points in the comments,
             # but there are bugs: e.g.,
             #     XK_approxeq = 0x1002248  /* U+2245 ALMOST EQUAL TO */
-            keysyms[repr(unichr(keysym & 0x00ffffff))] = "XK_%s" % name
+            keysyms[repr(unichr(keysym & 0x00ffffff))] = mnemonic
         elif code_point:
             char = unichr(code_point)
             if is_legacy_keysym(keysym):
-                legacy_codes["0x%x" % keysym] = repr(char)
-            keysyms[repr(char)] = "XK_%s" % name
+                legacy_codes[mnemonic] = repr(char)
+            keysyms[repr(char)] = mnemonic
 
     def pprint_dict(name, d):
         output.write("\f\n%s = {\n" % name)
