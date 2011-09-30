@@ -44,6 +44,10 @@ class TestEffectiveKeysym(unittest.TestCase):
         for i in range(len(keysyms)):
             self.assertEqual(effective_keysym(keysyms, i), effective_keysyms[i])
 
+    def test_empty(self):
+        self.assertEffectiveKeysyms([NoSymbol] * 4,
+                                    [NoSymbol] * 4)
+
     def test_full(self):
         self.assertEffectiveKeysyms([XK_1, XK_2, XK_3, XK_4],
                                     [XK_1, XK_2, XK_3, XK_4])
@@ -51,6 +55,8 @@ class TestEffectiveKeysym(unittest.TestCase):
     def test_nonalpha_nosymbol(self):
         self.assertEffectiveKeysyms([XK_1, NoSymbol, NoSymbol, NoSymbol],
                                     [XK_1, XK_1, XK_1, XK_1])
+        self.assertEffectiveKeysyms([NoSymbol, NoSymbol, XK_2, NoSymbol],
+                                    [NoSymbol, NoSymbol, XK_2, XK_2])
         self.assertEffectiveKeysyms([XK_1, NoSymbol, XK_2, NoSymbol],
                                     [XK_1, XK_1, XK_2, XK_2])
 
@@ -59,6 +65,8 @@ class TestEffectiveKeysym(unittest.TestCase):
         # and uppercase Latin-1 keysyms.
         self.assertEffectiveKeysyms([XK_a, NoSymbol, NoSymbol, NoSymbol],
                                     [XK_a, XK_A, XK_a, XK_A])
+        self.assertEffectiveKeysyms([NoSymbol, NoSymbol, XK_a, NoSymbol],
+                                    [NoSymbol, NoSymbol, XK_a, XK_A])
         self.assertEffectiveKeysyms([XK_a, NoSymbol, XK_b, NoSymbol],
                                     [XK_a, XK_A, XK_b, XK_B])
 
