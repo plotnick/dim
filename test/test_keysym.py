@@ -4,9 +4,10 @@ import unittest
 
 from keysym import *
 from keysym import _keysyms # borrow private dictionary from keysymdef
+import keysymdef
 
 class TestKeysym(unittest.TestCase):
-    def test_keysym(self):
+    def test_mnemonics(self):
         self.assertEqual(XK_VoidSymbol, 0xffffff)
         self.assertEqual(XK_space, 0x20)
 
@@ -16,6 +17,22 @@ class TestKeysym(unittest.TestCase):
         self.assertEqual(keysym_name(XK_logicalor), "logicalor")
         self.assertEqual(keysym_name(XK_VoidSymbol), "VoidSymbol")
         self.assertRaises(KeyError, lambda: keysym_name(NoSymbol))
+
+        # Verify that we have names for all the (non-deprecated) mnemonics.
+        mnemonics = [name for name in dir(keysymdef) if name.startswith("XK_")]
+        for mnemonic in mnemonics:
+            keysym = keysymdef.__dict__[mnemonic]
+            try:
+                self.assertEqual(keysym_name(keysym), mnemonic[len("XK_"):])
+            except AssertionError:
+                # Maybe the mnemonic is deprecated; let's try to find
+                # a non-deprecated one with the same value.
+                for name in mnemonics:
+                    other = keysymdef.__dict__[name]
+                    if (other == keysym and name != mnemonic):
+                        break
+                else:
+                    raise
 
     def test_string_to_keysym(self):
         self.assertEqual(string_to_keysym(" "), XK_space)

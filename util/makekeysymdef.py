@@ -1,7 +1,25 @@
 #!/usr/bin/env python
 # -*- mode: Python; coding: utf-8 -*-
 
-"""Generate a Python file containing X keysym code definitions."""
+"""Generate a Python file containing X keysym definitions.
+
+See the comment at the top of keysymdef.h for background information.
+
+We generate four kinds of definitions from the C header file. The first is
+mnemonic names: for each mnemonic macro definition XK_foo in keysymdef.h,
+we generate a Python variable with the same name and code.
+
+The second is a map from keysym codes to names, whic we represent as a
+Python dictionary named "_names". These names should be the same as the
+mnemonics with the prefix "XK_" removed. In the case when more than one
+mnemonic is defined for the same keysym, the one that occurs first in the
+header file is used.
+
+The third generated definition is a map from Unicode characters to keysym
+codes, which we represent by a Python dictionary named "_keysyms".
+
+The fourth is a map from legacy keysym codes to Unicode characters, which
+we call "_legacy_codes". It is also a dictionary."""
 
 from operator import itemgetter
 import os
@@ -31,8 +49,8 @@ def keysymdef(input, output):
         output.write("# Automatically generated from %s.\n\n" % input.name)
 
     names = {} # keysym code → name map
-    legacy_codes = {} # legacy keysym code → Unicode character
     keysyms = {} # Unicode character → keysym code map
+    legacy_codes = {} # legacy keysym code → Unicode character
 
     for line in input:
         for pattern in mnemonic_patterns:
@@ -49,7 +67,8 @@ def keysymdef(input, output):
             continue # skip this line of input
 
         output.write("XK_%s = 0x%x\n" % (name, code))
-        names["0x%x" % code] = repr(name)
+        if "0x%x" % code not in names:
+            names["0x%x" % code] = repr(name)
 
         if is_unicode_keysym(code):
             # For Unicode keysyms, the keysym code is authoritative.
@@ -69,8 +88,8 @@ def keysymdef(input, output):
             output.write("    %s: %s,\n" % (key, value))
         output.write("}\n")
 
-    pprint_dict("_keysyms", keysyms)
     pprint_dict("_names", names)
+    pprint_dict("_keysyms", keysyms)
     pprint_dict("_legacy_codes", legacy_codes)
 
 if __name__ == "__main__":
