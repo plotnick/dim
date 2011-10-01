@@ -155,7 +155,7 @@ class WMTestCase(unittest.TestCase):
             self.conn.flush()
 
             # Wait for more events, but only for a second.
-            r, w, x = select(rlist, wlist, xlist, 1)
+            r, w, x = select(rlist, wlist, xlist, 1.0)
             if not r and not w and not x:
                 timeouts += 1
         self.fail("timed out")
