@@ -2,8 +2,13 @@
 
 import unittest
 
+import xcb
+from xcb.xproto import *
+
+from keymap import *
 from keymap import effective_index, effective_keysym
 from keysym import *
+from xutil import GrabServer
 
 class TestEffectiveIndex(unittest.TestCase):
     def assertEffectiveIndices(self, keysyms, indices):
@@ -83,6 +88,70 @@ class TestEffectiveKeysym(unittest.TestCase):
         # we do.
         self.assertEffectiveKeysyms([XK_ahook, NoSymbol, XK_mu, NoSymbol],
                                     [XK_ahook, XK_Ahook, XK_mu, XK_Greek_MU])
+
+class TestKeyboardMap(unittest.TestCase):
+    def setUp(self):
+        self.conn = xcb.connect()
+
+    def tearDown(self):
+        self.conn.disconnect()
+
+    def test_init_with_cookie(self):
+        cookie = self.conn.core.GetKeyboardMapping(8, 248)
+        keymap = KeyboardMap(self.conn, cookie)
+        self.assertEqual(len(keymap), 248)
+
+        # Can't start with a partial keymap.
+        cookie = self.conn.core.GetKeyboardMapping(8, 16)
+        self.assertRaises(KeymapError, lambda: KeyboardMap(self.conn, cookie))
+
+    def test_refresh(self):
+        # We don't want other clients changing the keyboard map during this
+        # test, and it's not worth processing MappingNotify events just to
+        # detect such an eventuality. So we'll lazy out and run this test
+        # with the whole server grabbed.
+        with GrabServer(self.conn):
+            keymap = KeyboardMap(self.conn)
+            self.assertEqual(len(keymap), 248)
+            keycode = 38 # a random keycode
+            old = keymap[keycode]
+            new = [XK_VoidSymbol] * 4
+            try:
+                self.conn.core.ChangeKeyboardMappingChecked(1, keycode,
+                                                            len(new),
+                                                            new).check()
+                keymap.refresh(keycode, 1)
+                self.assertEqual(list(keymap[keycode][:4]), new)
+            finally:
+                self.conn.core.ChangeKeyboardMappingChecked(1, keycode,
+                                                            len(old),
+                                                            old).check()
+            keymap.refresh(keycode, 1)
+            self.assertEqual(keymap[keycode], old)
+
+    def test_keymap(self):
+        keymap = KeyboardMap(self.conn)
+        self.assertEqual(len(keymap), 248)
+
+        # We'll assume there's a keycode that generates the symbol XK_a,
+        # and that it has the usual list of keysyms bound to it.
+        a = keymap.keysym_to_keycode(XK_a)
+        self.assertTrue(a > 0)
+        self.assertEqual(list(keymap[a][:4]), [XK_a, XK_A, XK_a, XK_A])
+        self.assertEqual(keymap[(a, 0)], XK_a)
+        self.assertEqual(keymap[(a, 1)], XK_A)
+        self.assertEqual(keymap[(a, 2)], XK_a)
+        self.assertEqual(keymap[(a, 3)], XK_A)
+
+        # We'll make a similar assumption for XK_Escape.
+        esc = keymap.keysym_to_keycode(XK_Escape)
+        self.assertTrue(esc > 0)
+        self.assertEqual(list(keymap[esc][:4]),
+                         [XK_Escape, NoSymbol, XK_Escape, NoSymbol])
+        for i in range(4):
+            # Although the second element in each group is NoSymbol, the
+            # effectice keysym for all four positions should be the same.
+            self.assertEqual(keymap[(esc, i)], XK_Escape)
 
 if __name__ == "__main__":
     unittest.main()
