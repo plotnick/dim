@@ -48,6 +48,9 @@ def effective_keysym(keysyms, index):
             return upper(keysym) if index & 1 else lower(keysym)
     return keysyms[index]
 
+class KeymapError(Exception):
+    pass
+
 class Keymap(object):
     """A map from keycodes to keysyms (and vice-versa)."""
 
@@ -57,32 +60,40 @@ class Keymap(object):
         self.min_keycode = setup.min_keycode
         self.max_keycode = setup.max_keycode
 
-        n = (self.max_keycode - self.min_keycode) + 1
-        reply = self.conn.core.GetKeyboardMapping(self.min_keycode, n).reply()
-        self.keysyms = reply.keysyms
+        first_keycode = self.min_keycode
+        count = (self.max_keycode - first_keycode) + 1
+        reply = self.conn.core.GetKeyboardMapping(first_keycode, count).reply()
         self.keysyms_per_keycode = reply.keysyms_per_keycode
+        if len(reply.keysyms) != count * self.keysyms_per_keycode:
+            raise KeymapError("didn't get the expected number of keysyms")
+
+        # We store the keysyms as a list of lists to avoid slicing on every
+        # call to keycode_to_keysym.
+        self.keysyms = [None for k in range(count)]
+        self.update_keysyms(self.min_keycode, count, reply.keysyms)
+
+    def update_keysyms(self, first_keycode, count, keysyms):
+        n = self.keysyms_per_keycode
+        row = first_keycode - self.min_keycode
+        for k in range(count):
+            i = k * n
+            self.keysyms[row] = keysyms[i:i + n]
+            row += 1
 
     def refresh(self, first_keycode=None, count=None):
+        """Request an updated keyboard mapping for the specified keycodes."""
         if first_keycode is None:
             first_keycode = self.min_keycode
         if count is None:
             count = (self.max_keycode - first_keycode) + 1
-
         reply = self.conn.core.GetKeyboardMapping(first_keycode, count).reply()
-        if reply.keysyms_per_keycode == self.keysyms_per_keycode:
-            # Only replace the keysym range that was changed.
-            i = first_keycode - self.min_keycode
-            j = i + (count * self.keysyms_per_keycode)
-            assert (j - i) == len(reply.keysyms)
-            self.keysyms[i:j] = reply.keysyms
-        else:
-            raise ValueError("number of keysyms per keycode changed")
+        if reply.keysyms_per_keycode != self.keysyms_per_keycode:
+            raise KeymapError("number of keysyms per keycode changed")
+        self.update_keysyms(first_keycode, count, reply.keysyms)
 
     def keycode_to_keysym(self, keycode, index):
         """Return the index'th symbol bound to the given keycode."""
-        i = (keycode - self.min_keycode) * self.keysyms_per_keycode
-        keysyms = self.keysyms[i:i + self.keysyms_per_keycode]
-        return effective_keysym(keysyms, index)
+        return effective_keysym(self.keysyms[keycode - self.min_keycode], index)
 
     def __getitem__(self, key):
         """Retrieve the symbol associated with a keycode.
