@@ -104,7 +104,9 @@ class KeyboardMap(InputDeviceMapping):
             if n is None:
                 n = reply.keysyms_per_keycode
             elif reply.keysyms_per_keycode != n:
-                raise KeymapError("number of keysyms per keycode changed")
+                raise KeymapError("number of keysyms per keycode changed "
+                                  "(was %d, reply has %d)" %
+                                  (n, reply.keysyms_per_keycode))
             if len(reply.keysyms) != count * n:
                 raise KeymapError("unexpected number of keysyms in reply "
                                   "(expected %d, got %d)" %
