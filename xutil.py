@@ -106,3 +106,15 @@ class AtomCache(object):
         atom = self.conn.core.InternAtom(False, len(name), name).reply().atom
         self.atoms[name] = atom
         return atom
+
+class GrabServer(object):
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __enter__(self):
+        self.conn.core.GrabServer()
+        self.conn.flush()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.conn.core.UngrabServer()
+        self.conn.flush()
