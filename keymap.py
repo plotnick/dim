@@ -1,12 +1,14 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from abc import abstractmethod, ABCMeta
 from array import array
+from collections import Mapping as AbstractMapping # avoid conflict with xcb
 
 from xcb.xproto import *
 
 from keysym import NoSymbol, upper, lower
 
-__all__ = ["Keymap"]
+__all__ = ["KeyboardMap", "ModifierMap", "PointerMap", "KeymapError"]
 
 def effective_index(keysyms, index):
     """From the X11 protocol specification (Chapter 5, ¶3):
@@ -53,47 +55,87 @@ def effective_keysym(keysyms, index):
 class KeymapError(Exception):
     pass
 
-class Keymap(object):
+class InputDeviceMapping(AbstractMapping):
+    """Abstract base class for keyboard, modifier, and pointer mappings."""
+
+    def __init__(self, conn, cookie=None, *args):
+        self.conn = conn
+        if cookie:
+            self.update(cookie, *args)
+        else:
+            self.refresh(*args)
+
+    @abstractmethod
+    def refresh(self):
+        """Request an updated mapping from the server."""
+        # Subclasses should generate an appropriate request and pass the
+        # cookie to update.
+        pass
+
+    @abstractmethod
+    def update(self, cookie):
+        """Update the cached mapping using the given request cookie."""
+        pass
+
+class KeyboardMap(InputDeviceMapping):
     """A map from keycodes to keysyms (and vice-versa)."""
 
-    def __init__(self, conn):
+    def __init__(self, conn, cookie=None):
         setup = conn.get_setup()
-        self.conn = conn
         self.min_keycode = setup.min_keycode
         self.max_keycode = setup.max_keycode
-
-        # Always fetch the entire map on initialization.
-        first_keycode = self.min_keycode
-        count = (self.max_keycode - first_keycode) + 1
-        reply = self.conn.core.GetKeyboardMapping(first_keycode, count).reply()
-        self.keysyms_per_keycode = reply.keysyms_per_keycode
-        self.check_reply(reply, count * self.keysyms_per_keycode)
-        self.keysyms = array("I", reply.keysyms)
+        self.keysyms = None
+        super(KeyboardMap, self).__init__(conn, cookie,
+                                          self.min_keycode, len(self))
 
     def refresh(self, first_keycode=None, count=None):
         """Request an updated keyboard mapping for the specified keycodes."""
         if first_keycode is None:
             first_keycode = self.min_keycode
         if count is None:
-            count = (self.max_keycode - first_keycode) + 1
+            count = len(self)
+        cookie = self.conn.core.GetKeyboardMapping(first_keycode, count)
+        self.update(cookie, first_keycode, count)
 
-        # Only replace the keysym range that was requested.
-        reply = self.conn.core.GetKeyboardMapping(first_keycode, count).reply()
-        n = self.keysyms_per_keycode
-        i = (first_keycode - self.min_keycode) * n
-        j = i + (count * n)
-        self.check_reply(reply, j - i)
-        self.keysyms[i:j] = array("I", reply.keysyms)
+    def update(self, cookie, first_keycode, count):
+        """Update the stored keyboard mapping for the count keycodes starting
+        at first_keycode."""
+        def check_reply(reply, count, n=None):
+            if n is None:
+                n = reply.keysyms_per_keycode
+            elif reply.keysyms_per_keycode != n:
+                raise KeymapError("number of keysyms per keycode changed")
+            if len(reply.keysyms) != count * n:
+                raise KeymapError("unexpected number of keysyms in reply "
+                                  "(expected %d, got %d)" %
+                                  (count * n, len(reply.keysyms)))
 
-    def check_reply(self, reply, nkeysyms):
-        if reply.keysyms_per_keycode != self.keysyms_per_keycode:
-            raise KeymapError("number of keysyms per keycode changed")
-        if len(reply.keysyms) != nkeysyms:
-            raise KeymapError("did not receive the expected number of keysyms")
+        reply = cookie.reply()
+        if self.keysyms:
+            # Only replace the keysym range that was requested.
+            check_reply(reply, count, self.keysyms_per_keycode)
+            n = self.keysyms_per_keycode
+            i = (first_keycode - self.min_keycode) * n
+            j = i + (count * n)
+            self.keysyms[i:j] = array("I", reply.keysyms)
+        else:
+            # Initialize the keyboard mapping.
+            check_reply(reply, count)
+            self.keysyms_per_keycode = reply.keysyms_per_keycode
+            self.keysyms = array("I", reply.keysyms)
 
-    def keycode_to_keysym(self, keycode, index=None):
-        """Return the index'th symbol bound to the given keycode, or the entire
-        list of keysyms bound to that keycode if index is None."""
+    def __getitem__(self, key):
+        """Retrieve the symbol associated with a key.
+
+        If the key is a raw keycode, the entire list of keysyms currently
+        bound to that keycode is returned. If the key is given as a tuple
+        of the form (keycode, index), then the effective keysym at the
+        index'th position is returned."""
+        if isinstance(key, tuple):
+            keycode, index = key
+        else:
+            keycode, index = key, None
+
         n = self.keysyms_per_keycode
         i = (keycode - self.min_keycode) * n
         j = i + n
@@ -101,20 +143,60 @@ class Keymap(object):
         return (tuple(keysyms) if index is None else
                 effective_keysym(self.keysyms[i:j], index))
 
-    def __getitem__(self, key):
-        """Retrieve the symbol associated with a keycode.
+    def __iter__(self):
+        for keycode in range(self.min_keycode, self.max_keycode):
+            yield keycode
 
-        As a convenience, the key may be either a (keycode, index) tuple,
-        or a raw keycode, in which case the index defaults to None (i.e.,
-        retrieve the list of keysyms bound to the given keycode)."""
-        if isinstance(key, tuple):
-            return self.keycode_to_keysym(*key)
-        else:
-            return self.keycode_to_keysym(key, None)
+    def __len__(self):
+        return (self.max_keycode - self.min_keycode) + 1
 
     def keysym_to_keycode(self, keysym):
         """Return the first keycode that generates the given symbol."""
         for j in range(self.keysyms_per_keycode):
             for i in range(self.min_keycode, self.max_keycode + 1):
-                if self.keycode_to_keysym(i, j) == keysym:
+                if self[(i, j)] == keysym:
                     return i
+
+class ModifierMap(InputDeviceMapping):
+    def refresh(self):
+        """Request an updated modifier mapping from the server."""
+        self.update(self.conn.core.GetModifierMapping())
+
+    def update(self, cookie):
+        """Update the stored modifier mapping."""
+        reply = cookie.reply()
+        n = self.keycodes_per_modifier = reply.keycodes_per_modifier
+        self.modmap = [[reply.keycodes[(i * n) + j] for j in range(n)]
+                       for i in range(8)]
+
+    def __getitem__(self, modifier):
+        """Return the list of keycodes associated with the given modifier."""
+        return self.modmap[modifier]
+
+    def __iter__(self):
+        for i in range(8):
+            yield i
+
+    def __len__(self):
+        return 8
+
+class PointerMap(InputDeviceMapping):
+    def refresh(self):
+        """Request an updated pointer mapping from the server."""
+        self.update(self.conn.core.GetPointerMapping())
+
+    def update(self, cookie):
+        """Update the stored pointer mapping."""
+        reply = cookie.reply()
+        self.map = (None,) + tuple(reply.map)
+
+    def __getitem__(self, button):
+        if button == 0:
+            raise KeyError("pointer buttons are 1-indexed")
+        return self.map[button]
+
+    def __iter__(self):
+        return iter(self.map[1:])
+
+    def __len__(self):
+        return len(self.map) - 1

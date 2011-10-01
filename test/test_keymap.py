@@ -2,7 +2,7 @@
 
 import unittest
 
-from keymap import Keymap, effective_index, effective_keysym
+from keymap import effective_index, effective_keysym
 from keysym import *
 
 class TestEffectiveIndex(unittest.TestCase):
