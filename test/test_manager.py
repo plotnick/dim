@@ -135,7 +135,6 @@ class WMTestCase(unittest.TestCase):
 
     def event_loop(self, test=lambda: False, max_timeouts=5):
         """A simple client event loop."""
-        self.conn.flush()
         timeouts = 0
         rlist = [self.conn.get_file_descriptor()]
         wlist = []
@@ -152,11 +151,14 @@ class WMTestCase(unittest.TestCase):
                     self.fail("Event received for unknown window")
             if test():
                 return True
+
+            self.conn.flush()
+
             # Wait for more events, but only for a second.
             r, w, x = select(rlist, wlist, xlist, 1)
             if not r and not w and not x:
                 timeouts += 1
-        self.fail()
+        self.fail("timed out")
 
 class TestWMStartup(WMTestCase):
     # We'll override WMTestCase's setUp method so that it doesn't start the

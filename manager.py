@@ -121,7 +121,6 @@ class WindowManager(EventHandler):
         """The main event loop of the window manager. We keep a one-event
         lookahead (accessible via peek_next_event) in order to support event
         compression."""
-        self.conn.flush()
         self.next_event = None
 
         # We use a select-based loop instead of XCB's wait_for_event because
@@ -138,6 +137,7 @@ class WindowManager(EventHandler):
                     self.handle_event(event)
                 else:
                     break
+            self.conn.flush()
             select(rlist, wlist, xlist)
 
     def peek_next_event(self):
