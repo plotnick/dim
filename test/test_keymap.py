@@ -70,17 +70,19 @@ class TestEffectiveKeysym(unittest.TestCase):
         self.assertEffectiveKeysyms([XK_a, NoSymbol, XK_b, NoSymbol],
                                     [XK_a, XK_A, XK_b, XK_B])
 
-        # "ƒ" (LATIN SMALL LETTER F WITH HOOK) and "µ" (MICRO SIGN) are
-        # both defined as Latin-1 keysyms, but because their uppercase forms
-        # fall outside of the Latin-1 range, they do not have corresponding
-        # uppercase keysyms.
-        self.assertEffectiveKeysyms([XK_function, NoSymbol, XK_mu, NoSymbol],
-                                    [XK_function, XK_function, XK_mu, XK_mu])
+        # "ƒ" (LATIN SMALL LETTER F WITH HOOK) has an uppercase Unicode form,
+        # but there is no corresponding keysym.
+        self.assertEffectiveKeysyms([XK_function, NoSymbol],
+                                    [XK_function, XK_function])
 
         # "ả" (LATIN SMALL LETTER A WITH HOOK ABOVE) and its uppercase form
-        # are both defined as Unicode keysyms.
-        self.assertEffectiveKeysyms([XK_ahook, NoSymbol, XK_ahook, NoSymbol],
-                                    [XK_ahook, XK_Ahook, XK_ahook, XK_Ahook])
+        # are both defined as Unicode keysyms. "µ" (MICRO SIGN) is defined
+        # as a Latin-1 keysym, but its uppercase form falls outside of the
+        # Latin-1 range. We differ from Xlib in this latter case: Xlib does
+        # not consider XK_Greek_MU to be the uppercase form of XK_mu, but
+        # we do.
+        self.assertEffectiveKeysyms([XK_ahook, NoSymbol, XK_mu, NoSymbol],
+                                    [XK_ahook, XK_Ahook, XK_mu, XK_Greek_MU])
 
 if __name__ == "__main__":
     unittest.main()

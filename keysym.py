@@ -38,31 +38,16 @@ def keysym_to_string(keysym):
         except KeyError:
             return ""
 
-def _convert_keysym(keysym, convert):
-    if is_latin1(keysym):
-        # Some characters have upper- or lower-case variants that fall
-        # outside the Latin-1 range. These generally don't have keysym
-        # definitions, so we have to be careful.
-        converted = ord(convert(unichr(keysym)))
-        return converted if is_latin1(converted) else keysym
-    elif is_unicode(keysym):
-        # We'll assume that Unicode keysyms have the proper case variants.
-        return ord(convert(unichr(keysym & 0x00ffffff))) | 0x01000000
-    elif is_legacy(keysym):
-        # Some of the legacy keysyms also don't have corresponding
-        # upper- or lower-case variants, even though their Unicode
-        # equivalents do.
-        try:
-            return string_to_keysym(convert(_legacy_codes[keysym]))
-        except KeyError:
-            return keysym
-    else:
+def upper(keysym):
+    """Return the corresponding uppercase keysym."""
+    try:
+        return string_to_keysym(keysym_to_string(keysym).upper())
+    except KeyError:
         return keysym
 
-def upper(keysym, convert=lambda c: c.upper()):
-    """Return the corresponding uppercase keysym."""
-    return _convert_keysym(keysym, convert)
-
-def lower(keysym, convert=lambda c: c.lower()):
+def lower(keysym):
     """Return the corresponding lowercase keysym."""
-    return _convert_keysym(keysym, convert)
+    try:
+        return string_to_keysym(keysym_to_string(keysym).lower())
+    except KeyError:
+        return keysym
