@@ -91,22 +91,26 @@ class Keymap(object):
         if len(reply.keysyms) != nkeysyms:
             raise KeymapError("did not receive the expected number of keysyms")
 
-    def keycode_to_keysym(self, keycode, index):
-        """Return the index'th symbol bound to the given keycode."""
+    def keycode_to_keysym(self, keycode, index=None):
+        """Return the index'th symbol bound to the given keycode, or the entire
+        list of keysyms bound to that keycode if index is None."""
         n = self.keysyms_per_keycode
         i = (keycode - self.min_keycode) * n
         j = i + n
-        return effective_keysym(self.keysyms[i:j], index)
+        keysyms = self.keysyms[i:j]
+        return (tuple(keysyms) if index is None else
+                effective_keysym(self.keysyms[i:j], index))
 
     def __getitem__(self, key):
         """Retrieve the symbol associated with a keycode.
 
         As a convenience, the key may be either a (keycode, index) tuple,
-        or a raw keycode, in which case the index defaults to 0."""
+        or a raw keycode, in which case the index defaults to None (i.e.,
+        retrieve the list of keysyms bound to the given keycode)."""
         if isinstance(key, tuple):
             return self.keycode_to_keysym(*key)
         else:
-            return self.keycode_to_keysym(key, 0)
+            return self.keycode_to_keysym(key, None)
 
     def keysym_to_keycode(self, keysym):
         """Return the first keycode that generates the given symbol."""
