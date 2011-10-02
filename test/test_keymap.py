@@ -10,7 +10,9 @@ from xcb.xproto import *
 from keymap import *
 from keymap import effective_index, effective_keysym
 from keysym import *
-from xutil import GrabServer
+
+def flatten(l):
+    return [l[i][j] for i in range(len(l)) for j in range(len(l[i]))]
 
 class TestEffectiveIndex(unittest.TestCase):
     def assertEffectiveIndices(self, keysyms, indices):
@@ -91,19 +93,24 @@ class TestEffectiveKeysym(unittest.TestCase):
         self.assertEffectiveKeysyms([XK_ahook, NoSymbol, XK_mu, NoSymbol],
                                     [XK_ahook, XK_Ahook, XK_mu, XK_Greek_MU])
 
-class TestKeyboardMap(unittest.TestCase):
+class MappingTestCase(unittest.TestCase):
     def setUp(self):
-        # We don't want other clients changing the keyboard map during
-        # these tests, and it's not worth processing MappingNotify events
-        # just to detect such an eventuality. So we'll lazy out and run
-        # each of these tests with the whole server grabbed.
         self.conn = xcb.connect()
+
+        # We don't want other clients changing the mappings during these
+        # tests, and it's not worth processing MappingNotify events just
+        # to detect such an eventuality. So we'll lazy out and run them
+        # with the whole server grabbed.
         self.conn.core.GrabServer()
-        self.keymap = KeyboardMap(self.conn)
 
     def tearDown(self):
         self.conn.core.UngrabServer()
         self.conn.disconnect()
+
+class TestKeyboardMap(MappingTestCase):
+    def setUp(self):
+        super(TestKeyboardMap, self).setUp()
+        self.keymap = KeyboardMap(self.conn)
 
     def change_keyboard_mapping(self, first_keycode, keysyms):
         """Given an initial keycode and a list of lists of keysyms, make an
@@ -111,9 +118,7 @@ class TestKeyboardMap(unittest.TestCase):
         must be of the same length."""
         keycode_count = len(keysyms)
         keysyms_per_keycode = len(keysyms[0])
-        keysyms = [keysyms[i][j]
-                   for i in range(len(keysyms))
-                   for j in range(len(keysyms[i]))]
+        keysyms = flatten(keysyms)
         self.assertEqual(len(keysyms), keycode_count * keysyms_per_keycode)
         self.conn.core.ChangeKeyboardMappingChecked(keycode_count,
             first_keycode, keysyms_per_keycode, keysyms).check()
@@ -207,34 +212,64 @@ class TestKeyboardMap(unittest.TestCase):
             # effectice keysym for all four positions should be the same.
             self.assertEqual(self.keymap[(esc, i)], XK_Escape)
 
-class TestPointerMap(unittest.TestCase):
-    def setUp(self):
-        self.conn = xcb.connect()
+class TestModifierMap(MappingTestCase):
+    def test_init_with_cookie(self):
+        modmap = ModifierMap(self.conn, self.conn.core.GetModifierMapping())
+        self.assertTrue(len(modmap) == 8)
+        for i in range(8):
+            self.assertEqual(len(modmap[i]), modmap.keycodes_per_modifier)
 
-    def tearDown(self):
-        self.conn.disconnect()
+    def test_modmap(self):
+        keymap = KeyboardMap(self.conn)
+        shift_l, shift_r, control_l, control_r = \
+            map(keymap.keysym_to_keycode,
+                (XK_Shift_L, XK_Shift_R, XK_Control_L, XK_Control_R))
 
+        modmap = ModifierMap(self.conn)
+        # We'll assume a standard modifier layout for shift & control
+        # wherein both the left and right keycodes are bound.
+        self.assertTrue(shift_l in modmap[MapIndex.Shift] and
+                        shift_r in modmap[MapIndex.Shift])
+        self.assertTrue(control_l in modmap[MapIndex.Control] and
+                        control_r in modmap[MapIndex.Control])
+
+    def test_refresh(self):
+        modmap = ModifierMap(self.conn)
+        n = modmap.keycodes_per_modifier
+        old = modmap.values()
+        new = old[:]
+        shuffle(new)
+        try:
+            reply = self.conn.core.SetModifierMapping(n, flatten(new)).reply()
+            self.assertEqual(reply.status, MappingStatus.Success)
+            modmap.refresh()
+            self.assertEqual(modmap.values(), new)
+        finally:
+            self.conn.core.SetModifierMapping(n, flatten(old)).reply()
+        modmap.refresh()
+        self.assertEqual(modmap.values(), old)
+
+class TestPointerMap(MappingTestCase):
     def test_init_with_cookie(self):
         pointer_map = PointerMap(self.conn, self.conn.core.GetPointerMapping())
         self.assertTrue(len(pointer_map) >= 3)
 
     def test_pointer_map(self):
-        with GrabServer(self.conn):
-            pointer_map = PointerMap(self.conn)
-            self.assertTrue(len(pointer_map) >= 3)
-            self.assertTrue(0 not in pointer_map)
-            old = list(pointer_map)
-            new = old[:]
-            shuffle(new)
-            try:
-                reply = self.conn.core.SetPointerMapping(len(new), new).reply()
-                self.assertEqual(reply.status, MappingStatus.Success)
-                pointer_map.refresh()
-                self.assertEqual(list(pointer_map), new)
-            finally:
-                self.conn.core.SetPointerMapping(len(old), old).reply()
+        pointer_map = PointerMap(self.conn)
+        self.assertTrue(len(pointer_map) >= 3)
+        self.assertTrue(0 not in pointer_map)
+        old = list(pointer_map)
+        new = old[:]
+        shuffle(new)
+        try:
+            reply = self.conn.core.SetPointerMapping(len(new), new).reply()
+            self.assertEqual(reply.status, MappingStatus.Success)
             pointer_map.refresh()
-            self.assertEqual(list(pointer_map), old)
+            self.assertEqual(list(pointer_map), new)
+        finally:
+            self.conn.core.SetPointerMapping(len(old), old).reply()
+        pointer_map.refresh()
+        self.assertEqual(list(pointer_map), old)
 
 if __name__ == "__main__":
     unittest.main()
