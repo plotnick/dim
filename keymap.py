@@ -113,18 +113,18 @@ class KeyboardMap(InputDeviceMapping):
                                   (count * n, len(reply.keysyms)))
 
         reply = cookie.reply()
-        if self.keysyms:
+        if first_keycode == self.min_keycode and count == len(self):
+            # Replace the entire mapping.
+            check_reply(reply, count)
+            self.keysyms_per_keycode = reply.keysyms_per_keycode
+            self.keysyms = array("I", reply.keysyms)
+        else:
             # Only replace the keysym range that was requested.
             check_reply(reply, count, self.keysyms_per_keycode)
             n = self.keysyms_per_keycode
             i = (first_keycode - self.min_keycode) * n
             j = i + (count * n)
             self.keysyms[i:j] = array("I", reply.keysyms)
-        else:
-            # Initialize the keyboard mapping.
-            check_reply(reply, count)
-            self.keysyms_per_keycode = reply.keysyms_per_keycode
-            self.keysyms = array("I", reply.keysyms)
 
     def __getitem__(self, key):
         """Retrieve the symbol associated with a key.

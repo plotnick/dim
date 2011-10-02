@@ -1,7 +1,8 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 import unittest
-from random import shuffle
+from operator import itemgetter
+from random import choice, shuffle
 
 import xcb
 from xcb.xproto import *
@@ -92,10 +93,30 @@ class TestEffectiveKeysym(unittest.TestCase):
 
 class TestKeyboardMap(unittest.TestCase):
     def setUp(self):
+        # We don't want other clients changing the keyboard map during
+        # these tests, and it's not worth processing MappingNotify events
+        # just to detect such an eventuality. So we'll lazy out and run
+        # each of these tests with the whole server grabbed.
         self.conn = xcb.connect()
+        self.conn.core.GrabServer()
+        self.keymap = KeyboardMap(self.conn)
 
     def tearDown(self):
+        self.conn.core.UngrabServer()
         self.conn.disconnect()
+
+    def change_keyboard_mapping(self, first_keycode, keysyms):
+        """Given an initial keycode and a list of lists of keysyms, make an
+        appropriate ChangeKeyboardMapping request. All of the keysym lists
+        must be of the same length."""
+        keycode_count = len(keysyms)
+        keysyms_per_keycode = len(keysyms[0])
+        keysyms = [keysyms[i][j]
+                   for i in range(len(keysyms))
+                   for j in range(len(keysyms[i]))]
+        self.assertEqual(len(keysyms), keycode_count * keysyms_per_keycode)
+        self.conn.core.ChangeKeyboardMappingChecked(keycode_count,
+            first_keycode, keysyms_per_keycode, keysyms).check()
 
     def test_init_with_cookie(self):
         cookie = self.conn.core.GetKeyboardMapping(8, 248)
@@ -106,53 +127,85 @@ class TestKeyboardMap(unittest.TestCase):
         cookie = self.conn.core.GetKeyboardMapping(8, 16)
         self.assertRaises(KeymapError, lambda: KeyboardMap(self.conn, cookie))
 
-    def test_refresh(self):
-        # We don't want other clients changing the keyboard map during this
-        # test, and it's not worth processing MappingNotify events just to
-        # detect such an eventuality. So we'll lazy out and run this test
-        # with the whole server grabbed.
-        with GrabServer(self.conn):
-            keymap = KeyboardMap(self.conn)
-            self.assertEqual(len(keymap), 248)
-            keycode = 38 # a random keycode
-            old = keymap[keycode]
-            new = [XK_VoidSymbol] * 4
+    def test_full_refresh(self):
+        keysyms = self.keymap.values()
+        self.keymap.refresh()
+        self.assertEqual(keysyms, self.keymap.values())
+
+    def test_partial_refresh(self):
+        def make_keysym_list(letters=[chr(ord("a") + i) for i in range(26)]):
+            keysym = string_to_keysym(choice(letters))
+            return [keysym, upper(keysym), keysym, upper(keysym)]
+
+        n = 10 # a random number of keycodes
+        keycode = 38 # a random keycode
+        old = [self.keymap[keycode + i] for i in range(n)]
+        new = [make_keysym_list() for i in range(n)]
+        try:
+            self.change_keyboard_mapping(keycode, new)
+            self.keymap.refresh(keycode, n)
+            self.assertEqual([list(self.keymap[keycode + i][:4])
+                              for i in range(n)],
+                             new)
+        finally:
+            self.change_keyboard_mapping(keycode, old)
+        self.keymap.refresh(keycode, n)
+        self.assertEqual([self.keymap[keycode + i] for i in range(n)], old)
+
+    def test_failed_partial_refresh(self):
+        def make_keysym_list(length):
+            # We should be able to just use lists consisting of nothing
+            # but VoidSymbol, but some servers seem to special-case trailing
+            # VoidSymbols, so we'll use numbers instead.
+            return [string_to_keysym(chr(ord("1") + i)) for i in range(length)]
+
+        keycode = 42 # another random keycode
+        m = self.keymap.keysyms_per_keycode
+        old = [self.keymap[keycode]]
+        new = [make_keysym_list(m + 2)]
+        try:
+            self.change_keyboard_mapping(keycode, new)
             try:
-                self.conn.core.ChangeKeyboardMappingChecked(1, keycode,
-                                                            len(new),
-                                                            new).check()
-                keymap.refresh(keycode, 1)
-                self.assertEqual(list(keymap[keycode][:4]), new)
-            finally:
-                self.conn.core.ChangeKeyboardMappingChecked(1, keycode,
-                                                            len(old),
-                                                            old).check()
-            keymap.refresh(keycode, 1)
-            self.assertEqual(keymap[keycode], old)
+                # This should fail, because keysyms-per-keycode in the reply
+                # to the GetKeyboardMapping request will not match the cached
+                # value.
+                self.keymap.refresh(keycode, 1)
+            except KeymapError:
+                # However, a full refresh should succeed, since it can just
+                # re-initialize the whole mapping.
+                self.keymap.refresh()
+                self.assertTrue(self.keymap.keysyms_per_keycode >= m + 2)
+                self.assertEqual([list(self.keymap[keycode][:m + 2])], new)
+            else:
+                self.fail("partial refresh unexpectedly succeeded")
+        finally:
+            self.change_keyboard_mapping(keycode, old)
+        self.keymap.refresh()
+        # It's possible that the server might keep the new keysyms-per-keycode
+        # (it is free to do so, even though it's no longer necessary), so we'll
+        # check against the old value.
+        self.assertEqual([self.keymap[keycode][:m]], old)
 
-    def test_keymap(self):
-        keymap = KeyboardMap(self.conn)
-        self.assertEqual(len(keymap), 248)
-
-        # We'll assume there's a keycode that generates the symbol XK_a,
+    def test_keycode_to_keysym(self):
+        # We'll assume that there's a keycode that generates the symbol XK_a,
         # and that it has the usual list of keysyms bound to it.
-        a = keymap.keysym_to_keycode(XK_a)
+        a = self.keymap.keysym_to_keycode(XK_a)
         self.assertTrue(a > 0)
-        self.assertEqual(list(keymap[a][:4]), [XK_a, XK_A, XK_a, XK_A])
-        self.assertEqual(keymap[(a, 0)], XK_a)
-        self.assertEqual(keymap[(a, 1)], XK_A)
-        self.assertEqual(keymap[(a, 2)], XK_a)
-        self.assertEqual(keymap[(a, 3)], XK_A)
+        self.assertEqual(list(self.keymap[a][:4]), [XK_a, XK_A, XK_a, XK_A])
+        self.assertEqual(self.keymap[(a, 0)], XK_a)
+        self.assertEqual(self.keymap[(a, 1)], XK_A)
+        self.assertEqual(self.keymap[(a, 2)], XK_a)
+        self.assertEqual(self.keymap[(a, 3)], XK_A)
 
         # We'll make a similar assumption for XK_Escape.
-        esc = keymap.keysym_to_keycode(XK_Escape)
+        esc = self.keymap.keysym_to_keycode(XK_Escape)
         self.assertTrue(esc > 0)
-        self.assertEqual(list(keymap[esc][:4]),
+        self.assertEqual(list(self.keymap[esc][:4]),
                          [XK_Escape, NoSymbol, XK_Escape, NoSymbol])
         for i in range(4):
             # Although the second element in each group is NoSymbol, the
             # effectice keysym for all four positions should be the same.
-            self.assertEqual(keymap[(esc, i)], XK_Escape)
+            self.assertEqual(self.keymap[(esc, i)], XK_Escape)
 
 class TestPointerMap(unittest.TestCase):
     def setUp(self):
