@@ -1,6 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 import unittest
+from random import shuffle
 
 import xcb
 from xcb.xproto import *
@@ -152,6 +153,35 @@ class TestKeyboardMap(unittest.TestCase):
             # Although the second element in each group is NoSymbol, the
             # effectice keysym for all four positions should be the same.
             self.assertEqual(keymap[(esc, i)], XK_Escape)
+
+class TestPointerMap(unittest.TestCase):
+    def setUp(self):
+        self.conn = xcb.connect()
+
+    def tearDown(self):
+        self.conn.disconnect()
+
+    def test_init_with_cookie(self):
+        pointer_map = PointerMap(self.conn, self.conn.core.GetPointerMapping())
+        self.assertTrue(len(pointer_map) >= 3)
+
+    def test_pointer_map(self):
+        with GrabServer(self.conn):
+            pointer_map = PointerMap(self.conn)
+            self.assertTrue(len(pointer_map) >= 3)
+            self.assertTrue(0 not in pointer_map)
+            old = list(pointer_map)
+            new = old[:]
+            shuffle(new)
+            try:
+                reply = self.conn.core.SetPointerMapping(len(new), new).reply()
+                self.assertEqual(reply.status, MappingStatus.Success)
+                pointer_map.refresh()
+                self.assertEqual(list(pointer_map), new)
+            finally:
+                self.conn.core.SetPointerMapping(len(old), old).reply()
+            pointer_map.refresh()
+            self.assertEqual(list(pointer_map), old)
 
 if __name__ == "__main__":
     unittest.main()
