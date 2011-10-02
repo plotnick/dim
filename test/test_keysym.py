@@ -16,7 +16,7 @@ class TestKeysym(unittest.TestCase):
         self.assertEqual(keysym_name(XK_eacute), "eacute")
         self.assertEqual(keysym_name(XK_logicalor), "logicalor")
         self.assertEqual(keysym_name(XK_VoidSymbol), "VoidSymbol")
-        self.assertRaises(KeyError, lambda: keysym_name(NoSymbol))
+        self.assertEqual(keysym_name(NoSymbol), None)
 
         # F12 and L2 are both mnemonics for the same keysym; make sure
         # that we have the former as the canonical name.
@@ -42,7 +42,7 @@ class TestKeysym(unittest.TestCase):
         self.assertEqual(string_to_keysym(" "), XK_space)
         self.assertEqual(string_to_keysym(u"é"), XK_eacute)
         self.assertEqual(string_to_keysym(u"\N{LOGICAL OR}"), XK_logicalor)
-        self.assertRaises(KeyError, lambda: string_to_keysym("\x00"))
+        self.assertEqual(string_to_keysym("\x00"), NoSymbol)
 
         for keysym in _keysyms.values():
             if is_unicode(keysym):
@@ -69,8 +69,17 @@ class TestKeysym(unittest.TestCase):
                 self.assertTrue(keysym_to_string(keysym))
 
     def test_case_conversion(self):
+        def case_pair(keysym):
+            return (lower(keysym), upper(keysym))
+
+        self.assertEqual(case_pair(NoSymbol), (NoSymbol, NoSymbol))
+        self.assertEqual(case_pair(XK_a), (XK_a, XK_A))
+        self.assertEqual(case_pair(XK_A), (XK_a, XK_A))
+        self.assertEqual(case_pair(XK_1), (XK_1, XK_1))
+        self.assertEqual(case_pair(XK_function), (XK_function, XK_function))
+
         for keysym in _keysyms.values():
-            u, l = upper(keysym), lower(keysym)
+            l, u = case_pair(keysym)
             self.assertTrue(keysym_to_string(u))
             self.assertTrue(keysym_to_string(l))
             self.assertTrue(keysym_to_string(keysym) == keysym_to_string(u) or

@@ -16,11 +16,11 @@ def is_legacy(keysym):
 
 def keysym_name(keysym):
     """Return the name of the given keysym."""
-    return _names[keysym]
+    return _names.get(keysym, None)
 
 def string_to_keysym(string):
     """Return the keysym corresponding to the given string."""
-    return _keysyms[string]
+    return _keysyms.get(string, NoSymbol)
 
 def keysym_to_string(keysym):
     """Return the string denoted by the given keysym, or the empty string if
@@ -40,14 +40,8 @@ def keysym_to_string(keysym):
 
 def upper(keysym):
     """Return the corresponding uppercase keysym."""
-    try:
-        return string_to_keysym(keysym_to_string(keysym).upper())
-    except KeyError:
-        return keysym
+    return string_to_keysym(keysym_to_string(keysym).upper()) or keysym
 
 def lower(keysym):
     """Return the corresponding lowercase keysym."""
-    try:
-        return string_to_keysym(keysym_to_string(keysym).lower())
-    except KeyError:
-        return keysym
+    return string_to_keysym(keysym_to_string(keysym).lower()) or keysym
