@@ -12,7 +12,7 @@ from xcb.xproto import *
 from client import ClientWindow, WMState
 from event import handler, EventHandler
 from geometry import *
-from keymap import Keymap
+from keymap import KeyboardMap
 from properties import *
 from xutil import *
 
@@ -31,7 +31,7 @@ class WindowManager(EventHandler):
         self.conn = conn
         self.clients = {} # managed clients, indexed by window ID
         self.atoms = AtomCache(conn)
-        self.keymap = Keymap(conn)
+        self.keymap = KeyboardMap(conn)
         self.screen = conn.get_setup().roots[screen if screen is not None
                                                     else conn.pref_screen]
 

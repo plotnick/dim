@@ -133,7 +133,7 @@ class MoveResize(WindowManager):
     def handle_key_press(self, event):
         if not self.moveresize:
             raise UnhandledEvent(event)
-        if self.keymap[event.detail] == XK_Escape:
+        if XK_Escape in self.keymap[event.detail]:
             try:
                 self.moveresize.rollback()
             finally:
