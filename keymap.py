@@ -84,7 +84,6 @@ class KeyboardMap(InputDeviceMapping):
         setup = conn.get_setup()
         self.min_keycode = setup.min_keycode
         self.max_keycode = setup.max_keycode
-        self.keysyms = None
         super(KeyboardMap, self).__init__(conn, cookie,
                                           self.min_keycode, len(self))
 
