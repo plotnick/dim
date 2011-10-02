@@ -12,7 +12,7 @@ from xcb.xproto import *
 from client import ClientWindow, WMState
 from event import handler, EventHandler
 from geometry import *
-from keymap import KeyboardMap
+from keymap import KeymapError, KeyboardMap
 from properties import *
 from xutil import *
 
@@ -227,6 +227,20 @@ class WindowManager(EventHandler):
         """Note the destruction of a top-level window, and unmanage the
         corresponding client."""
         self.unmanage(event.window)
+
+    @handler(MappingNotifyEvent)
+    def handle_mapping_notify(self, event):
+        """Note the change of an input device mapping and possibly request
+        an update from the server."""
+        if event.request == Mapping.Keyboard:
+            try:
+                debug("Refreshing keymap: %d codes starting at %d" %
+                      (event.count, event.first_keycode))
+                self.keymap.refresh(event.first_keycode, event.count)
+            except KeymapError as e:
+                warning("Unable to refresh partial keymap: %s" % e)
+                # Do a full refresh. If that fails, just bail out.
+                self.keymap.refresh()
 
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.
