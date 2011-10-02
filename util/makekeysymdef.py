@@ -57,6 +57,12 @@ def keysymdef(input, output):
     keysyms = {} # Unicode character → mnemonic (keysym code) map
     legacy_codes = {} # legacy keysym mnemonic (code) → Unicode character
 
+    # Since we're using mnemonics as keys for the names dictionary, we
+    # need another way to detect keysym code collisions. We'll keep all
+    # of the keysym codes we've seen so far in the following set. This set
+    # is not serialized to the output file; it's for internal use only.
+    keysyms_seen = set()
+
     for line in input:
         for pattern in mnemonic_patterns:
             match = pattern.match(line)
@@ -74,20 +80,26 @@ def keysymdef(input, output):
             continue # skip this line of input
 
         output.write("%s = %s\n" % (mnemonic, code))
-        if code not in names:
-            names[mnemonic] = repr(name)
 
         if is_unicode_keysym(keysym):
             # For Unicode keysyms, the keysym code is authoritative.
             # These should agree with the code points in the comments,
             # but there are bugs: e.g.,
             #     XK_approxeq = 0x1002248  /* U+2245 ALMOST EQUAL TO */
-            keysyms[repr(unichr(keysym & 0x00ffffff))] = mnemonic
+            char = unichr(keysym & 0x00ffffff)
         elif code_point:
+            # Use the code point from the mnemonic definition comment.
             char = unichr(code_point)
-            if is_legacy_keysym(keysym):
-                legacy_codes[mnemonic] = repr(char)
+        else:
+            char = None
+        if char and char not in keysyms:
             keysyms[repr(char)] = mnemonic
+
+        if keysym not in keysyms_seen:
+            names[mnemonic] = repr(name)
+            if char and is_legacy_keysym(keysym):
+                legacy_codes[mnemonic] = repr(char)
+            keysyms_seen.add(keysym)
 
     def pprint_dict(name, d):
         output.write("\f\n%s = {\n" % name)

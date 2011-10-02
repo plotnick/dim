@@ -18,6 +18,10 @@ class TestKeysym(unittest.TestCase):
         self.assertEqual(keysym_name(XK_VoidSymbol), "VoidSymbol")
         self.assertRaises(KeyError, lambda: keysym_name(NoSymbol))
 
+        # F12 and L2 are both mnemonics for the same keysym; make sure
+        # that we have the former as the canonical name.
+        self.assertEqual(keysym_name(XK_F12), "F12")
+
         # Verify that we have names for all the (non-deprecated) mnemonics.
         mnemonics = [name for name in dir(keysymdef) if name.startswith("XK_")]
         for mnemonic in mnemonics:
