@@ -94,6 +94,62 @@ class TestEffectiveKeysym(unittest.TestCase):
         self.assertEffectiveKeysyms([XK_ahook, NoSymbol, XK_mu, NoSymbol],
                                     [XK_ahook, XK_Ahook, XK_mu, XK_Greek_MU])
 
+class TestLookupEffectiveKeysym(unittest.TestCase):
+    def setUp(self):
+        self.group_mod = ModMask._3
+        self.numlock_mod = ModMask._2
+        self.lock_sym = XK_Caps_Lock
+
+    def lookup(self, keysyms, modifiers, shift_lock=None):
+        lock_sym = (self.lock_sym if shift_lock is None else
+                    XK_Shift_Lock if shift_lock else XK_Caps_Lock)
+        return KeyboardMap.lookup_effective_keysym(keysyms, modifiers,
+                                                   self.group_mod,
+                                                   self.numlock_mod,
+                                                   lock_sym)
+
+    def test_alphabetic_lookup(self):
+        self.assertEqual(self.lookup([XK_a], 0), XK_a)
+        self.assertEqual(self.lookup([XK_a], self.numlock_mod), XK_a)
+        self.assertEqual(self.lookup([XK_a], ModMask.Shift), XK_A)
+        self.assertEqual(self.lookup([XK_a], ModMask.Lock), XK_A)
+        self.assertEqual(self.lookup([XK_a], ModMask.Lock, shift_lock=True),
+                         XK_A)
+        self.assertEqual(self.lookup([XK_a, XK_b], ModMask.Shift), XK_b)
+
+    def test_nonalphabetic_lookup(self):
+        keysyms = [XK_1, XK_exclam]
+        self.assertEqual(self.lookup(keysyms, 0), XK_1)
+        self.assertEqual(self.lookup(keysyms, self.numlock_mod), XK_1)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift), XK_exclam)
+        self.assertEqual(self.lookup(keysyms, ModMask.Lock), XK_1)
+        self.assertEqual(self.lookup(keysyms, ModMask.Lock, shift_lock=True),
+                         XK_exclam)
+
+    def test_group_switch(self):
+        keysyms = [XK_a, NoSymbol, XK_b, NoSymbol]
+        self.assertEqual(self.lookup(keysyms, 0), XK_a)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift), XK_A)
+        self.assertEqual(self.lookup(keysyms, self.group_mod), XK_b)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift | self.group_mod),
+                         XK_B)
+        self.assertEqual(self.lookup(keysyms, ModMask.Lock | self.group_mod, 
+                                     shift_lock=True),
+                         XK_B)
+
+    def test_keypad(self):
+        keysyms = [XK_KP_End, XK_KP_1]
+        self.assertEqual(self.lookup(keysyms, 0), XK_KP_End)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift), XK_KP_1)
+        self.assertEqual(self.lookup(keysyms, ModMask.Lock), XK_KP_End)
+        self.assertEqual(self.lookup(keysyms, ModMask.Lock, shift_lock=True),
+                         XK_KP_1)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift | ModMask.Lock),
+                         XK_KP_1)
+        self.assertEqual(self.lookup(keysyms, self.numlock_mod), XK_KP_1)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift | self.numlock_mod),
+                         XK_KP_End)
+
 class MappingTestCase(unittest.TestCase):
     def setUp(self):
         self.conn = xcb.connect()
