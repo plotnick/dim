@@ -127,7 +127,7 @@ class KeyboardMap(InputDeviceMapping):
         form of "K" and the second element were the uppercase form of "K"."""
         if index < 4:
             index = KeyboardMap.effective_index(keysyms, index)
-            if keysyms[index | 1] == NoSymbol:
+            if len(keysyms) == 1 or keysyms[index | 1] == NoSymbol:
                 keysym = keysyms[index & ~1]
                 return upper(keysym) if index & 1 else lower(keysym)
         return keysyms[index]
