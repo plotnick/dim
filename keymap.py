@@ -64,8 +64,8 @@ def lookup_effective_keysym(keysyms, modifiers,
     is on and is interpreted as ShiftLock, then the first KEYSYM is used;
     otherwise, the second KEYSYM is used.
 
-  • The Shift and Lock modifiers are both off. In this case, the first
-    KEYSYM is used.
+  • The Shift and Lock modifiers are both off. In this case, the first KEYSYM
+    is used.
 
   • The Shift modifier is off, and the Lock modifier is on and is interpreted
     as CapsLock. In this case, the first KEYSYM is used, but if that KEYSYM
