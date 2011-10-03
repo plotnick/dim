@@ -6,7 +6,7 @@ from collections import Mapping as AbstractMapping # avoid conflict with xcb
 
 from xcb.xproto import *
 
-from keysym import NoSymbol, upper, lower
+from keysym import *
 
 __all__ = ["KeyboardMap", "ModifierMap", "PointerMap", "KeymapError"]
 
@@ -52,6 +52,47 @@ def effective_keysym(keysyms, index):
             return upper(keysym) if index & 1 else lower(keysym)
     return keysyms[index]
 
+def lookup_effective_keysym(keysyms, modifiers,
+                            group_mod, numlock_mod, lock_sym):
+    """From the X11 protocol specification (Chapter 5, ¶8):
+
+    Within a group, the choice of KEYSYM is determined by applying the
+    first rule that is satisfied from the following list:
+
+  • The numlock modifier is on and the second KEYSYM is a keypad KEYSYM.
+    In this case, if the Shift modifier is on, or if the Lock modifier
+    is on and is interpreted as ShiftLock, then the first KEYSYM is used;
+    otherwise, the second KEYSYM is used.
+
+  • The Shift and Lock modifiers are both off. In this case, the first
+    KEYSYM is used.
+
+  • The Shift modifier is off, and the Lock modifier is on and is interpreted
+    as CapsLock. In this case, the first KEYSYM is used, but if that KEYSYM
+    is lowercase alphabetic, then the corresponding uppercase KEYSYM is used
+    instead.
+
+  • The Shift modifier is on, and the Lock modifier is on and is interpreted
+    as CapsLock. In this case, the second KEYSYM is used, but if that KEYSYM
+    is lowercase alphabetic, then the corresponding uppercase KEYSYM is used
+    instead.
+
+  • The Shift modifier is on, or the Lock modifier is on and is interpreted
+    as ShiftLock, or both. In this case, the second KEYSYM is used."""
+    index = 2 if modifiers & group_mod else 0 # select group
+    numlock = modifiers & numlock_mod
+    lock = modifiers & ModMask.Lock
+    caps_lock = lock and lock_sym == XK_Caps_Lock
+    shift_lock = lock and lock_sym == XK_Shift_Lock
+    shift = modifiers & ModMask.Shift or shift_lock
+
+    if numlock and is_keypad(effective_keysym(keysyms, index | 1)):
+        return effective_keysym(keysyms, index | (not shift))
+    elif caps_lock:
+        return upper(effective_keysym(keysyms, index | shift))
+    else:
+        return effective_keysym(keysyms, index | shift)
+
 class KeymapError(Exception):
     pass
 
@@ -80,12 +121,19 @@ class InputDeviceMapping(AbstractMapping):
 class KeyboardMap(InputDeviceMapping):
     """A map from keycodes to keysyms (and vice-versa)."""
 
-    def __init__(self, conn, cookie=None):
+    def __init__(self, conn, cookie=None, modmap=None):
         setup = conn.get_setup()
         self.min_keycode = setup.min_keycode
         self.max_keycode = setup.max_keycode
         super(KeyboardMap, self).__init__(conn, cookie,
                                           self.min_keycode, len(self))
+
+        if modmap:
+            self.scry_modifiers(modmap)
+        else:
+            self.lock = NoSymbol
+            self.group_mod = 0
+            self.numlock_mod = 0
 
     def refresh(self, first_keycode=None, count=None):
         """Request an updated keyboard mapping for the specified keycodes."""
@@ -157,6 +205,39 @@ class KeyboardMap(InputDeviceMapping):
             for i in range(self.min_keycode, self.max_keycode + 1):
                 if self[(i, j)] == keysym:
                     return i
+
+    def lookup_key(self, keycode, modifiers):
+        """Given a keycode and modifier mask (e.g., from the detail and state
+        fields of a KeyPress/KeyRelease event), return the effective keysym."""
+        return lookup_effective_keysym(self[keycode], modifiers,
+                                       self.group_mod, self.numlock_mod,
+                                       self.lock)
+
+    def scry_modifiers(self, modmap):
+        """Grovel through the modifier map, looking for the current
+        interpretation of caps lock, mode (group) switch, and numlock."""
+        # Find any appropriate keysym currently acting as the Lock modifier.
+        for keycode in modmap[MapIndex.Lock]:
+            keysyms = self[keycode]
+            if XK_Caps_Lock in keysyms or XK_ISO_Lock in keysyms:
+                self.lock = XK_Caps_Lock
+                break
+            elif XK_Shift_Lock in keysyms:
+                self.lock = XK_Shift_Lock
+                break
+        else:
+            self.lock = NoSymbol
+
+        # Now find any modifiers acting as the Group or NumLock modifiers.
+        self.group_mod = 0
+        self.numlock_mod = 0
+        for mod in range(MapIndex._1, MapIndex._5 + 1):
+            for keycode in modmap[mod]:
+                keysyms = self[keycode]
+                if XK_Mode_switch in keysyms:
+                    self.group_mod |= 1 << mod
+                if XK_Num_Lock in keysyms:
+                    self.numlock_mod |= 1 << mod
 
 class ModifierMap(InputDeviceMapping):
     def refresh(self):

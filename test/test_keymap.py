@@ -192,7 +192,7 @@ class TestKeyboardMap(MappingTestCase):
         self.assertEqual([self.keymap[keycode][:m]], old)
 
     def test_keycode_to_keysym(self):
-        # We'll assume that there's a keycode that generates the symbol XK_a,
+        # We'll assume that there's a keycode that generates the symbol "a",
         # and that it has the usual list of keysyms bound to it.
         a = self.keymap.keysym_to_keycode(XK_a)
         self.assertTrue(a > 0)
@@ -211,6 +211,35 @@ class TestKeyboardMap(MappingTestCase):
             # Although the second element in each group is NoSymbol, the
             # effectice keysym for all four positions should be the same.
             self.assertEqual(self.keymap[(esc, i)], XK_Escape)
+
+    def test_lookup_key(self):
+        def lookup(keycode, mask):
+            return self.keymap.lookup_key(keycode, mask)
+
+        # We'll need the modifier key interpretations from the modifier map.
+        self.keymap.scry_modifiers(ModifierMap(self.conn))
+
+        # We'll assume that there's a keycode that generates the symbol "a",
+        # and that it has the usual list of keysyms bound to it.
+        a = self.keymap.keysym_to_keycode(XK_a)
+        self.assertTrue(a > 0)
+        self.assertEqual(list(self.keymap[a][:2]), [XK_a, XK_A])
+        self.assertEqual(lookup(a, 0), XK_a)
+        self.assertEqual(lookup(a, ModMask.Shift), XK_A)
+        self.assertEqual(lookup(a, ModMask.Lock), XK_A)
+        self.assertEqual(lookup(a, ModMask.Shift | ModMask.Lock), XK_A)
+
+        # We'll make a similar assumption regarding the symbol "KP_1".
+        numlock = self.keymap.numlock_mod
+        kp_1 = self.keymap.keysym_to_keycode(XK_KP_1)
+        self.assertTrue(kp_1 > 0)
+        self.assertEqual(list(self.keymap[kp_1][:2]), [XK_KP_End, XK_KP_1])
+        self.assertEqual(lookup(kp_1, 0), XK_KP_End)
+        self.assertEqual(lookup(kp_1, ModMask.Shift), XK_KP_1)
+        self.assertEqual(lookup(kp_1, ModMask.Lock), XK_KP_End)
+        self.assertEqual(lookup(kp_1, ModMask.Shift | ModMask.Lock), XK_KP_1)
+        self.assertEqual(lookup(kp_1, numlock), XK_KP_1)
+        self.assertEqual(lookup(kp_1, ModMask.Shift | numlock), XK_KP_End)
 
 class TestModifierMap(MappingTestCase):
     def test_init_with_cookie(self):
