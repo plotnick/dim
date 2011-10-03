@@ -10,89 +10,6 @@ from keysym import *
 
 __all__ = ["KeyboardMap", "ModifierMap", "PointerMap", "KeymapError"]
 
-def effective_index(keysyms, index):
-    """From the X11 protocol specification (Chapter 5, ¶3):
-
-    A list of KEYSYMs is associated with each KEYCODE. The list is intended
-    to convey the set of symbols on the corresponding key. If the list
-    (ignoring trailing NoSymbol entries) is a single KEYSYM "K", then the
-    list is treated as if it were the list "K NoSymbol K NoSymbol". If the
-    list (ignoring trailing NoSymbol entries) is a pair of KEYSYMs "K1 K2",
-    then the list is treated as if it were the list "K1 K2 K1 K2". If the list
-    (ignoring trailing NoSymbol entries) is a triple of KEYSYMs "K1 K2 K3",
-    then the list is treated as if it were the list "K1 K2 K3 NoSymbol".
-    When an explicit "void" element is desired in the list, the value
-    VoidSymbol can be used."""
-    if 1 < index < 4:
-        # This subtle but efficient logic was blatantly stolen from Xlib's
-        # KeyCodetoKeySym function.
-        n = len(keysyms)
-        while n > 2 and keysyms[n - 1] == NoSymbol:
-            n -= 1
-        if n < 3:
-            index -= 2
-    return index
-
-def effective_keysym(keysyms, index):
-    """From the X11 protocol specification (Chapter 5, ¶4):
-
-    The first four elements of the list are split into two groups of KEYSYMs.
-    Group 1 contains the first and second KEYSYMs; Group 2 contains the third
-    and fourth KEYSYMs. Within each group, if the second element of the group
-    is NoSymbol, then the group should be treated as if the second element
-    were the same as the first element, except when the first element is an
-    alphabetic KEYSYM "K" for which both lowercase and uppercase forms are
-    defined. In that case, the group should be treated as if the first element
-    were the lowercase form of "K" and the second element were the uppercase
-    form of "K"."""
-    if index < 4:
-        index = effective_index(keysyms, index)
-        if keysyms[index | 1] == NoSymbol:
-            keysym = keysyms[index & ~1]
-            return upper(keysym) if index & 1 else lower(keysym)
-    return keysyms[index]
-
-def lookup_effective_keysym(keysyms, modifiers,
-                            group_mod, numlock_mod, lock_sym):
-    """From the X11 protocol specification (Chapter 5, ¶8):
-
-    Within a group, the choice of KEYSYM is determined by applying the
-    first rule that is satisfied from the following list:
-
-  • The numlock modifier is on and the second KEYSYM is a keypad KEYSYM.
-    In this case, if the Shift modifier is on, or if the Lock modifier
-    is on and is interpreted as ShiftLock, then the first KEYSYM is used;
-    otherwise, the second KEYSYM is used.
-
-  • The Shift and Lock modifiers are both off. In this case, the first KEYSYM
-    is used.
-
-  • The Shift modifier is off, and the Lock modifier is on and is interpreted
-    as CapsLock. In this case, the first KEYSYM is used, but if that KEYSYM
-    is lowercase alphabetic, then the corresponding uppercase KEYSYM is used
-    instead.
-
-  • The Shift modifier is on, and the Lock modifier is on and is interpreted
-    as CapsLock. In this case, the second KEYSYM is used, but if that KEYSYM
-    is lowercase alphabetic, then the corresponding uppercase KEYSYM is used
-    instead.
-
-  • The Shift modifier is on, or the Lock modifier is on and is interpreted
-    as ShiftLock, or both. In this case, the second KEYSYM is used."""
-    index = 2 if modifiers & group_mod else 0 # select group
-    numlock = modifiers & numlock_mod
-    lock = modifiers & ModMask.Lock
-    caps_lock = lock and lock_sym == XK_Caps_Lock
-    shift_lock = lock and lock_sym == XK_Shift_Lock
-    shift = modifiers & ModMask.Shift or shift_lock
-
-    if numlock and is_keypad(effective_keysym(keysyms, index | 1)):
-        return effective_keysym(keysyms, index | (not shift))
-    elif caps_lock:
-        return upper(effective_keysym(keysyms, index | shift))
-    else:
-        return effective_keysym(keysyms, index | shift)
-
 class KeymapError(Exception):
     pass
 
@@ -171,6 +88,101 @@ class KeyboardMap(InputDeviceMapping):
             j = i + (count * n)
             self.keysyms[i:j] = array("I", reply.keysyms)
 
+    @staticmethod
+    def effective_index(keysyms, index):
+        """From the X11 protocol specification (Chapter 5, ¶3):
+
+        A list of KEYSYMs is associated with each KEYCODE. The list is intended
+        to convey the set of symbols on the corresponding key. If the list
+        (ignoring trailing NoSymbol entries) is a single KEYSYM "K", then the
+        list is treated as if it were the list "K NoSymbol K NoSymbol". If the
+        list (ignoring trailing NoSymbol entries) is a pair of KEYSYMs "K1 K2",
+        then the list is treated as if it were the list "K1 K2 K1 K2". If the
+        list (ignoring trailing NoSymbol entries) is a triple of KEYSYMs
+        "K1 K2 K3", then the list is treated as if it were the list
+        "K1 K2 K3 NoSymbol". When an explicit "void" element is desired in
+        the list, the value VoidSymbol can be used."""
+        if 1 < index < 4:
+            # This subtle but efficient logic was blatantly stolen from Xlib's
+            # KeyCodetoKeySym function.
+            n = len(keysyms)
+            while n > 2 and keysyms[n - 1] == NoSymbol:
+                n -= 1
+            if n < 3:
+                index -= 2
+        return index
+
+    @staticmethod
+    def effective_keysym(keysyms, index):
+        """From the X11 protocol specification (Chapter 5, ¶4):
+
+        The first four elements of the list are split into two groups of
+        KEYSYMs. Group 1 contains the first and second KEYSYMs; Group 2
+        contains the third and fourth KEYSYMs. Within each group, if the
+        second element of the group is NoSymbol, then the group should be
+        treated as if the second element were the same as the first element,
+        except when the first element is an alphabetic KEYSYM "K" for which
+        both lowercase and uppercase forms are defined. In that case, the
+        group should be treated as if the first element were the lowercase
+        form of "K" and the second element were the uppercase form of "K"."""
+        if index < 4:
+            index = KeyboardMap.effective_index(keysyms, index)
+            if keysyms[index | 1] == NoSymbol:
+                keysym = keysyms[index & ~1]
+                return upper(keysym) if index & 1 else lower(keysym)
+        return keysyms[index]
+
+    @staticmethod
+    def lookup_effective_keysym(keysyms, modifiers,
+                                group_mod, numlock_mod, lock_sym):
+        """From the X11 protocol specification (Chapter 5, ¶8):
+
+        Within a group, the choice of KEYSYM is determined by applying the
+        first rule that is satisfied from the following list:
+
+      • The numlock modifier is on and the second KEYSYM is a keypad KEYSYM.
+        In this case, if the Shift modifier is on, or if the Lock modifier
+        is on and is interpreted as ShiftLock, then the first KEYSYM is used;
+        otherwise, the second KEYSYM is used.
+
+      • The Shift and Lock modifiers are both off. In this case, the first
+        KEYSYM is used.
+
+      • The Shift modifier is off, and the Lock modifier is on and is
+        interpreted as CapsLock. In this case, the first KEYSYM is used,
+        but if that KEYSYM is lowercase alphabetic, then the corresponding
+        uppercase KEYSYM is used instead.
+
+      • The Shift modifier is on, and the Lock modifier is on and is
+        interpreted as CapsLock. In this case, the second KEYSYM is used,
+        but if that KEYSYM is lowercase alphabetic, then the corresponding
+        uppercase KEYSYM is used instead.
+
+      • The Shift modifier is on, or the Lock modifier is on and is interpreted
+        as ShiftLock, or both. In this case, the second KEYSYM is used."""
+        index = 2 if modifiers & group_mod else 0 # select group
+        numlock = modifiers & numlock_mod
+        lock = modifiers & ModMask.Lock
+        caps_lock = lock and lock_sym == XK_Caps_Lock
+        shift_lock = lock and lock_sym == XK_Shift_Lock
+        shift = modifiers & ModMask.Shift or shift_lock
+
+        if numlock and \
+                is_keypad(KeyboardMap.effective_keysym(keysyms, index | 1)):
+            return KeyboardMap.effective_keysym(keysyms, index | (not shift))
+        elif caps_lock:
+            return upper(KeyboardMap.effective_keysym(keysyms, index | shift))
+        else:
+            return KeyboardMap.effective_keysym(keysyms, index | shift)
+
+    def lookup_key(self, keycode, modifiers):
+        """Given a keycode and modifier mask (e.g., from the detail and state
+        fields of a KeyPress/KeyRelease event), return the effective keysym."""
+        return self.lookup_effective_keysym(self[keycode], modifiers,
+                                            self.group_mod,
+                                            self.numlock_mod,
+                                            self.lock)
+
     def __getitem__(self, key):
         """Retrieve the symbol associated with a key.
 
@@ -188,7 +200,7 @@ class KeyboardMap(InputDeviceMapping):
         j = i + n
         keysyms = self.keysyms[i:j]
         return (tuple(keysyms) if index is None else
-                effective_keysym(self.keysyms[i:j], index))
+                self.effective_keysym(self.keysyms[i:j], index))
 
     def __iter__(self):
         for keycode in range(self.min_keycode, self.max_keycode):
@@ -203,13 +215,6 @@ class KeyboardMap(InputDeviceMapping):
             for i in range(self.min_keycode, self.max_keycode + 1):
                 if self[(i, j)] == keysym:
                     return i
-
-    def lookup_key(self, keycode, modifiers):
-        """Given a keycode and modifier mask (e.g., from the detail and state
-        fields of a KeyPress/KeyRelease event), return the effective keysym."""
-        return lookup_effective_keysym(self[keycode], modifiers,
-                                       self.group_mod, self.numlock_mod,
-                                       self.lock)
 
     def clear_modifiers(self):
         self.lock = NoSymbol

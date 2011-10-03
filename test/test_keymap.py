@@ -7,8 +7,7 @@ from random import choice, shuffle
 import xcb
 from xcb.xproto import *
 
-from keymap import *
-from keymap import effective_index, effective_keysym
+from keymap import KeymapError, KeyboardMap, ModifierMap, PointerMap
 from keysym import *
 
 def flatten(l):
@@ -18,7 +17,8 @@ class TestEffectiveIndex(unittest.TestCase):
     def assertEffectiveIndices(self, keysyms, indices):
         self.assertEqual(len(keysyms), len(indices))
         for i in range(len(keysyms)):
-            self.assertEqual(effective_index(keysyms, i), indices[i])
+            self.assertEqual(KeyboardMap.effective_index(keysyms, i),
+                             indices[i])
 
     def test_singleton(self):
         self.assertEffectiveIndices([XK_a, NoSymbol, NoSymbol, NoSymbol],
@@ -51,7 +51,8 @@ class TestEffectiveKeysym(unittest.TestCase):
     def assertEffectiveKeysyms(self, keysyms, effective_keysyms):
         self.assertEqual(len(keysyms), len(effective_keysyms))
         for i in range(len(keysyms)):
-            self.assertEqual(effective_keysym(keysyms, i), effective_keysyms[i])
+            self.assertEqual(KeyboardMap.effective_keysym(keysyms, i),
+                             effective_keysyms[i])
 
     def test_empty(self):
         self.assertEffectiveKeysyms([NoSymbol] * 4,
