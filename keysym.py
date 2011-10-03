@@ -14,6 +14,9 @@ def is_unicode(keysym):
 def is_legacy(keysym):
     return 0x100 <= keysym <= 0x20ff
 
+def is_keypad(keysym):
+    return 0xff80 <= keysym <= 0xffbd or 0x11000000 <= keysym <= 0x1100ffff
+
 def keysym_name(keysym):
     """Return the name of the given keysym."""
     return _names.get(keysym, None)
