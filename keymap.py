@@ -131,9 +131,7 @@ class KeyboardMap(InputDeviceMapping):
         if modmap:
             self.scry_modifiers(modmap)
         else:
-            self.lock = NoSymbol
-            self.group_mod = 0
-            self.numlock_mod = 0
+            self.clear_modifiers()
 
     def refresh(self, first_keycode=None, count=None):
         """Request an updated keyboard mapping for the specified keycodes."""
@@ -213,9 +211,20 @@ class KeyboardMap(InputDeviceMapping):
                                        self.group_mod, self.numlock_mod,
                                        self.lock)
 
+    def clear_modifiers(self):
+        self.lock = NoSymbol
+        self.group_mod = 0
+        self.numlock_mod = 0
+        self.meta_mod = 0
+        self.alt_mod = 0
+        self.super_mod = 0
+        self.hyper_mod = 0
+
     def scry_modifiers(self, modmap):
         """Grovel through the modifier map, looking for the current
-        interpretation of caps lock, mode (group) switch, and numlock."""
+        interpretation of various modifiers."""
+        self.clear_modifiers()
+
         # Find any appropriate keysym currently acting as the Lock modifier.
         for keycode in modmap[MapIndex.Lock]:
             keysyms = self[keycode]
@@ -225,19 +234,24 @@ class KeyboardMap(InputDeviceMapping):
             elif XK_Shift_Lock in keysyms:
                 self.lock = XK_Shift_Lock
                 break
-        else:
-            self.lock = NoSymbol
 
-        # Now find any modifiers acting as the Group or NumLock modifiers.
-        self.group_mod = 0
-        self.numlock_mod = 0
+        # Now find any modifiers acting as Group, NumLock, Meta, Alt,
+        # Super, or Hyper modifiers. Only the first two are required for
+        # proper keycode → keysym translation; the others are provided
+        # purely as a convenience.
         for mod in range(MapIndex._1, MapIndex._5 + 1):
             for keycode in modmap[mod]:
                 keysyms = self[keycode]
-                if XK_Mode_switch in keysyms:
-                    self.group_mod |= 1 << mod
-                if XK_Num_Lock in keysyms:
-                    self.numlock_mod |= 1 << mod
+                self.group_mod |= (XK_Mode_switch in keysyms) << mod
+                self.numlock_mod |= (XK_Num_Lock in keysyms) << mod
+                self.meta_mod |= (XK_Meta_L in keysyms or
+                                  XK_Meta_R in keysyms) << mod
+                self.alt_mod |= (XK_Alt_L in keysyms or
+                                 XK_Alt_R in keysyms) << mod
+                self.super_mod |= (XK_Super_L in keysyms or
+                                   XK_Super_R in keysyms) << mod
+                self.hyper_mod |= (XK_Hyper_L in keysyms or
+                                   XK_Hyper_R in keysyms) << mod
 
 class ModifierMap(InputDeviceMapping):
     def refresh(self):
