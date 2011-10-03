@@ -12,7 +12,7 @@ from keymap import effective_index, effective_keysym
 from keysym import *
 
 def flatten(l):
-    return [l[i][j] for i in range(len(l)) for j in range(len(l[i]))]
+    return [y for x in l for y in x]
 
 class TestEffectiveIndex(unittest.TestCase):
     def assertEffectiveIndices(self, keysyms, indices):
