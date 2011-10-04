@@ -133,8 +133,7 @@ class KeyboardMap(InputDeviceMapping):
         return keysyms[index]
 
     @staticmethod
-    def lookup_effective_keysym(keysyms, modifiers,
-                                group_mod, numlock_mod, lock_sym):
+    def lookup_effective_keysym(keysyms, modifiers, group, numlock, lock):
         """From the X11 protocol specification (Chapter 5, ¶8):
 
         Within a group, the choice of KEYSYM is determined by applying the
@@ -160,17 +159,16 @@ class KeyboardMap(InputDeviceMapping):
 
       • The Shift modifier is on, or the Lock modifier is on and is interpreted
         as ShiftLock, or both. In this case, the second KEYSYM is used."""
-        index = 2 if modifiers & group_mod else 0 # select group
-        numlock = modifiers & numlock_mod
-        lock = modifiers & ModMask.Lock
-        caps_lock = lock and lock_sym == XK_Caps_Lock
-        shift_lock = lock and lock_sym == XK_Shift_Lock
-        shift = modifiers & ModMask.Shift or shift_lock
+        index = 2 if modifiers & group else 0 # select group
+        numlock_on = modifiers & numlock
+        caps_lock_on = modifiers & ModMask.Lock and lock == XK_Caps_Lock
+        shift_lock_on = modifiers & ModMask.Lock and lock == XK_Shift_Lock
+        shift = modifiers & ModMask.Shift or shift_lock_on
 
-        if numlock and \
+        if numlock_on and \
                 is_keypad(KeyboardMap.effective_keysym(keysyms, index | 1)):
             return KeyboardMap.effective_keysym(keysyms, index | (not shift))
-        elif caps_lock:
+        elif caps_lock_on:
             return upper(KeyboardMap.effective_keysym(keysyms, index | shift))
         else:
             return KeyboardMap.effective_keysym(keysyms, index | shift)
@@ -179,9 +177,7 @@ class KeyboardMap(InputDeviceMapping):
         """Given a keycode and modifier mask (e.g., from the detail and state
         fields of a KeyPress/KeyRelease event), return the effective keysym."""
         return self.lookup_effective_keysym(self[keycode], modifiers,
-                                            self.group_mod,
-                                            self.numlock_mod,
-                                            self.lock)
+                                            self.group, self.numlock, self.lock)
 
     def __getitem__(self, key):
         """Retrieve the symbol associated with a key.
@@ -217,17 +213,26 @@ class KeyboardMap(InputDeviceMapping):
                     return i
 
     def clear_modifiers(self):
-        self.lock = NoSymbol
-        self.group_mod = 0
-        self.numlock_mod = 0
-        self.meta_mod = 0
-        self.alt_mod = 0
-        self.super_mod = 0
-        self.hyper_mod = 0
+        self.lock = NoSymbol # keysym, not bucky bit
+        self.group = 0
+        self.numlock = 0
+        self.meta = 0
+        self.alt = 0
+        self.super = 0
+        self.hyper = 0
 
     def scry_modifiers(self, modmap):
-        """Grovel through the modifier map, looking for the current
-        interpretation of various modifiers."""
+        """Grovel through the modifier map and assign meanings to modifiers.
+
+        Assigns to the "lock" attribute one of the keysyms Caps_Lock or
+        Shift_Lock, depending on which keysym is currently attached to a
+        keycode that is in turn attached to the Lock modifier. If no such
+        keys are attached, lock will be NoSymbol.
+
+        Also assigns modifier bits to each of the attributes "group",
+        "numlock", "meta", "alt", "super", and "hyper" if there is an
+        appropriate keysym attached to a keycode that is attached to any
+        of the modifiers Mod1 through Mod5."""
         self.clear_modifiers()
 
         # Find any appropriate keysym currently acting as the Lock modifier.
@@ -240,23 +245,23 @@ class KeyboardMap(InputDeviceMapping):
                 self.lock = XK_Shift_Lock
                 break
 
-        # Now find any modifiers acting as Group, NumLock, Meta, Alt,
-        # Super, or Hyper modifiers. Only the first two are required for
-        # proper keycode → keysym translation; the others are provided
-        # purely as a convenience.
+        # Now find any modifiers acting as Group, NumLock, Meta, Alt, Super,
+        # and Hyper modifiers. Only the first two are required for proper
+        # keycode → keysym translation; the others are provided purely as
+        # a convenience.
         for mod in range(MapIndex._1, MapIndex._5 + 1):
             for keycode in modmap[mod]:
                 keysyms = self[keycode]
-                self.group_mod |= (XK_Mode_switch in keysyms) << mod
-                self.numlock_mod |= (XK_Num_Lock in keysyms) << mod
-                self.meta_mod |= (XK_Meta_L in keysyms or
-                                  XK_Meta_R in keysyms) << mod
-                self.alt_mod |= (XK_Alt_L in keysyms or
-                                 XK_Alt_R in keysyms) << mod
-                self.super_mod |= (XK_Super_L in keysyms or
-                                   XK_Super_R in keysyms) << mod
-                self.hyper_mod |= (XK_Hyper_L in keysyms or
-                                   XK_Hyper_R in keysyms) << mod
+                self.group |= (XK_Mode_switch in keysyms) << mod
+                self.numlock |= (XK_Num_Lock in keysyms) << mod
+                self.meta |= (XK_Meta_L in keysyms or
+                              XK_Meta_R in keysyms) << mod
+                self.alt |= (XK_Alt_L in keysyms or
+                             XK_Alt_R in keysyms) << mod
+                self.super |= (XK_Super_L in keysyms or
+                               XK_Super_R in keysyms) << mod
+                self.hyper |= (XK_Hyper_L in keysyms or
+                               XK_Hyper_R in keysyms) << mod
 
 class ModifierMap(InputDeviceMapping):
     def refresh(self):

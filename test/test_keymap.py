@@ -96,21 +96,21 @@ class TestEffectiveKeysym(unittest.TestCase):
 
 class TestLookupEffectiveKeysym(unittest.TestCase):
     def setUp(self):
-        self.group_mod = ModMask._3
-        self.numlock_mod = ModMask._2
-        self.lock_sym = XK_Caps_Lock
+        self.group = ModMask._3
+        self.numlock = ModMask._2
+        self.lock = XK_Caps_Lock
 
     def lookup(self, keysyms, modifiers, shift_lock=None):
-        lock_sym = (self.lock_sym if shift_lock is None else
-                    XK_Shift_Lock if shift_lock else XK_Caps_Lock)
+        lock = (self.lock if shift_lock is None else
+                XK_Shift_Lock if shift_lock else XK_Caps_Lock)
         return KeyboardMap.lookup_effective_keysym(keysyms, modifiers,
-                                                   self.group_mod,
-                                                   self.numlock_mod,
-                                                   lock_sym)
+                                                   self.group,
+                                                   self.numlock,
+                                                   lock)
 
     def test_alphabetic_lookup(self):
         self.assertEqual(self.lookup([XK_a], 0), XK_a)
-        self.assertEqual(self.lookup([XK_a], self.numlock_mod), XK_a)
+        self.assertEqual(self.lookup([XK_a], self.numlock), XK_a)
         self.assertEqual(self.lookup([XK_a], ModMask.Shift), XK_A)
         self.assertEqual(self.lookup([XK_a], ModMask.Lock), XK_A)
         self.assertEqual(self.lookup([XK_a], ModMask.Lock, shift_lock=True),
@@ -120,7 +120,7 @@ class TestLookupEffectiveKeysym(unittest.TestCase):
     def test_nonalphabetic_lookup(self):
         keysyms = [XK_1, XK_exclam]
         self.assertEqual(self.lookup(keysyms, 0), XK_1)
-        self.assertEqual(self.lookup(keysyms, self.numlock_mod), XK_1)
+        self.assertEqual(self.lookup(keysyms, self.numlock), XK_1)
         self.assertEqual(self.lookup(keysyms, ModMask.Shift), XK_exclam)
         self.assertEqual(self.lookup(keysyms, ModMask.Lock), XK_1)
         self.assertEqual(self.lookup(keysyms, ModMask.Lock, shift_lock=True),
@@ -130,10 +130,10 @@ class TestLookupEffectiveKeysym(unittest.TestCase):
         keysyms = [XK_a, NoSymbol, XK_b, NoSymbol]
         self.assertEqual(self.lookup(keysyms, 0), XK_a)
         self.assertEqual(self.lookup(keysyms, ModMask.Shift), XK_A)
-        self.assertEqual(self.lookup(keysyms, self.group_mod), XK_b)
-        self.assertEqual(self.lookup(keysyms, ModMask.Shift | self.group_mod),
+        self.assertEqual(self.lookup(keysyms, self.group), XK_b)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift | self.group),
                          XK_B)
-        self.assertEqual(self.lookup(keysyms, ModMask.Lock | self.group_mod, 
+        self.assertEqual(self.lookup(keysyms, ModMask.Lock | self.group, 
                                      shift_lock=True),
                          XK_B)
 
@@ -146,8 +146,8 @@ class TestLookupEffectiveKeysym(unittest.TestCase):
                          XK_KP_1)
         self.assertEqual(self.lookup(keysyms, ModMask.Shift | ModMask.Lock),
                          XK_KP_1)
-        self.assertEqual(self.lookup(keysyms, self.numlock_mod), XK_KP_1)
-        self.assertEqual(self.lookup(keysyms, ModMask.Shift | self.numlock_mod),
+        self.assertEqual(self.lookup(keysyms, self.numlock), XK_KP_1)
+        self.assertEqual(self.lookup(keysyms, ModMask.Shift | self.numlock),
                          XK_KP_End)
 
 class MappingTestCase(unittest.TestCase):
@@ -287,7 +287,7 @@ class TestKeyboardMap(MappingTestCase):
         self.assertEqual(lookup(a, ModMask.Shift | ModMask.Lock), XK_A)
 
         # We'll make a similar assumption regarding the symbol "KP_1".
-        numlock = self.keymap.numlock_mod
+        numlock = self.keymap.numlock
         kp_1 = self.keymap.keysym_to_keycode(XK_KP_1)
         self.assertTrue(kp_1 > 0)
         self.assertEqual(list(self.keymap[kp_1][:2]), [XK_KP_End, XK_KP_1])
