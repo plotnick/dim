@@ -269,6 +269,42 @@ class TestKeyboardMap(MappingTestCase):
             # effectice keysym for all four positions should be the same.
             self.assertEqual(self.keymap[(esc, i)], XK_Escape)
 
+    def test_scry_modifiers(self):
+        # Save the current modifier map.
+        reply = self.conn.core.GetModifierMapping().reply()
+        saved_keycodes_per_modifier = reply.keycodes_per_modifier
+        saved_keycodes = reply.keycodes
+        try:
+            # Set the modifier map to a known state. We'll assume that each
+            # of the keysyms listed below is attached to some keycode. Note
+            # that XKB seems to step in here sometimes and muck around with
+            # our values.
+            def keycode(keysym):
+                return self.keymap.keysym_to_keycode(keysym)
+            keycodes = [keycode(XK_Shift_L), # shift
+                        keycode(XK_Caps_Lock), # lock
+                        keycode(XK_Control_L), # control
+                        keycode(XK_Meta_L), # mod1
+                        keycode(XK_Num_Lock), #mod2
+                        keycode(XK_Mode_switch), # mod3
+                        keycode(XK_Super_L), # mod4
+                        0] # mod5
+            reply = self.conn.core.SetModifierMapping(1, keycodes).reply()
+            self.assertEqual(reply.status, MappingStatus.Success)
+
+            # Now check that we have what we ought to.
+            self.keymap.scry_modifiers(ModifierMap(self.conn))
+            self.assertEqual(self.keymap.lock, XK_Caps_Lock)
+            self.assertEqual(self.keymap.group, ModMask._3)
+            self.assertEqual(self.keymap.numlock, ModMask._2)
+            self.assertEqual(self.keymap.meta, ModMask._1)
+            self.assertEqual(self.keymap.alt, ModMask._1) # thanks, XKB!
+            self.assertEqual(self.keymap.super, ModMask._4)
+            self.assertEqual(self.keymap.hyper, 0)
+        finally:
+            self.conn.core.SetModifierMapping(saved_keycodes_per_modifier,
+                                              saved_keycodes).reply()
+
     def test_lookup_key(self):
         def lookup(keycode, mask):
             return self.keymap.lookup_key(keycode, mask)
