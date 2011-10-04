@@ -34,6 +34,7 @@ class WindowManager(EventHandler):
         self.keymap = KeyboardMap(conn)
         self.screen = conn.get_setup().roots[screen if screen is not None
                                                     else conn.pref_screen]
+        self.next_event = None
 
         # Make this client a window manager by selecting (at least)
         # SubstructureRedirect events on the root window. If another client
@@ -118,11 +119,7 @@ class WindowManager(EventHandler):
         self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
 
     def event_loop(self):
-        """The main event loop of the window manager. We keep a one-event
-        lookahead (accessible via peek_next_event) in order to support event
-        compression."""
-        self.next_event = None
-
+        """The main event loop of the window manager."""
         # We use a select-based loop instead of XCB's wait_for_event because
         # (a) select handles signals correctly, and (b) wait_for_event blocks
         # the entire interpreter, not just the current thread.
@@ -131,9 +128,8 @@ class WindowManager(EventHandler):
         xlist = []
         while True:
             while True:
-                event = self.peek_next_event()
+                event = self.get_next_event()
                 if event:
-                    self.next_event = None
                     self.handle_event(event)
                 else:
                     break
@@ -141,9 +137,18 @@ class WindowManager(EventHandler):
             select(rlist, wlist, xlist)
 
     def peek_next_event(self):
-        if not self.next_event:
-            self.next_event = self.conn.poll_for_event()
+        if self.next_event is None:
+            self.next_event = self.get_next_event()
         return self.next_event
+
+    def get_next_event(self):
+        if self.next_event:
+            try:
+                return self.next_event
+            finally:
+                self.next_event = None
+        else:
+            return self.conn.poll_for_event()
 
     def unhandled_event(self, event):
         debug("Ignoring unhandled %s" % event.__class__.__name__)

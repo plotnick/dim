@@ -239,6 +239,7 @@ class TestWMEventLoop(WMTestCase):
         # Move the window around a bunch of times.
         for i in range(n):
             w.resize(g + (randint(1, 100), randint(1, 100)))
+        self.conn.flush()
 
     def test_event_loop(self):
         """Test the window manager's event loop"""
@@ -259,7 +260,7 @@ class TestWMEventLoopWithCompression(TestWMEventLoop):
         """Test event compression"""
         n = 100
         self.jiggle_window(n)
-        self.event_loop(lambda: self.wm_thread.wm.events_received == 1)
+        self.event_loop(lambda: 0 < self.wm_thread.wm.events_received < n)
 
 if __name__ == "__main__":
     import logging
