@@ -1,7 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from logging import basicConfig as logconfig, debug, info, warning, error
-from select import select
 
 import xcb
 from xcb.xproto import *
