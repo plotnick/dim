@@ -7,39 +7,42 @@ from xcb.xproto import *
 
 from client import ClientWindow
 from event import handler, EventHandler, UnhandledEvent
-from manager import WindowManager
+from manager import WindowManager, GrabButtons
 
 class RaiseLower(WindowManager):
-    GRAB_EVENT_MASK = EventMask.ButtonPress | EventMask.ButtonRelease
+    __GRAB_EVENT_MASK = EventMask.ButtonPress
 
     def __init__(self, conn, screen=None,
-                 modifier=ModMask._1,
-                 raise_button=1,
-                 lower_button=3):
-        assert modifier != 0, "Invalid modifier key for raise/lower"
+                 raise_lower_mods=ModMask.Shift | ModMask._1,
+                 raise_button=1, lower_button=3,
+                 grab_buttons=GrabButtons(),
+                 **kwargs):
+        assert raise_lower_mods != 0, "Invalid modifiers for raise/lower"
         assert raise_button != lower_button, \
             "Can't have raise and lower on the same button"
-
-        super(RaiseLower, self).__init__(conn, screen)
-
+        self.raise_lower_mods = raise_lower_mods
         self.raise_button = raise_button
         self.lower_button = lower_button
 
-        for button in (raise_button, lower_button):
-            self.conn.core.GrabButtonChecked(False, self.screen.root,
-                                             self.GRAB_EVENT_MASK,
-                                             GrabMode.Async, GrabMode.Async,
-                                             self.screen.root, Cursor._None,
-                                             button, modifier).check()
+        kwargs.update(grab_buttons=grab_buttons.merge({
+            (self.raise_button, self.raise_lower_mods): self.__GRAB_EVENT_MASK,
+            (self.lower_button, self.raise_lower_mods): self.__GRAB_EVENT_MASK
+        }))
+        super(RaiseLower, self).__init__(conn, screen, **kwargs)
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
         button = event.detail
-        if not event.child:
-            debug("Ignoring button %d press in root window" % button)
+        modifiers = event.state & 0xff
+        window = event.child
+
+        if not window or \
+                modifiers != self.raise_lower_mods or \
+                button not in (self.raise_button, self.lower_button):
             raise UnhandledEvent(event)
+
         try:
-            client = self.clients[event.child]
+            client = self.clients[window]
         except KeyError:
             raise UnhandledEvent(event)
 
@@ -47,5 +50,4 @@ class RaiseLower(WindowManager):
             client.restack(StackMode.TopIf)
         elif button == self.lower_button:
             client.restack(StackMode.BottomIf)
-        else:
-            raise UnhandledEvent(event)
+        raise UnhandledEvent(event)

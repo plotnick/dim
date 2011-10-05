@@ -4,6 +4,7 @@
 
 from logging import debug, info, warning, error
 from functools import wraps
+from operator import or_
 from select import select
 
 import xcb
@@ -27,7 +28,7 @@ class WindowManager(EventHandler):
                        EventMask.SubstructureNotify |
                        EventMask.SubstructureRedirect)
 
-    def __init__(self, conn, screen=None):
+    def __init__(self, conn, screen=None, grab_buttons=GrabButtons()):
         self.conn = conn
         self.clients = {} # managed clients, indexed by window ID
         self.atoms = AtomCache(conn)
@@ -44,6 +45,15 @@ class WindowManager(EventHandler):
             "A window manager must select for SubstructureRedirect."
         self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
             CW.EventMask, [self.ROOT_EVENT_MASK]).check()
+
+        # Establish passive grabs for buttons on the root window. Subclasses
+        # will add their own entries to the grab_buttons argument.
+        for key, mask in grab_buttons.items():
+            button, modifiers = key
+            self.conn.core.GrabButtonChecked(False, self.screen.root, mask,
+                                             GrabMode.Async, GrabMode.Async,
+                                             self.screen.root, Cursor._None,
+                                             button, modifiers).check()
 
         # Adopt any suitable top-level windows.
         self.scan()
@@ -258,6 +268,15 @@ def compress(handler):
             return
         return handler(self, event)
     return compressed_handler
+
+class GrabButtons(dict):
+    def merge(self, other):
+        for key, mask in other.items():
+            if key in self:
+                self[key] |= mask
+            else:
+                self[key] = mask
+        return self
 
 if __name__ == "__main__":
     from optparse import OptionParser
