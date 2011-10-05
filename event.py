@@ -33,12 +33,11 @@ class EventHandlerClass(type):
                                                           bases, namespace)
         cls.__handlers__ = {}
         for base in bases:
-            cls.__handlers__.update(getattr(base, "__handlers__", dict()))
+            for ev, handlers in getattr(base, "__handlers__", dict()).items():
+                cls.__handlers__[ev] = cls.__handlers__.get(ev, []) + handlers
         for obj in filter(callable, namespace.values()):
-            event_classes = getattr(obj, "__handler_for__", ())
-            for event_class in event_classes:
-                cls.__handlers__[event_class] = [obj] + \
-                    cls.__handlers__.get(event_class, [])
+            for ev in getattr(obj, "__handler_for__", ()):
+                cls.__handlers__[ev] = [obj] + cls.__handlers__.get(ev, [])
         return cls
 
 class EventHandler(object):

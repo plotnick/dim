@@ -39,11 +39,20 @@ class BazHandler(BarHandler):
     def unhandled_event(self, event):
         return False
 
+class QuxHandler(EventHandler):
+    @handler(QuxEvent)
+    def handle_qux(self, event):
+        event.handled = True
+        return event
+
 class MultiHandler(EventHandler):
     @handler((FooEvent, BarEvent, BazEvent))
     def handle_foo_bar_baz(self, event):
         event.handled = True
         return event
+
+class SuperHandler(BazHandler, QuxHandler):
+    pass
 
 class TestEventHandler(unittest.TestCase):
     def test_base_handler(self):
@@ -90,6 +99,14 @@ class TestEventHandler(unittest.TestCase):
         self.assertTrue(multi_handler.handle_event(BazEvent()).handled)
         self.assertRaises(UnhandledEvent,
                           lambda: multi_handler.handle_event(QuxEvent()))
+
+    def test_super_handler(self):
+        """Test multi-superclass handler inheritance"""
+        super_handler = SuperHandler()
+        qux = QuxEvent()
+        self.assertEqual(super_handler.handle_event(qux), qux)
+        self.assertTrue(qux.declined) # by BazHandler
+        self.assertTrue(qux.handled) # by QuxHandler
 
 if __name__ == "__main__":
     unittest.main()
