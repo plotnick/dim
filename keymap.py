@@ -194,8 +194,7 @@ class KeyboardMap(InputDeviceMapping):
         n = self.keysyms_per_keycode
         i = (keycode - self.min_keycode) * n
         j = i + n
-        keysyms = self.keysyms[i:j]
-        return (tuple(keysyms) if index is None else
+        return (self.keysyms[i:j] if index is None else
                 self.effective_keysym(self.keysyms[i:j], index))
 
     def __iter__(self):
