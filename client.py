@@ -51,6 +51,11 @@ class ClientWindow(object):
             (ConfigWindow.Width | ConfigWindow.Height),
             map(int16, size)).check()
 
+    def restack(self, stack_mode):
+        self.manager.conn.core.ConfigureWindowChecked(self.window,
+            ConfigWindow.StackMode,
+            [stack_mode]).check()
+
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x
 
