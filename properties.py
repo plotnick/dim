@@ -179,7 +179,7 @@ class WMSizeHints(PropertyValue):
                              ("_min_width", "_min_height"),
                              lambda self: self.base_size \
                                  if self.flags & self.PBaseSize \
-                                 else (0, 0))
+                                 else (1, 1))
     max_size = PropertyField(PMaxSize, Rectangle,
                              ("_max_width", "_max_height"),
                              (0x7fffffff, 0x7fffffff))
@@ -198,7 +198,7 @@ class WMSizeHints(PropertyValue):
                               ("_base_width", "_base_height"),
                               lambda self: self.min_size \
                                   if self.flags & self.PMinSize \
-                                  else (0, 0))
+                                  else (1, 1))
     win_gravity = PropertyField(PWinGravity, int,
                                 "_win_gravity",
                                 Gravity.NorthWest)

@@ -55,12 +55,12 @@ class TestWMSizeHints(unittest.TestCase):
     def test_default_size_hints(self):
         hints = WMSizeHints()
         self.assertEqual(hints.flags, 0)
-        self.assertEqual(hints.min_size, (0, 0))
+        self.assertEqual(hints.min_size, (1, 1))
         self.assertEqual(hints.max_size, (0x7fffffff, 0x7fffffff))
         self.assertEqual(hints.resize_inc, (1, 1))
         self.assertEqual(hints.min_aspect, (None, None))
         self.assertEqual(hints.max_aspect, (None, None))
-        self.assertEqual(hints.base_size, (0, 0))
+        self.assertEqual(hints.base_size, (1, 1))
         self.assertEqual(hints.win_gravity, Gravity.NorthWest)
 
     def test_base_size(self):
@@ -118,7 +118,7 @@ class TestWMSizeHints(unittest.TestCase):
         del hints.min_size
         self.assertEqual(hints.flags, WMSizeHints.PResizeInc)
         self.assertEqual(hints.resize_inc, self.resize_inc)
-        self.assertEqual(hints.min_size, (0, 0))
+        self.assertEqual(hints.min_size, (1, 1))
 
     def test_pack_unpack(self):
         hints = WMSizeHints(base_size=self.base_size,
