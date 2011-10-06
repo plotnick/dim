@@ -6,6 +6,7 @@ import xcb
 from xcb.xproto import *
 
 from client import ClientWindow
+from cursor import *
 from event import handler, EventHandler, UnhandledEvent
 from geometry import *
 from keysym import *
@@ -83,6 +84,13 @@ class MoveResize(WindowManager):
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
 
+    move_cursor = XC_fleur
+    # The resize cursors are keyed to the quadrants.
+    resize_cursors = {(+1, +1): XC_bottom_right_corner,
+                      (-1, +1): XC_bottom_left_corner,
+                      (-1, -1): XC_top_left_corner,
+                      (+1, -1): XC_top_right_corner}
+
     def __init__(self, conn, screen=None,
                  move_resize_mods=ModMask._1, move_button=1, resize_button=3,
                  grab_buttons=GrabButtons(),
@@ -94,7 +102,7 @@ class MoveResize(WindowManager):
         self.move_resize_mods = move_resize_mods
         self.move_button = move_button
         self.resize_button = resize_button
-        self.moving = None
+        self.moveresize = None
         
         kwargs.update(grab_buttons=grab_buttons.merge({
             (self.move_button, self.move_resize_mods): self.__GRAB_EVENT_MASK,
@@ -123,12 +131,18 @@ class MoveResize(WindowManager):
             self.moveresize = MoveClient(client,
                                          self.grab_keyboard,
                                          self.ungrab_keyboard)
+            self.change_cursor(self.move_cursor)
         elif button == self.resize_button:
             self.moveresize = ResizeClient(client,
                                            self.button_press,
                                            self.grab_keyboard,
                                            self.ungrab_keyboard)
+            self.change_cursor(self.resize_cursors[self.moveresize.quadrant])
         raise UnhandledEvent(event)
+
+    def change_cursor(self, cursor):
+        self.conn.core.ChangeActivePointerGrabChecked(self.cursors[cursor],
+            Time.CurrentTime, self.__GRAB_EVENT_MASK).check()
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
