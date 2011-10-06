@@ -17,6 +17,15 @@ from keymap import KeymapError, KeyboardMap
 from properties import *
 from xutil import *
 
+class GrabButtons(dict):
+    def merge(self, other):
+        for key, mask in other.items():
+            if key in self:
+                self[key] |= mask
+            else:
+                self[key] = mask
+        return self
+
 class WindowManager(EventHandler):
     """A window manager for one X screen.
 
@@ -268,15 +277,6 @@ def compress(handler):
             return
         return handler(self, event)
     return compressed_handler
-
-class GrabButtons(dict):
-    def merge(self, other):
-        for key, mask in other.items():
-            if key in self:
-                self[key] |= mask
-            else:
-                self[key] = mask
-        return self
 
 if __name__ == "__main__":
     from optparse import OptionParser
