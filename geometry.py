@@ -51,6 +51,8 @@ Rectangle.__str__ = lambda self: "%ux%u" % self
 Rectangle.__unicode__ = lambda self: u"%u×%u" % self
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
+Geometry.resize = lambda self, other: \
+    self._replace(width=other.width, height=other.height)
 Geometry.__add__ = Geometry.__radd__ = make_translater(add)
 Geometry.__sub__ = make_translater(sub)
 Geometry.__nonzero__ = lambda self: \

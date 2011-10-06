@@ -43,13 +43,20 @@ class ClientWindow(object):
 
     def move(self, position):
         self.manager.conn.core.ConfigureWindowChecked(self.window,
-            (ConfigWindow.X | ConfigWindow.Y),
+            ConfigWindow.X | ConfigWindow.Y,
             map(int16, position)).check()
 
     def resize(self, size):
         self.manager.conn.core.ConfigureWindowChecked(self.window,
-            (ConfigWindow.Width | ConfigWindow.Height),
+            ConfigWindow.Width | ConfigWindow.Height,
             map(int16, size)).check()
+
+    def update_geometry(self, geometry):
+        self.manager.conn.core.ConfigureWindowChecked(self.window,
+            (ConfigWindow.X | ConfigWindow.Y |
+             ConfigWindow.Width | ConfigWindow.Height |
+             ConfigWindow.BorderWidth),
+            map(int16, geometry)).check()
 
     def restack(self, stack_mode):
         self.manager.conn.core.ConfigureWindowChecked(self.window,

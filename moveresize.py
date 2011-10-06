@@ -42,16 +42,39 @@ class MoveClient(ConfigureClient):
         super(MoveClient, self).rollback()
 
 class ResizeClient(ConfigureClient):
-    def __init__(self, client, *args):
+    def __init__(self, client, point, *args):
         super(ResizeClient, self).__init__(client, *args)
-        self.size = Rectangle(client.geometry.width, client.geometry.height)
+        self.geometry = client.geometry
         self.size_hints = client.wm_normal_hints
 
+        # Determine which quadrant of the client window the initial button
+        # press occurred in. A quadrant is a represented by a position whose
+        # coordinates are ±1:
+        #     ┌──────────┬──────────┐
+        #     │ (-1, -1) │ (+1, -1) │
+        #     ├──────────┼──────────┤
+        #     │ (-1, +1) │ (+1, +1) │
+        #     └──────────┴──────────┘
+        midpoint = Position(self.geometry.x + self.geometry.width // 2,
+                            self.geometry.y + self.geometry.height // 2)
+        self.quadrant = Position(1 if point.x - midpoint.x >= 0 else -1,
+                                 1 if point.y - midpoint.y >= 0 else -1)
+
     def update(self, delta):
-        self.client.resize(constrain_size(self.size + delta, self.size_hints))
+        delta = Position(delta.x * self.quadrant.x, delta.y * self.quadrant.y)
+        old_size = Rectangle(self.geometry.width, self.geometry.height)
+        new_size = constrain_size(old_size + delta, self.size_hints)
+        if new_size != old_size:
+            offset = Position(new_size.width - old_size.width \
+                                  if self.quadrant.x < 0 \
+                                  else 0,
+                              new_size.height - old_size.height \
+                                  if self.quadrant.y < 0 \
+                                  else 0)
+            self.client.update_geometry(self.geometry.resize(new_size) - offset)
 
     def rollback(self):
-        self.client.resize(self.size)
+        self.client.update_geometry(self.geometry)
         super(ResizeClient, self).rollback()
 
 class MoveResize(WindowManager):
@@ -102,6 +125,7 @@ class MoveResize(WindowManager):
                                          self.ungrab_keyboard)
         elif button == self.resize_button:
             self.moveresize = ResizeClient(client,
+                                           self.button_press,
                                            self.grab_keyboard,
                                            self.ungrab_keyboard)
         raise UnhandledEvent(event)
