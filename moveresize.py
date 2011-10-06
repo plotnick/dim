@@ -31,6 +31,8 @@ class ConfigureClient(object):
         self.end()
 
 class MoveClient(ConfigureClient):
+    cursor = XC_fleur
+
     def __init__(self, client, *args):
         super(MoveClient, self).__init__(client, *args)
         self.position = Position(client.geometry.x, client.geometry.y)
@@ -48,31 +50,51 @@ class ResizeClient(ConfigureClient):
         self.geometry = client.geometry
         self.size_hints = client.wm_normal_hints
 
-        # Determine which quadrant of the client window the initial button
-        # press occurred in. A quadrant is a represented by a position whose
-        # coordinates are ±1:
-        #     ┌──────────┬──────────┐
-        #     │ (-1, -1) │ (+1, -1) │
-        #     ├──────────┼──────────┤
-        #     │ (-1, +1) │ (+1, +1) │
-        #     └──────────┴──────────┘
-        midpoint = Position(self.geometry.x + self.geometry.width // 2,
-                            self.geometry.y + self.geometry.height // 2)
-        self.quadrant = Position(1 if point.x - midpoint.x >= 0 else -1,
-                                 1 if point.y - midpoint.y >= 0 else -1)
+        # Determine which octant of the client window the initial button
+        # press occurred in. An octant is a represented by a position whose
+        # coordinates are ±1 or 0:
+        #     ┌──────┬──────┬──────┐
+        #     │ -1-1 │ +0-1 │ +1-1 │
+        #     ├──────┼──────┼──────┤
+        #     │ -1+0 │ +1+1 │ +1+0 │
+        #     ├──────┼──────┼──────┤
+        #     │ -1+1 │ +0+1 │ +1+1 │
+        #     └──────┴──────┴──────┘
+        # (Yes, Virginia, there are nine octants. But two of them are the
+        # same, and so there are effectively only eight.)
+        def third(point, start, length):
+            thirds = (start + length // 3, start + 2 * length // 3)
+            return (-1 if point < thirds[0] else
+                     0 if point < thirds[1] else
+                     1)
+        octant = (third(point.x, self.geometry.x, self.geometry.width),
+                  third(point.y, self.geometry.y, self.geometry.height))
+        self.octant = Position(*(octant if octant != (0, 0) else (+1, +1)))
 
     def update(self, delta):
-        delta = Position(delta.x * self.quadrant.x, delta.y * self.quadrant.y)
+        delta = Position(delta.x * self.octant.x, delta.y * self.octant.y)
         old_size = Rectangle(self.geometry.width, self.geometry.height)
         new_size = constrain_size(old_size + delta, self.size_hints)
         if new_size != old_size:
             offset = Position(new_size.width - old_size.width \
-                                  if self.quadrant.x < 0 \
+                                  if self.octant.x < 0 \
                                   else 0,
                               new_size.height - old_size.height \
-                                  if self.quadrant.y < 0 \
+                                  if self.octant.y < 0 \
                                   else 0)
             self.client.update_geometry(self.geometry.resize(new_size) - offset)
+
+    @property
+    def cursor(self, cursors={(+0, +0): XC_cross,
+                              (-1, -1): XC_top_left_corner,
+                              (+0, -1): XC_top_side,
+                              (+1, -1): XC_top_right_corner,
+                              (+1, +0): XC_right_side,
+                              (+1, +1): XC_bottom_right_corner,
+                              (+0, +1): XC_bottom_side,
+                              (-1, +1): XC_bottom_left_corner,
+                              (-1, +0): XC_left_side}):
+        return cursors[self.octant]
 
     def rollback(self):
         self.client.update_geometry(self.geometry)
@@ -83,13 +105,6 @@ class MoveResize(WindowManager):
                          EventMask.ButtonRelease |
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
-
-    move_cursor = XC_fleur
-    # The resize cursors are keyed to the quadrants.
-    resize_cursors = {(+1, +1): XC_bottom_right_corner,
-                      (-1, +1): XC_bottom_left_corner,
-                      (-1, -1): XC_top_left_corner,
-                      (+1, -1): XC_top_right_corner}
 
     def __init__(self, conn, screen=None,
                  move_resize_mods=ModMask._1, move_button=1, resize_button=3,
@@ -131,13 +146,12 @@ class MoveResize(WindowManager):
             self.moveresize = MoveClient(client,
                                          self.grab_keyboard,
                                          self.ungrab_keyboard)
-            self.change_cursor(self.move_cursor)
         elif button == self.resize_button:
             self.moveresize = ResizeClient(client,
                                            self.button_press,
                                            self.grab_keyboard,
                                            self.ungrab_keyboard)
-            self.change_cursor(self.resize_cursors[self.moveresize.quadrant])
+        self.change_cursor(self.moveresize.cursor)
         raise UnhandledEvent(event)
 
     def change_cursor(self, cursor):
