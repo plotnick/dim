@@ -7,7 +7,19 @@ import re
 
 cursor_pattern = re.compile(r"""^#define (XC_[a-zA-Z_0-9]+)\s+([0-9]+)$""")
 
+def makecursorfont(input, output):
+    if input.name:
+        output.write("# Automatically generated from %s.\n\n" % input.name)
+
+    for line in input:
+        match = cursor_pattern.match(line)
+        if match:
+            name = match.group(1)
+            value = match.group(2)
+            output.write("%s = %s\n" % (name, value))
+
 if __name__ == "__main__":
+    import os
     import sys
 
     try:
@@ -18,13 +30,4 @@ if __name__ == "__main__":
         sys.exit(1)
     with open(input_file) as input:
         with open(output_file, "w") as output:
-            if input.name:
-                output.write("# Automatically generated from %s.\n\n" % \
-                                 input.name)
-
-            for line in input:
-                match = cursor_pattern.match(line)
-                if match:
-                    name = match.group(1)
-                    value = match.group(2)
-                    output.write("%s = %s\n" % (name, value))
+            makecursorfont(input, output)

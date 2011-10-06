@@ -22,7 +22,6 @@ The fourth is a map from legacy keysym codes to Unicode characters, which
 we call "_legacy_codes". It is also a dictionary."""
 
 from operator import itemgetter
-import os
 import re
 
 # Adapted from keysymdef.h comment.
@@ -112,6 +111,7 @@ def keysymdef(input, output):
     pprint_dict("_legacy_codes", legacy_codes)
 
 if __name__ == "__main__":
+    import os
     import sys
 
     try:
