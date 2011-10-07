@@ -9,7 +9,9 @@ from select import select
 from xcb.xproto import *
 
 from client import ClientWindow, WMState
+from color import ColorCache
 from cursor import FontCursor
+from decorator import Decorator
 from event import handler, EventHandler
 from geometry import *
 from keymap import KeymapError, KeyboardMap
@@ -29,12 +31,13 @@ class WindowManager(EventHandler):
 
     def __init__(self, conn, screen=None, grab_buttons=GrabButtons()):
         self.conn = conn
+        self.screen = conn.get_setup().roots[screen if screen is not None else
+                                             conn.pref_screen]
         self.clients = {} # managed clients, indexed by window ID
         self.atoms = AtomCache(conn)
+        self.colors = ColorCache(conn, self.screen.default_colormap)
         self.cursors = FontCursor(conn)
         self.keymap = KeyboardMap(conn)
-        self.screen = conn.get_setup().roots[screen if screen is not None
-                                                    else conn.pref_screen]
         self.next_event = None
 
         # Make this client a window manager by selecting (at least)
@@ -120,6 +123,10 @@ class WindowManager(EventHandler):
                                             int16(geometry.height),
                                             int16(geometry.border_width)))
         return geometry
+
+    def decorator(self, client):
+        """Return a decorator for the given client."""
+        return Decorator(self.conn, client)
 
     def grab_keyboard(self):
         self.conn.core.GrabKeyboard(False, self.screen.root, Time.CurrentTime,

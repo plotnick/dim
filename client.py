@@ -24,6 +24,7 @@ class ClientWindow(object):
         self.window = window
         self.manager = manager
         self._geometry = None
+        self.decorator = manager.decorator(self)
 
     @property
     def geometry(self):
