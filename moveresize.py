@@ -125,6 +125,11 @@ class MoveResize(WindowManager):
         }))
         super(MoveResize, self).__init__(conn, screen, **kwargs)
 
+    def change_cursor(self, cursor):
+        self.conn.core.ChangeActivePointerGrab(self.cursors[cursor],
+                                               Time.CurrentTime,
+                                               self.__grab_event_mask)
+
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
         button = event.detail
@@ -153,11 +158,6 @@ class MoveResize(WindowManager):
                                            self.ungrab_keyboard)
         self.change_cursor(self.moveresize.cursor)
         raise UnhandledEvent(event)
-
-    def change_cursor(self, cursor):
-        self.conn.core.ChangeActivePointerGrab(self.cursors[cursor],
-                                               Time.CurrentTime,
-                                               self.__grab_event_mask)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
