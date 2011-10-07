@@ -85,7 +85,7 @@ class WindowManager(EventHandler):
         # windows from the save-set when they are destroyed.
         self.conn.core.ChangeSaveSet(SetMode.Insert, window)
 
-        client = ClientWindow(window, self)
+        client = ClientWindow(self.conn, window, self)
         self.clients[window] = client
 
         # ICCCM §4.1.3.1: "The window manager will place a WM_STATE

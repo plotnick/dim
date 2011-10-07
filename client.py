@@ -19,17 +19,17 @@ class ClientWindow(object):
     """All top-level windows (other than those with override-redirect set) will
     be wrapped with an instance of this class."""
 
-    def __init__(self, window, manager, decorator=None):
+    def __init__(self, conn, window, manager):
+        self.conn = conn
         self.window = window
         self.manager = manager
-        self.decorator = decorator
         self._geometry = None
 
     @property
     def geometry(self):
         if self._geometry is None:
             debug("Fetching geometry for client 0x%x" % self.window)
-            geometry = self.manager.conn.core.GetGeometry(self.window).reply()
+            geometry = self.conn.core.GetGeometry(self.window).reply()
             if geometry:
                 self._geometry = Geometry(geometry.x, geometry.y,
                                           geometry.width, geometry.height,
@@ -42,39 +42,36 @@ class ClientWindow(object):
         self._geometry = geometry
 
     def move(self, position):
-        self.manager.conn.core.ConfigureWindow(self.window,
-                                               (ConfigWindow.X |
-                                                ConfigWindow.Y),
-                                               map(int16, position))
+        self.conn.core.ConfigureWindow(self.window,
+                                       ConfigWindow.X | ConfigWindow.Y,
+                                       map(int16, position))
 
     def resize(self, size):
-        self.manager.conn.core.ConfigureWindow(self.window,
-                                               (ConfigWindow.Width |
-                                                ConfigWindow.Height),
-                                               map(int16, size))
+        self.conn.core.ConfigureWindow(self.window,
+                                       ConfigWindow.Width | ConfigWindow.Height,
+                                       map(int16, size))
 
     def update_geometry(self, geometry):
-        self.manager.conn.core.ConfigureWindow(self.window,
-                                               (ConfigWindow.X |
-                                                ConfigWindow.Y |
-                                                ConfigWindow.Width |
-                                                ConfigWindow.Height |
-                                                ConfigWindow.BorderWidth),
-                                               map(int16, geometry))
+        self.conn.core.ConfigureWindow(self.window,
+                                       (ConfigWindow.X |
+                                        ConfigWindow.Y |
+                                        ConfigWindow.Width |
+                                        ConfigWindow.Height |
+                                        ConfigWindow.BorderWidth),
+                                       map(int16, geometry))
 
     def restack(self, stack_mode):
-        self.manager.conn.core.ConfigureWindow(self.window,
-                                               ConfigWindow.StackMode,
-                                               [stack_mode])
+        self.conn.core.ConfigureWindow(self.window,
+                                       ConfigWindow.StackMode,
+                                       [stack_mode])
 
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x
 
     def get_property(self, name, type):
-        reply = self.manager.conn.core.GetProperty(False, self.window,
-                                                   self.atom(name),
-                                                   self.atom(type),
-                                                   0, 0xffffffff).reply()
+        reply = self.conn.core.GetProperty(False, self.window,
+                                           self.atom(name), self.atom(type),
+                                           0, 0xffffffff).reply()
         if reply.type:
             return reply.value.buf()
 
@@ -87,13 +84,9 @@ class ClientWindow(object):
             (format, data_len, data) = value.change_property_args()
         else:
             raise ValueError("unknown property value type")
-        self.manager.conn.core.ChangeProperty(mode,
-                                              self.window,
-                                              self.atom(name),
-                                              self.atom(type),
-                                              format,
-                                              data_len,
-                                              data)
+        self.conn.core.ChangeProperty(mode, self.window,
+                                      self.atom(name), self.atom(type),
+                                      format, data_len, data)
 
     def get_ewmh_name(self, name):
         """The EWMH specification defines two application window properties,
