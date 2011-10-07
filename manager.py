@@ -4,7 +4,6 @@
 
 from logging import debug, info, warning, error
 from functools import wraps
-from operator import or_
 from select import select
 
 from xcb.xproto import *
