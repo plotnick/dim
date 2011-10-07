@@ -6,7 +6,7 @@ from struct import Struct
 
 from xcb.xproto import *
 
-__all__ = ["power_of_2", "popcount", "int16",
+__all__ = ["power_of_2", "popcount", "int16", "card16",
            "is_synthetic_event", "configure_notify",
            "select_values", "value_list",
            "AtomCache", "GrabButtons", "GrabServer"]
@@ -21,6 +21,11 @@ def popcount(x):
 
 def int16(x):
     """Truncate an integer to 16 bits, ignoring sign."""
+    return x & 0xffff
+
+def card16(x):
+    """Truncate an unsigned integer to 16 bits."""
+    assert x >= 0, "invalid cardinal %d" % x
     return x & 0xffff
 
 def is_synthetic_event(event):
