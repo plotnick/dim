@@ -9,7 +9,7 @@ from xcb.xproto import *
 __all__ = ["power_of_2", "popcount", "int16",
            "is_synthetic_event", "configure_notify",
            "select_values", "value_list",
-           "AtomCache"]
+           "AtomCache", "GrabButtons", "GrabServer"]
 
 def power_of_2(x):
     """Check whether x is a power of 2."""
@@ -106,6 +106,23 @@ class AtomCache(object):
         atom = self.conn.core.InternAtom(False, len(name), name).reply().atom
         self.atoms[name] = atom
         return atom
+
+class GrabButtons(dict):
+    """Helper class for managing passive grabs established with GrabButton.
+
+    Instances of this class will be dictionaries whose keys are tuples of
+    the form (button, modifiers), and whose values are event masks."""
+
+    def merge(self, other):
+        """Given another dictionary, update this instance with any new entries
+        and merge the event masks (i.e., compute the logical or) of entries
+        with corresponding keys."""
+        for key, mask in other.items():
+            if key in self:
+                self[key] |= mask
+            else:
+                self[key] = mask
+        return self
 
 class GrabServer(object):
     def __init__(self, conn):

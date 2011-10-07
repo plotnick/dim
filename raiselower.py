@@ -6,7 +6,8 @@ from xcb.xproto import *
 
 from client import ClientWindow
 from event import handler, EventHandler, UnhandledEvent
-from manager import WindowManager, GrabButtons
+from manager import WindowManager
+from xutil import GrabButtons
 
 class RaiseLower(WindowManager):
     __grab_event_mask = EventMask.ButtonPress

@@ -9,8 +9,8 @@ from cursor import *
 from event import handler, EventHandler, UnhandledEvent
 from geometry import *
 from keysym import *
-from manager import WindowManager, compress, GrabButtons
-from xutil import *
+from manager import WindowManager, compress
+from xutil import GrabButtons
 
 class ConfigureClient(object):
     """A transactional client configuration change."""
