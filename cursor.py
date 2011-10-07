@@ -6,8 +6,7 @@ class FontCursor(object):
     def __init__(self, conn, font_name="cursor"):
         self.conn = conn
         self.cursor_font = self.conn.generate_id()
-        self.conn.core.OpenFontChecked(self.cursor_font,
-                                       len(font_name), font_name).check()
+        self.conn.core.OpenFont(self.cursor_font, len(font_name), font_name)
         self.cursors = {}
 
     def __getitem__(self, key):
@@ -18,10 +17,10 @@ class FontCursor(object):
         # glyph; so character position 0 contains a shape, 1 the mask for 0,
 	# 2 a shape, etc.
         self.cursors[key] = self.conn.generate_id()
-        self.conn.core.CreateGlyphCursorChecked(self.cursors[key],
-                                                self.cursor_font,
-                                                self.cursor_font,
-                                                key, key + 1,
-                                                0x0, 0x0, 0x0,
-                                                0xffff, 0xffff, 0xffff).check()
+        self.conn.core.CreateGlyphCursor(self.cursors[key],
+                                         self.cursor_font,
+                                         self.cursor_font,
+                                         key, key + 1,
+                                         0x0, 0x0, 0x0,
+                                         0xffff, 0xffff, 0xffff)
         return self.cursors[key]

@@ -42,26 +42,30 @@ class ClientWindow(object):
         self._geometry = geometry
 
     def move(self, position):
-        self.manager.conn.core.ConfigureWindowChecked(self.window,
-            ConfigWindow.X | ConfigWindow.Y,
-            map(int16, position)).check()
+        self.manager.conn.core.ConfigureWindow(self.window,
+                                               (ConfigWindow.X |
+                                                ConfigWindow.Y),
+                                               map(int16, position))
 
     def resize(self, size):
-        self.manager.conn.core.ConfigureWindowChecked(self.window,
-            ConfigWindow.Width | ConfigWindow.Height,
-            map(int16, size)).check()
+        self.manager.conn.core.ConfigureWindow(self.window,
+                                               (ConfigWindow.Width |
+                                                ConfigWindow.Height),
+                                               map(int16, size))
 
     def update_geometry(self, geometry):
-        self.manager.conn.core.ConfigureWindowChecked(self.window,
-            (ConfigWindow.X | ConfigWindow.Y |
-             ConfigWindow.Width | ConfigWindow.Height |
-             ConfigWindow.BorderWidth),
-            map(int16, geometry)).check()
+        self.manager.conn.core.ConfigureWindow(self.window,
+                                               (ConfigWindow.X |
+                                                ConfigWindow.Y |
+                                                ConfigWindow.Width |
+                                                ConfigWindow.Height |
+                                                ConfigWindow.BorderWidth),
+                                               map(int16, geometry))
 
     def restack(self, stack_mode):
-        self.manager.conn.core.ConfigureWindowChecked(self.window,
-            ConfigWindow.StackMode,
-            [stack_mode]).check()
+        self.manager.conn.core.ConfigureWindow(self.window,
+                                               ConfigWindow.StackMode,
+                                               [stack_mode])
 
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x

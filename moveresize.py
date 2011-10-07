@@ -155,8 +155,9 @@ class MoveResize(WindowManager):
         raise UnhandledEvent(event)
 
     def change_cursor(self, cursor):
-        self.conn.core.ChangeActivePointerGrabChecked(self.cursors[cursor],
-            Time.CurrentTime, self.__grab_event_mask).check()
+        self.conn.core.ChangeActivePointerGrab(self.cursors[cursor],
+                                               Time.CurrentTime,
+                                               self.__grab_event_mask)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):

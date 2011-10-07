@@ -137,7 +137,7 @@ class WindowManager(EventHandler):
                                     GrabMode.Async, GrabMode.Async)
 
     def ungrab_keyboard(self):
-        self.conn.core.UngrabKeyboardChecked(Time.CurrentTime).check()
+        self.conn.core.UngrabKeyboard(Time.CurrentTime)
 
     def event_loop(self):
         """The main event loop of the window manager."""
