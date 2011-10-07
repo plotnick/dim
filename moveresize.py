@@ -101,7 +101,7 @@ class ResizeClient(ConfigureClient):
         super(ResizeClient, self).rollback()
 
 class MoveResize(WindowManager):
-    __GRAB_EVENT_MASK = (EventMask.ButtonPress |
+    __grab_event_mask = (EventMask.ButtonPress |
                          EventMask.ButtonRelease |
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
@@ -120,8 +120,8 @@ class MoveResize(WindowManager):
         self.moveresize = None
         
         kwargs.update(grab_buttons=grab_buttons.merge({
-            (self.move_button, self.move_resize_mods): self.__GRAB_EVENT_MASK,
-            (self.resize_button, self.move_resize_mods): self.__GRAB_EVENT_MASK
+            (self.move_button, self.move_resize_mods): self.__grab_event_mask,
+            (self.resize_button, self.move_resize_mods): self.__grab_event_mask
         }))
         super(MoveResize, self).__init__(conn, screen, **kwargs)
 
@@ -156,7 +156,7 @@ class MoveResize(WindowManager):
 
     def change_cursor(self, cursor):
         self.conn.core.ChangeActivePointerGrabChecked(self.cursors[cursor],
-            Time.CurrentTime, self.__GRAB_EVENT_MASK).check()
+            Time.CurrentTime, self.__grab_event_mask).check()
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):

@@ -10,7 +10,7 @@ from event import handler, EventHandler, UnhandledEvent
 from manager import WindowManager, GrabButtons
 
 class RaiseLower(WindowManager):
-    __GRAB_EVENT_MASK = EventMask.ButtonPress
+    __grab_event_mask = EventMask.ButtonPress
 
     def __init__(self, conn, screen=None,
                  raise_lower_mods=ModMask.Shift | ModMask._1,
@@ -25,8 +25,8 @@ class RaiseLower(WindowManager):
         self.lower_button = lower_button
 
         kwargs.update(grab_buttons=grab_buttons.merge({
-            (self.raise_button, self.raise_lower_mods): self.__GRAB_EVENT_MASK,
-            (self.lower_button, self.raise_lower_mods): self.__GRAB_EVENT_MASK
+            (self.raise_button, self.raise_lower_mods): self.__grab_event_mask,
+            (self.lower_button, self.raise_lower_mods): self.__grab_event_mask
         }))
         super(RaiseLower, self).__init__(conn, screen, **kwargs)
 

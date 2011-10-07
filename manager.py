@@ -34,7 +34,7 @@ class WindowManager(EventHandler):
     Subclasses are expected to override or augment many of its methods and
     add their own management protocols."""
 
-    ROOT_EVENT_MASK = (EventMask.StructureNotify |
+    root_event_mask = (EventMask.StructureNotify |
                        EventMask.SubstructureNotify |
                        EventMask.SubstructureRedirect)
 
@@ -52,10 +52,10 @@ class WindowManager(EventHandler):
         # SubstructureRedirect events on the root window. If another client
         # has already done so (i.e., there's already a window manager
         # running on this screen), the check will raise an exception.
-        assert self.ROOT_EVENT_MASK & EventMask.SubstructureRedirect, \
+        assert self.root_event_mask & EventMask.SubstructureRedirect, \
             "A window manager must select for SubstructureRedirect."
         self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
-            CW.EventMask, [self.ROOT_EVENT_MASK]).check()
+            CW.EventMask, [self.root_event_mask]).check()
 
         # Establish passive grabs for buttons on the root window. Subclasses
         # will add their own entries to the grab_buttons argument.
