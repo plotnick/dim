@@ -7,7 +7,6 @@ from functools import wraps
 from operator import or_
 from select import select
 
-import xcb
 from xcb.xproto import *
 
 from client import ClientWindow, WMState
@@ -284,6 +283,7 @@ if __name__ == "__main__":
     from optparse import OptionParser
     import logging
     import sys
+    import xcb
 
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",

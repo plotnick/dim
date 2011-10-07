@@ -2,7 +2,6 @@
 
 from logging import basicConfig as logconfig, debug, info, warning, error
 
-import xcb
 from xcb.xproto import *
 
 from client import ClientWindow
