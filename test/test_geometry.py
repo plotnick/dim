@@ -89,10 +89,10 @@ class TestConstrainSize(unittest.TestCase):
 
     def test_constrain_size_resize_inc(self):
         self.hints = WMSizeHints(resize_inc=self.resize_inc)
-        self.assertConstraint(Rectangle(3, 5), Rectangle(0, 0))
-        self.assertConstraint(self.resize_inc, self.resize_inc)
-        self.assertConstraint(Rectangle(14, 19), Rectangle(12, 13))
-        self.assertConstraint(Rectangle(12, 26), Rectangle(12, 26))
+        self.assertConstraint(Rectangle(3, 5), Rectangle(1, 1))
+        self.assertConstraint(Rectangle(7, 14), Rectangle(7, 14))
+        self.assertConstraint(Rectangle(14, 19), Rectangle(13, 14))
+        self.assertConstraint(Rectangle(14, 27), Rectangle(13, 27))
 
     def test_constrain_base_inc(self):
         self.hints = WMSizeHints(resize_inc=self.resize_inc,
