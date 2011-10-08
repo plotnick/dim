@@ -7,7 +7,7 @@ from struct import Struct
 from xcb.xproto import *
 
 __all__ = ["power_of_2", "popcount", "int16", "card16",
-           "is_synthetic_event", "configure_notify",
+           "is_synthetic_event", "configure_notify", "send_client_message",
            "select_values", "value_list",
            "AtomCache", "GrabButtons", "GrabServer"]
 
@@ -40,19 +40,33 @@ def configure_notify(connection, window, x, y, width, height, border_width,
     """Send a synthetic ConfigureNotify event to a window, as per ICCCM §4.1.5
     and §4.2.3."""
     assert formatter.size == 32
-    connection.core.SendEvent(False,
-                              window,
-                              EventMask.StructureNotify,
-                              formatter.pack(22, # code
-                                             window, # event
-                                             window, # window
-                                             0, # above-sibling: None
-                                             x + border_width,
-                                             y + border_width,
-                                             width,
-                                             height,
-                                             border_width,
-                                             override_redirect))
+    return connection.core.SendEvent(False, window, EventMask.StructureNotify,
+                                     formatter.pack(22, # code (ConfigureNotify)
+                                                    window, # event
+                                                    window, # window
+                                                    0, # above-sibling: None
+                                                    x + border_width,
+                                                    y + border_width,
+                                                    width,
+                                                    height,
+                                                    border_width,
+                                                    override_redirect))
+
+def send_client_message(connection, window, event_mask, format, type, data,
+                        formatters={8: Struct("bB2xII20B"),
+                                    16: Struct("bB2xII10H"),
+                                    32: Struct("bB2xII5I")}):
+    """Send a ClientMessage event to a window.
+
+    The format must be one of 8, 16, or 32, and the data must be a list of
+    exactly 20, 10, or 5 values, respectively."""
+    formatter = formatters[format]
+    return connection.core.SendEvent(False, window, event_mask,
+                                     formatter.pack(33, # code (ClientMessage)
+                                                    format,
+                                                    window,
+                                                    type,
+                                                    *data))
 
 def select_values(value_mask, values):
     """Create a value-list from the supplied possible values according to the

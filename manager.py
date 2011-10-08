@@ -18,6 +18,11 @@ from keymap import KeymapError, KeyboardMap
 from properties import *
 from xutil import *
 
+class ExitWindowManager(Exception):
+    """An event handler may raise an exception of this type in order to break
+    out of the main event loop."""
+    pass
+
 class WindowManager(EventHandler):
     """A window manager for one X screen.
 
@@ -147,7 +152,10 @@ class WindowManager(EventHandler):
             while True:
                 event = self.get_next_event()
                 if event:
-                    self.handle_event(event)
+                    try:
+                        self.handle_event(event)
+                    except ExitWindowManager:
+                        return
                 else:
                     break
             self.conn.flush()
@@ -263,6 +271,15 @@ class WindowManager(EventHandler):
                 warning("Unable to refresh partial keymap: %s" % e)
                 # Do a full refresh. If that fails, just bail out.
                 self.keymap.refresh()
+
+    @handler(ClientMessageEvent)
+    def handle_client_message(self, event):
+        if event.window != self.screen.root:
+            debug("Ignoring client message to non-root window 0x%x" %
+                  event.window)
+        if event.type == self.atoms["WM_EXIT"]:
+            info("Received exit message; shutting down")
+            raise ExitWindowManager
 
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.

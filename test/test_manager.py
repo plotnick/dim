@@ -3,7 +3,7 @@
 from random import randint
 from struct import unpack
 from select import select
-from threading import Thread, Lock
+from threading import Thread
 import unittest
 
 import xcb
@@ -23,15 +23,8 @@ class WindowManagerThread(Thread):
     def run(self):
         try:
             self.wm.event_loop()
-        except:
-            pass
-
-    def stop(self):
-        """Abort the window manager by closing its connection. This method
-        must not be called from the WM's thread, as it calls join."""
-        self.conn.flush()
-        self.conn.disconnect()
-        self.join()
+        finally:
+            self.conn.disconnect()
 
 class TestWindow(EventHandler):
     """A simple top-level window."""
@@ -115,17 +108,28 @@ class WMTestCase(unittest.TestCase):
 
     wm_class = WindowManager
 
-    def setUp(self):
+    def setUp(self, start_wm=True):
         self.conn = xcb.connect()
+        self.atoms = AtomCache(self.conn)
         self.windows = {} # test windows, indexed by id
         self.wm_thread = WindowManagerThread(self.wm_class)
-        self.wm_thread.start()
+        if start_wm:
+            self.wm_thread.start()
 
     def tearDown(self):
         for window in self.windows.values():
             window.destroy()
         self.conn.flush()
-        self.wm_thread.stop()
+        if self.wm_thread.is_alive():
+            self.kill_wm()
+            self.wm_thread.join()
+
+    def kill_wm(self):
+        """Ask the window manager to exit."""
+        root = self.conn.get_setup().roots[self.conn.pref_screen].root
+        send_client_message(self.conn, root, EventMask.StructureNotify,
+                            8, self.atoms["WM_EXIT"], [0] * 20)
+        self.conn.flush()
 
     def add_window(self, window):
         """Create and return a new client window."""
@@ -133,7 +137,7 @@ class WMTestCase(unittest.TestCase):
         self.windows[window.id] = window
         return window
 
-    def event_loop(self, test=lambda: False, max_timeouts=5):
+    def event_loop(self, test=lambda: False, max_timeouts=50):
         """A simple client event loop."""
         timeouts = 0
         rlist = [self.conn.get_file_descriptor()]
@@ -154,22 +158,18 @@ class WMTestCase(unittest.TestCase):
 
             self.conn.flush()
 
-            # Wait for more events, but only for a second.
-            r, w, x = select(rlist, wlist, xlist, 1.0)
+            # Wait for more events, but only for a few milliseconds.
+            r, w, x = select(rlist, wlist, xlist, 0.001)
             if not r and not w and not x:
                 timeouts += 1
         self.fail("timed out")
 
 class TestWMStartup(WMTestCase):
-    # We'll override WMTestCase's setUp method so that it doesn't start the
-    # WM for us.
     def setUp(self):
-        self.conn = xcb.connect()
-        self.windows = {}
+        super(TestWMStartup, self).setUp(start_wm=False)
 
     def test_startup(self):
         """Ensure that the window manager adopts extant top-level windows"""
-
         # Create a few top-level windows. Just for fun, we'll map two and
         # leave one more withdrawn; that last will not be managed.
         w1 = self.add_window(TestWindow(self.conn, Geometry(0, 0, 100, 100, 1)))
@@ -177,11 +177,8 @@ class TestWMStartup(WMTestCase):
         w3 = self.add_window(TestWindow(self.conn, Geometry(20, 20, 20, 20, 1)))
         w1.map()
         w2.map()
-        self.event_loop(lambda: w1.mapped and w2.mapped and not w3.mapped)
-        self.assertFalse(w1.managed or w2.managed or w3.managed)
 
         # Now fire up the window manager.
-        self.wm_thread = WindowManagerThread()
         self.wm_thread.start()
 
         self.event_loop(lambda: w1.managed and w2.managed and not w3.managed)
@@ -239,7 +236,6 @@ class TestWMEventLoop(WMTestCase):
         # Move the window around a bunch of times.
         for i in range(n):
             w.resize(g + (randint(1, 100), randint(1, 100)))
-        self.conn.flush()
 
     def test_event_loop(self):
         """Test the window manager's event loop"""
