@@ -1,8 +1,11 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from collections import namedtuple
 import re
 
 from xutil import card16
+
+Color = namedtuple("Color", "red, green, blue")
 
 class InvalidColorName(Exception):
     pass
@@ -28,7 +31,7 @@ def parse_color(name, pattern=re.compile("#([0-9a-z]+)$", re.I)):
             i += 1
     n <<= 2
     n = 16 - n
-    return (r << n, g << n, b << n)
+    return Color(r << n, g << n, b << n)
 
 class ColorCache(object):
     """A simple auto-allocating colormap wrapper."""
@@ -39,30 +42,34 @@ class ColorCache(object):
         self.colors = {}
 
     def __getitem__(self, key):
+        """Given a color specification (hex string, color name, or RGB triple),
+        return the corresponding pixel value."""
         if isinstance(key, basestring):
-            key = key.lower()
+            key = key.lower() # case doesn't matter; canonicalize to lower
             if key in self.colors:
                 return self.colors[key]
             try:
-                r, g, b = parse_color(key)
+                color = parse_color(key)
             except InvalidColorName:
                 # Assume the key is a color name, and ask the server to
-                # interpret it.
+                # look it up.
                 reply = self.conn.core.AllocNamedColor(self.cmap,
                                                        len(key), key).reply()
-                exact = (reply.exact_red, reply.exact_green, reply.exact_blue)
+                exact = Color(reply.exact_red,
+                              reply.exact_green,
+                              reply.exact_blue)
                 self.colors[key] = self.colors[exact] = reply.pixel
                 return reply.pixel
         elif isinstance(key, tuple):
             if key in self.colors:
                 return self.colors[key]
-            r, g, b = key
+            key = color = Color._make(key)
         else:
             raise KeyError("invalid color specification %r" % key)
         reply = self.conn.core.AllocColor(self.cmap,
-                                          card16(r),
-                                          card16(g),
-                                          card16(b)).reply()
-        actual = (reply.red, reply.green, reply.blue)
+                                          card16(color.red),
+                                          card16(color.green),
+                                          card16(color.blue)).reply()
+        actual = Color(reply.red, reply.green, reply.blue)
         self.colors[key] = self.colors[actual] = reply.pixel
         return reply.pixel
