@@ -37,12 +37,17 @@ class TestGeometryClasses(unittest.TestCase):
     def test_geometry(self):
         g = Geometry(x=100, y=-50, width=3, height=5, border_width=1)
         p = Position(x=10, y=20)
+        r = Rectangle(width=2, height=4)
         self.assertTrue(g)
         self.assertEqual(g, (100, -50, 3, 5, 1))
         self.assertEqual(g + p, g._replace(x=g.x + p.x, y=g.y + p.y))
         self.assertEqual(g + 10, g._replace(x=g.x + 10, y=g.y + 10))
         self.assertEqual(g - 10, g._replace(x=g.x - 10, y=g.y - 10))
         self.assertEqual(g + 10, 10 + g)
+        self.assertEqual(g + r,
+                         g._replace(width=g.width + r.width,
+                                    height=g.height + r.height))
+        self.assertEqual(r + g, g + r)
         self.assertEqual(str(g), "3x5+100-50")
         self.assertFalse(Geometry(0, 0, 0, 0, 0))
 

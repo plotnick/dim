@@ -9,7 +9,7 @@ __all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
 def make_tuple_adder(op):
     def add_sub_tuple(self, other):
         """Add or subtract two named tuples or a named tuple and a scalar."""
-        if isinstance(other, tuple):
+        if isinstance(other, tuple) and len(self) == len(other):
             return self._make(map(op, self, other))
         elif isinstance(other, (int, float)):
             return self._make(op(field, other) for field in self)
@@ -24,16 +24,20 @@ def multiply_tuple(self, other):
     else:
         return NotImplemented
 
-def make_translater(op):
-    def translate_geometry(self, other):
-        """Translate a geometry by a relative position or a scalar."""
-        if isinstance(other, tuple):
+def make_geometry_adder(op):
+    def add_sub_geometry(self, other):
+        """Translate a geometry by a relative position or a scalar, or
+        increment its width and height."""
+        if isinstance(other, Rectangle):
+            return self._replace(width=op(self.width, other.width),
+                                 height=op(self.height, other.height))
+        elif isinstance(other, tuple):
             return self._replace(x=op(self.x, other[0]), y=op(self.y, other[1]))
         elif isinstance(other, (int, float)):
             return self._replace(x=op(self.x, other), y=op(self.y, other))
         else:
             return NotImplemented
-    return translate_geometry
+    return add_sub_geometry
 
 Position = namedtuple("Position", "x, y")
 Position.__add__ = Position.__radd__ = make_tuple_adder(add)
@@ -53,8 +57,8 @@ Rectangle.__unicode__ = lambda self: u"%u×%u" % self
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
 Geometry.resize = lambda self, other: \
     self._replace(width=other.width, height=other.height)
-Geometry.__add__ = Geometry.__radd__ = make_translater(add)
-Geometry.__sub__ = make_translater(sub)
+Geometry.__add__ = Geometry.__radd__ = make_geometry_adder(add)
+Geometry.__sub__ = make_geometry_adder(sub)
 Geometry.__nonzero__ = lambda self: \
     (self.x != 0 or self.y != 0 or
      self.width != 0 or self.height != 0 or
