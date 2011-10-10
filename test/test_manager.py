@@ -149,10 +149,11 @@ class WMTestCase(unittest.TestCase):
                 event = self.conn.poll_for_event()
                 if not event:
                     break
-                try:
-                    self.windows[event.window].handle_event(event)
-                except KeyError:
-                    self.fail("Event received for unknown window")
+                if hasattr(event, "window"):
+                    try:
+                        self.windows[event.window].handle_event(event)
+                    except KeyError:
+                        self.fail("Event received for unknown window")
             if test():
                 return True
 
