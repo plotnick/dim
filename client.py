@@ -3,9 +3,7 @@
 """The clients of a window manager are top-level windows. This module provides
 classes and routines for dealing with those as such."""
 
-from array import array
 from codecs import decode
-from fractions import Fraction
 from logging import debug, info, warning, error
 from struct import Struct
 
