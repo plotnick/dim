@@ -12,7 +12,7 @@ from client import ClientWindow, WMState
 from color import ColorCache
 from cursor import FontCursor
 from decorator import Decorator
-from event import handler, EventHandler
+from event import EventHandler, handler
 from geometry import *
 from keymap import KeymapError, KeyboardMap
 from properties import *

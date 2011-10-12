@@ -6,7 +6,7 @@ from xcb.xproto import *
 
 from client import ClientWindow
 from cursor import *
-from event import handler, EventHandler, UnhandledEvent
+from event import UnhandledEvent, handler
 from geometry import *
 from keysym import *
 from manager import WindowManager, compress

@@ -5,7 +5,7 @@ from logging import basicConfig as logconfig, debug, info, warning, error
 from xcb.xproto import *
 
 from client import ClientWindow
-from event import handler, EventHandler, UnhandledEvent
+from event import UnhandledEvent, handler
 from manager import WindowManager
 from xutil import GrabButtons
 
