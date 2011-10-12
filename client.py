@@ -24,6 +24,12 @@ class ClientWindow(object):
         self._geometry = None
         self.decorator = manager.decorator(self)
 
+        self.conn.core.ChangeWindowAttributes(self.window,
+                                              CW.EventMask,
+                                              [EventMask.EnterWindow |
+                                               EventMask.LeaveWindow |
+                                               EventMask.FocusChange])
+
     @property
     def geometry(self):
         if self._geometry is None:
@@ -63,6 +69,17 @@ class ClientWindow(object):
         self.conn.core.ConfigureWindow(self.window,
                                        ConfigWindow.StackMode,
                                        [stack_mode])
+
+    def focus(self, set_focus=True, time=Time.CurrentTime):
+        if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
+            if set_focus:
+                self.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                             self.window, time)
+            self.decorator.focus()
+            return self
+
+    def unfocus(self):
+        self.decorator.unfocus()
 
     def atom(self, x):
         return self.manager.atoms[x] if isinstance(x, basestring) else x

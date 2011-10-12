@@ -36,6 +36,7 @@ class BorderDecorator(Decorator):
         self.conn.core.ConfigureWindow(self.client.window,
                                        ConfigWindow.BorderWidth,
                                        [border_width])
+        self.unfocus()
 
     def undecorate(self):
         black_pixel = self.client.manager.screen.black_pixel

@@ -1,13 +1,22 @@
 #!/usr/bin/env python
 # -*- mode: Python; coding: utf-8 -*-
 
+from decorator import BorderDecorator
+from focus import FocusFollowsMouse, SloppyFocus, ClickToFocus
+from moveresize import MoveResize
+from raiselower import RaiseLower
+
+class WM(SloppyFocus, MoveResize, RaiseLower):
+    def decorator(self, client):
+        return BorderDecorator(self.conn, client,
+                               focused_color="red",
+                               unfocused_color="blue")
+
 if __name__ == "__main__":
     from optparse import OptionParser
     import logging
     import sys
     import xcb
-
-    from stacking import StackingWindowManager
 
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
@@ -27,7 +36,7 @@ if __name__ == "__main__":
                               logging.WARNING,
                         format="%(levelname)s: %(message)s")
 
-    wm = StackingWindowManager(xcb.connect(options.display))
+    wm = WM(xcb.connect(options.display))
     try:
         wm.event_loop()
     except KeyboardInterrupt:
