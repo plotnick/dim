@@ -10,7 +10,7 @@ from xcb.xproto import Gravity
 
 from geometry import *
 
-__all__ = ["PropertyValue", "PropertyValueList", "StringValue", "UTF8String",
+__all__ = ["PropertyValue", "PropertyValueList", "String", "UTF8String",
            "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
            "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
 
@@ -29,7 +29,7 @@ class PropertyValueClass(type):
         # the property data.
         try:
             fields = namespace["__slots__"]
-            format = namespace["__propformat__"]
+            format = namespace["property_format"]
         except KeyError:
             raise TypeError("property values must specify format and fields")
         assert format in type_codes, "invalid property format %r" % format
@@ -42,7 +42,7 @@ class PropertyValueListClass(PropertyValueClass):
     def __new__(metaclass, name, bases, namespace):
         cls = type.__new__(metaclass, name, bases, namespace)
         try:
-            format = namespace["__propformat__"]
+            format = namespace["property_format"]
         except KeyError:
             raise TypeError("property value lists must specify format")
         assert (isinstance(format, (list, tuple)) and
@@ -59,13 +59,13 @@ class PropertyValue(object):
     and offers convenience methods for translating to and from the
     binary representation.
 
-    Subclassess should set their __propformat__ attribute to either 8, 16,
+    Subclassess should set their property_format attribute to either 8, 16,
     or 32, and their __slots__ attribute to a sequence of attribute names
     whose values comprise the property data."""
 
     __metaclass__ = PropertyValueClass
     __slots__ = ()
-    __propformat__ = 32
+    property_format = 32
 
     def __init__(self, *args, **kwargs):
         for field, value in zip(self.__slots__, args):
@@ -93,34 +93,34 @@ class PropertyValue(object):
         """Return the property data as a byte string."""
         data = self.formatter.pack(*(getattr(self, slot, 0)
                                      for slot in self.__slots__))
-        assert len(self.__slots__) == len(data) // (self.__propformat__ // 8), \
+        assert len(self.__slots__) == len(data) // (self.property_format // 8), \
             "invalid property data"
         return data
 
     def change_property_args(self):
         """Return a (format, data-length, data) tuple."""
-        return (self.__propformat__, len(self.__slots__), self.pack())
+        return (self.property_format, len(self.__slots__), self.pack())
 
 class PropertyValueList(PropertyValue):
     """Base class for representations of list-like X property values."""
 
     __metaclass__ = PropertyValueListClass
     __slots__ = ("elements")
-    __propformat__ = [32]
+    property_format = [32]
 
     def __init__(self, elements):
         self.elements = elements
 
     @classmethod
     def unpack(cls, data):
-        return cls(array(type_codes[cls.__propformat__[0]], str(data)))
+        return cls(array(type_codes[cls.property_format[0]], str(data)))
 
     def pack(self):
-        return array(type_codes[self.__propformat__[0]],
+        return array(type_codes[self.property_format[0]],
                      self.elements).tostring()
 
     def change_property_args(self):
-        format = self.__propformat__[0]
+        format = self.property_format[0]
         data = self.pack()
         return (format, len(data) // (format // 8), data)
 
@@ -139,16 +139,22 @@ class PropertyValueList(PropertyValue):
     def __eq__(self, other):
         return list(self.elements) == list(other)
 
-class StringValue(PropertyValueList):
+class String(PropertyValueList):
+    """A representation of property values of type STRING.
+
+    Note that we currently only support Latin-1 strings, and not the (obsolete)
+    COMPOUND_TEXT type. If you need Unicode support, use UTF8String instead."""
+
     __slots__ = ()
-    __propformat__ = [8]
+    property_format = [8]
+    property_type = "STRING"
     encoding = "Latin-1"
 
     def __init__(self, elements):
         if isinstance(elements, basestring):
             self.elements = array("B", elements.encode(self.encoding))
         else:
-            super(StringValue, self).__init__(elements)
+            super(String, self).__init__(elements)
 
     def __str__(self):
         return decode(buffer(self.elements), self.encoding)
@@ -157,18 +163,20 @@ class StringValue(PropertyValueList):
         if isinstance(other, basestring):
             return str(self) == other
         else:
-            return super(StringValue, self).__eq__(other)
+            return super(String, self).__eq__(other)
 
-class UTF8String(StringValue):
+class UTF8String(String):
     __slots__ = ()
-    __propformat__ = [8]
+    property_format = [8]
+    property_type = "UTF8_STRING"
     encoding = "UTF-8"
 
-class WMClass(StringValue):
+class WMClass(String):
     """A representation of the WM_STATE property (ICCCM §4.1.2.5)"""
 
     __slots__ = ()
-    __propformat__ = [8]
+    property_format = [8]
+    property_type = "STRING"
 
     def instance_and_class(self):
         """Return a tuple of the form (client-instance, client-class)."""
@@ -183,31 +191,36 @@ class WMTransientFor(PropertyValue):
     """A representation of the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)"""
 
     __slots__ = ("window")
-    __propformat__ = 32
+    property_format = 32
+    property_type = "WINDOW"
 
 class WMProtocols(PropertyValueList):
     """A representation of the WM_PROTOCOLS property (ICCCM §4.1.2.7)"""
 
     __slots__ = ()
-    __propformat__ = [32]
+    property_format = [32]
+    property_type = "ATOM"
 
 class WMColormapWindows(PropertyValueList):
     """A representation of the WM_COLORMAP_WINDOWS property (ICCCM §4.1.2.8)"""
 
     __slots__ = ()
-    __propformat__ = [32]
+    property_format = [32]
+    property_type = "WINDOW"
 
-class WMClientMachine(StringValue):
+class WMClientMachine(String):
     """A representation of the WM_CLIENT_MACHINE property (ICCCM §4.1.2.9)"""
 
     __slots__ = ()
-    __propformat__ = [8]
+    property_format = [8]
+    property_type = "STRING"
 
 class WMState(PropertyValue):
     """A representation of the WM_STATE type (ICCCM §4.1.3.1)"""
 
-    __propformat__ = 32
     __slots__ = ("state", "icon")
+    property_format = 32
+    property_type = "WM_STATE"
 
     # State values
     WithdrawnState = 0
@@ -268,7 +281,6 @@ class PropertyField(object):
 class WMSizeHints(PropertyValue):
     """A representation of the WM_SIZE_HINTS type (ICCCM §4.1.2.3)."""
 
-    __propformat__ = 32
     __slots__ = ("flags",
                  "_pad1", "_pad2", "_pad3", "_pad4",
                  "_min_width", "_min_height",
@@ -278,6 +290,8 @@ class WMSizeHints(PropertyValue):
                  "_max_aspect_numerator", "_max_aspect_denominator",
                  "_base_width", "_base_height",
                  "_win_gravity")
+    property_format = 32
+    property_type = "WM_SIZE_HINTS"
 
     # Flags
     USPosition = 1
@@ -326,7 +340,6 @@ class WMSizeHints(PropertyValue):
 class WMHints(PropertyValue):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
 
-    __propformat__ = 32
     __slots__ = ("flags",
                  "_input",
                  "_initial_state",
@@ -335,6 +348,8 @@ class WMHints(PropertyValue):
                  "_icon_x", "_icon_y",
                  "_icon_mask",
                  "_window_group")
+    property_format = 32
+    property_type = "WM_HINTS"
 
     # Flags
     InputHint = 1

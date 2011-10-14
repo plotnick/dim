@@ -101,7 +101,8 @@ class WindowManager(EventHandler):
         # property ... on each top-level client window that is not in
         # the Withdrawn state."
         if attrs.map_state != MapState.Unmapped:
-            client.wm_state = WMState.NormalState
+            client.wm_state = WMState(WMState.NormalState)
+            client.request_properties()
 
         return client
             
@@ -239,7 +240,8 @@ class WindowManager(EventHandler):
         if event.window not in self.clients:
             return
         try:
-            self.clients[event.window].wm_state = WMState.NormalState
+            self.clients[event.window].wm_state = WMState(WMState.NormalState)
+            self.clients[event.window].request_properties()
         except BadWindow:
             pass
 
@@ -249,7 +251,7 @@ class WindowManager(EventHandler):
         if event.window not in self.clients:
             return
         try:
-            self.clients[event.window].wm_state = WMState.WithdrawnState
+            self.clients[event.window].wm_state = WMState(WMState.WithdrawnState)
         except BadWindow:
             pass
 
@@ -272,6 +274,15 @@ class WindowManager(EventHandler):
                 warning("Unable to refresh partial keymap: %s" % e)
                 # Do a full refresh. If that fails, just bail out.
                 self.keymap.refresh()
+
+    @handler(PropertyNotifyEvent)
+    def handle_property_notify(self, event):
+        """Note the change of a window property."""
+        try:
+            client = self.clients[event.window]
+        except KeyError:
+            return
+        client.property_changed(event.atom)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):

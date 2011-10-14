@@ -3,10 +3,7 @@
 """The clients of a window manager are top-level windows. This module provides
 classes and routines for dealing with those as such."""
 
-from array import array
-from codecs import decode
 from logging import debug, info, warning, error
-from struct import Struct
 
 from xcb.xproto import *
 
@@ -14,9 +11,66 @@ from geometry import *
 from properties import *
 from xutil import *
 
+class ClientProperty(object):
+    """A descriptor class for client properties."""
+
+    def __init__(self, name, type, default=None):
+        assert isinstance(name, basestring), "invalid property name"
+        assert issubclass(type, PropertyValue), "invalid property value type"
+        self.name = name
+        self.type = type
+        self.default = default
+
+    def __get__(self, instance, owner):
+        # Check the value cache.
+        try:
+            return instance.property_values[self.name]
+        except KeyError:
+            pass
+
+        # Check the cookie cache for a pending request, or make a new request
+        # if there is none.
+        try:
+            cookie = instance.property_cookies.pop(self.name)
+        except KeyError:
+            cookie = instance.get_property(self.name)
+
+        # Construct a new value from the reply data and cache it.
+        reply = cookie.reply()
+        value = owner.properties[self.name].unpack(reply.value.buf()) \
+            if reply and reply.type else self.default
+        instance.property_values[self.name] = value
+
+        return value
+
+    def __set__(self, instance, value):
+        instance.set_property(self.name, self.type.property_type, value)
+
+    def __delete__(self, instance):
+        instance.invalidate_cached_property(self.name)
+
+class ClientWindowClass(type):
+    """A metaclass for the ClientWindow class that supports auto-registration
+    of client properties."""
+
+    def __new__(metaclass, name, bases, namespace):
+        cls = super(ClientWindowClass, metaclass).__new__(metaclass, name,
+                                                          bases, namespace)
+
+        # Initialize the client properties map.
+        def is_client_property(x):
+            return isinstance(x, ClientProperty)
+        cls.properties = {}
+        for p in filter(is_client_property, namespace.values()):
+            cls.properties[p.name] = p.type
+
+        return cls
+
 class ClientWindow(object):
     """All top-level windows (other than those with override-redirect set) will
     be wrapped with an instance of this class."""
+
+    __metaclass__ = ClientWindowClass
 
     def __init__(self, conn, window, manager):
         self.conn = conn
@@ -25,12 +79,15 @@ class ClientWindow(object):
         self.atoms = manager.atoms
         self._geometry = None
         self.decorator = manager.decorator(self)
+        self.property_values = {}
+        self.property_cookies = {}
 
         self.conn.core.ChangeWindowAttributes(self.window,
                                               CW.EventMask,
                                               [EventMask.EnterWindow |
                                                EventMask.LeaveWindow |
-                                               EventMask.FocusChange])
+                                               EventMask.FocusChange |
+                                               EventMask.PropertyChange])
 
     @property
     def geometry(self):
@@ -94,109 +151,68 @@ class ClientWindow(object):
     def unfocus(self):
         self.decorator.unfocus()
 
-    def get_property(self, name, type):
-        reply = self.conn.core.GetProperty(False, self.window,
-                                           self.atoms[name], self.atoms[type],
-                                           0, 0xffffffff).reply()
-        if reply.type:
-            return reply.value.buf()
+    def get_property(self, name, type=None):
+        if type is None:
+            type = self.properties[name].property_type
+        debug("Requesting property %s for window 0x%x" % (name, self.window))
+        return self.conn.core.GetProperty(False, self.window,
+                                          self.atoms[name], self.atoms[type],
+                                          0, 0xffffffff)
 
     def set_property(self, name, type, value, mode=PropMode.Replace):
         if isinstance(value, unicode):
             format = 8
             data = value.encode("UTF-8")
             data_len = len(data)
+        if isinstance(value, str):
+            format = 8
+            data = value.encode("Latin-1")
+            data_len = len(data)
         elif isinstance(value, PropertyValue):
             (format, data_len, data) = value.change_property_args()
         else:
-            raise ValueError("unknown property value type")
+            raise __builtins__.ValueError("unknown property value type")
+
+        # Dump the locally cached value for this property. Only values
+        # from the server are canonical, so we'll wait for a new request
+        # to update the value.
+        self.invalidate_cached_property(name)
+
         self.conn.core.ChangeProperty(mode, self.window,
                                       self.atoms[name], self.atoms[type],
                                       format, data_len, data)
 
-    def get_ewmh_name(self, name):
-        """The EWMH specification defines two application window properties,
-        _NET_WM_NAME and _NET_WM_ICON_NAME, that should be used in preference
-        to the ICCCM equivalents, WM_NAME and WM_ICON_NAME. They differ only
-        in type: the newer properties are always UTF-8 encoded, whereas the
-        older properties use the polymorphic TEXT type."""
-        assert name.startswith("_NET_")
+    def request_properties(self):
+        """Request all of the client properties for which we don't have cached
+        values. Does not wait for any of the replies."""
+        for name in self.properties:
+            if name not in self.property_values:
+                self.property_cookies[name] = self.get_property(name)
 
-        net_name = self.get_property(name, "UTF8_STRING")
-        if net_name:
-            return decode(net_name, "UTF-8", "replace")
+    def invalidate_cached_property(self, name):
+        """Invalidate any cached request or value for the given property."""
+        if name in self.property_values:
+            del self.property_values[name]
+        if name in self.property_cookies:
+            del self.property_cookies[name]
 
-        # Fall back to the ICCM property. Note that we currently only
-        # support the Latin-1 STRING type, and not the COMPOUND_TEXT type.
-        icccm_name = self.get_property(name[len("_NET_"):], "STRING")
-        if icccm_name:
-            return decode(icccm_name, "Latin-1", "replace")
+    def property_changed(self, atom):
+        name = self.atoms.name(atom)
+        debug("Property %s changed on window 0x%x" % (name, self.window))
+        self.invalidate_cached_property(name)
 
-    @property
-    def wm_name(self):
-        """Retrieve the window name property (EWMH and ICCCM §4.1.2.1)."""
-        return self.get_ewmh_name("_NET_WM_NAME")
+    # ICCCM properties
+    wm_name = ClientProperty("WM_NAME", String)
+    wm_icon_name = ClientProperty("WM_ICON_NAME", String)
+    wm_normal_hints = ClientProperty("WM_NORMAL_HINTS",
+                                     WMSizeHints,
+                                     WMSizeHints())
+    wm_hints = ClientProperty("WM_HINTS", WMHints, WMHints())
+    wm_class = ClientProperty("WM_CLASS", WMClass, (None, None))
+    wm_transient_for = ClientProperty("WM_TRANSIENT_FOR", WMTransientFor)
+    wm_protocols = ClientProperty("WM_PROTOCOLS", WMProtocols)
+    wm_state = ClientProperty("WM_STATE", WMState)
 
-    @property
-    def wm_icon_name(self):
-        """Retrieve the window icon name property (EWMH and ICCCM §4.1.2.2)."""
-        return self.get_ewmh_name("_NET_WM_ICON_NAME")
-
-    @property
-    def wm_normal_hints(self, default_size_hints=WMSizeHints()):
-        """Retrieve the WM_NORMAL_HINTS property (ICCCM §4.1.2.3)."""
-        size_hints = self.get_property("WM_NORMAL_HINTS", "WM_SIZE_HINTS")
-        if size_hints:
-            return WMSizeHints.unpack(size_hints)
-        else:
-            return default_size_hints
-
-    @property
-    def wm_hints(self, default_hints=WMHints()):
-        """Retrieve the WM_HINTS property (ICCCM §4.1.2.4)."""
-        wm_hints = self.get_property("WM_HINTS", "WM_HINTS")
-        if wm_hints:
-            return WMHints.unpack(wm_hints)
-        else:
-            return default_hints
-
-    @property
-    def wm_class(self):
-        """Retrieve the WM_CLASS property (ICCCM §4.1.2.5)."""
-        wm_class = self.get_property("WM_CLASS", "STRING")
-        if wm_class:
-            # The WM_CLASS property contains two consecutive null-terminated
-            # strings naming the client instance and class, respectively.
-            class_and_instance = decode(wm_class, "Latin-1", "replace")
-            i = class_and_instance.find("\0")
-            j = class_and_instance.find("\0", i+1)
-            return (class_and_instance[0:i], class_and_instance[i+1:j])
-        else:
-            return (None, None)
-
-    @property
-    def wm_transient_for(self, formatter=Struct("=I")):
-        """Retrieve the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)."""
-        window = self.get_property("WM_TRANSIENT_FOR", "WINDOW")
-        if window:
-            return formatter.unpack_from(window)[0]
-
-    @property
-    def wm_protocols(self):
-        """Retrieve the WM_PROTOCOLS property (ICCCM §4.1.2.7)."""
-        protocols = self.get_property("WM_PROTOCOLS", "ATOM")
-        return array("I", str(protocols)) if protocols else ()
-
-    @property
-    def wm_state(self):
-        """Retrieve the WM_STATE property (ICCCM §4.1.3.1)."""
-        wm_state = self.get_property("WM_STATE", "WM_STATE")
-        if wm_state:
-            return WMState.unpack(wm_state)
-
-    @wm_state.setter
-    def wm_state(self, state):
-        """Set the WM_STATE property (ICCCM §4.1.3.1)."""
-        self.set_property("WM_STATE", "WM_STATE",
-                          state if isinstance(state, WMState) \
-                              else WMState(state))
+    # EWMH properties
+    net_wm_name = ClientProperty("_NET_WM_NAME", UTF8String)
+    net_wm_icon_name = ClientProperty("_NET_WM_ICON_NAME", UTF8String)

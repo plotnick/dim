@@ -10,8 +10,8 @@ from xcb.xproto import *
 from properties import *
 
 class TestProp(PropertyValue):
-    __propformat__ = 32
     __slots__ = ("a", "b", "c")
+    property_format = 32
 
 class TestPropertyValue(unittest.TestCase):
     def test_unpack(self):
@@ -67,15 +67,15 @@ class TestPropertyVaueList(unittest.TestCase):
 
     def test_string(self):
         s = u"foö"
-        p = StringValue(s)
-        self.assertEqual(p, StringValue.unpack(s.encode("Latin-1")))
+        p = String(s)
+        self.assertEqual(p, String.unpack(s.encode("Latin-1")))
         self.assertEqual(p.pack(), s.encode("Latin-1"))
         self.assertEqual(unicode(p), s)
 
     def test_utf8_string(self):
         s = u"foö"
         p = UTF8String(s)
-        self.assertEqual(p, StringValue.unpack(s.encode("UTF-8")))
+        self.assertEqual(p, String.unpack(s.encode("UTF-8")))
         self.assertEqual(p.pack(), s.encode("UTF-8"))
         self.assertEqual(unicode(p), s)
 
