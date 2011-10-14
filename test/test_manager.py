@@ -9,6 +9,7 @@ import unittest
 import xcb
 from xcb.xproto import *
 
+from atom import AtomCache
 from event import *
 from geometry import *
 from manager import WindowManager, compress

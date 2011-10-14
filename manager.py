@@ -8,6 +8,7 @@ from select import select
 
 from xcb.xproto import *
 
+from atom import AtomCache
 from client import ClientWindow, WMState
 from color import ColorCache
 from cursor import FontCursor

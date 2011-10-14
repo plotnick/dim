@@ -9,7 +9,7 @@ from xcb.xproto import *
 __all__ = ["power_of_2", "popcount", "int16", "card16",
            "is_synthetic_event", "configure_notify", "send_client_message",
            "select_values", "value_list",
-           "AtomCache", "GrabButtons", "GrabServer"]
+           "GrabButtons", "GrabServer"]
 
 def power_of_2(x):
     """Check whether x is a power of 2."""
@@ -93,38 +93,6 @@ def value_list(flag_class, **kwargs):
     return (reduce(operator.or_, map(operator.itemgetter(1), values), 0),
             map(operator.itemgetter(0),
                 sorted(values, key=operator.itemgetter(1))))
-
-class AtomCache(object):
-    """A simple cache for X atoms."""
-
-    def __init__(self, conn, names=[]):
-        assert isinstance(conn, xcb.Connection)
-        self.conn = conn
-        self.atoms = {}
-        if names:
-            self.prime_cache(names)
-
-    def prime_cache(self, names):
-        cookies = [self.conn.core.InternAtom(False, len(name), name)
-                   for name in names]
-        for name, cookie in zip(names, cookies):
-            self.atoms[name] = cookie.reply().atom
-
-    def __getitem__(self, name):
-        try:
-            # Is it in the cache?
-            return self.atoms[name]
-        except KeyError:
-            pass
-        try:
-            # Is it one of the pre-defined atoms?
-            return getattr(Atom, name)
-        except AttributeError:
-            pass
-        # Request the atom from the server and cache it.
-        atom = self.conn.core.InternAtom(False, len(name), name).reply().atom
-        self.atoms[name] = atom
-        return atom
 
 class GrabButtons(dict):
     """Helper class for managing passive grabs established with GrabButton.
