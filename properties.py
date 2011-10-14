@@ -2,16 +2,20 @@
 
 """Classes and utilites for managing various X properties."""
 
+from array import array
+from codecs import decode
 from struct import Struct
 
-from xcb.xproto import *
+from xcb.xproto import Gravity
 
 from geometry import *
 
-__all__ = ["PropertyValue", "WMState", "WMSizeHints", "WMHints"]
+__all__ = ["PropertyValue", "PropertyValueList", "StringValue", "UTF8String",
+           "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
+           "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
 
 # Translate between X property formats and Python's struct & array type codes.
-_type_codes = {8: "B", 16: "H", 32: "I"}
+type_codes = {8: "B", 16: "H", 32: "I"}
 
 class PropertyValueClass(type):
     """Metaclass for X property values."""
@@ -28,8 +32,22 @@ class PropertyValueClass(type):
             format = namespace["__propformat__"]
         except KeyError:
             raise TypeError("property values must specify format and fields")
-        assert format in _type_codes, "invalid property format %s" % format
-        cls._formatter = Struct(_type_codes[format] * len(fields))
+        assert format in type_codes, "invalid property format %r" % format
+        cls.formatter = Struct(type_codes[format] * len(fields))
+        return cls
+
+class PropertyValueListClass(PropertyValueClass):
+    """Metaclass for list-like X property values."""
+
+    def __new__(metaclass, name, bases, namespace):
+        cls = type.__new__(metaclass, name, bases, namespace)
+        try:
+            format = namespace["__propformat__"]
+        except KeyError:
+            raise TypeError("property value lists must specify format")
+        assert (isinstance(format, (list, tuple)) and
+                len(format) == 1 and format[0] in type_codes), \
+                "invalid property format %r" % format
         return cls
 
 class PropertyValue(object):
@@ -69,19 +87,121 @@ class PropertyValue(object):
     @classmethod
     def unpack(cls, data):
         """Create and return a new instance by unpacking the property data."""
-        return cls(*cls._formatter.unpack_from(data))
+        return cls(*cls.formatter.unpack_from(data))
 
     def pack(self):
         """Return the property data as a byte string."""
-        data = self._formatter.pack(*(getattr(self, slot, 0)
-                                      for slot in self.__slots__))
-        assert len(self.__slots__) == len(data) / (self.__propformat__ / 8), \
+        data = self.formatter.pack(*(getattr(self, slot, 0)
+                                     for slot in self.__slots__))
+        assert len(self.__slots__) == len(data) // (self.__propformat__ // 8), \
             "invalid property data"
         return data
 
     def change_property_args(self):
         """Return a (format, data-length, data) tuple."""
         return (self.__propformat__, len(self.__slots__), self.pack())
+
+class PropertyValueList(PropertyValue):
+    """Base class for representations of list-like X property values."""
+
+    __metaclass__ = PropertyValueListClass
+    __slots__ = ("elements")
+    __propformat__ = [32]
+
+    def __init__(self, elements):
+        self.elements = elements
+
+    @classmethod
+    def unpack(cls, data):
+        return cls(array(type_codes[cls.__propformat__[0]], str(data)))
+
+    def pack(self):
+        return array(type_codes[self.__propformat__[0]],
+                     self.elements).tostring()
+
+    def change_property_args(self):
+        format = self.__propformat__[0]
+        data = self.pack()
+        return (format, len(data) // (format // 8), data)
+
+    def __getitem__(self, index):
+        return self.elements[index]
+
+    def __setitem__(self, index, value):
+        self.elements[index] = value
+
+    def __len__(self):
+        return len(self.elements)
+
+    def __iter__(self):
+        return iter(self.elements)
+
+    def __eq__(self, other):
+        return list(self.elements) == list(other)
+
+class StringValue(PropertyValueList):
+    __slots__ = ()
+    __propformat__ = [8]
+    encoding = "Latin-1"
+
+    def __init__(self, elements):
+        if isinstance(elements, basestring):
+            self.elements = array("B", elements.encode(self.encoding))
+        else:
+            super(StringValue, self).__init__(elements)
+
+    def __str__(self):
+        return decode(buffer(self.elements), self.encoding)
+
+    def __eq__(self, other):
+        if isinstance(other, basestring):
+            return str(self) == other
+        else:
+            return super(StringValue, self).__eq__(other)
+
+class UTF8String(StringValue):
+    __slots__ = ()
+    __propformat__ = [8]
+    encoding = "UTF-8"
+
+class WMClass(StringValue):
+    """A representation of the WM_STATE property (ICCCM §4.1.2.5)"""
+
+    __slots__ = ()
+    __propformat__ = [8]
+
+    def instance_and_class(self):
+        """Return a tuple of the form (client-instance, client-class)."""
+        # The WM_CLASS property contains two consecutive null-terminated
+        # strings naming the client instance and class, respectively.
+        s = str(self)
+        i = s.find("\0")
+        j = s.find("\0", i + 1)
+        return (s[0:i], s[i + 1:j])
+
+class WMTransientFor(PropertyValue):
+    """A representation of the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)"""
+
+    __slots__ = ("window")
+    __propformat__ = 32
+
+class WMProtocols(PropertyValueList):
+    """A representation of the WM_PROTOCOLS property (ICCCM §4.1.2.7)"""
+
+    __slots__ = ()
+    __propformat__ = [32]
+
+class WMColormapWindows(PropertyValueList):
+    """A representation of the WM_COLORMAP_WINDOWS property (ICCCM §4.1.2.8)"""
+
+    __slots__ = ()
+    __propformat__ = [32]
+
+class WMClientMachine(StringValue):
+    """A representation of the WM_CLIENT_MACHINE property (ICCCM §4.1.2.9)"""
+
+    __slots__ = ()
+    __propformat__ = [8]
 
 class WMState(PropertyValue):
     """A representation of the WM_STATE type (ICCCM §4.1.3.1)"""

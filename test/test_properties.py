@@ -1,5 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from array import array
 from struct import pack, unpack
 import unittest
 
@@ -44,6 +45,46 @@ class TestPropertyValue(unittest.TestCase):
     def test_pack_unpack(self):
         prop = TestProp(a=1, b=2, c=3)
         self.assertEqual(prop, prop.unpack(prop.pack()))
+
+class TestPropertyVaueList(unittest.TestCase):
+    def test_pack_unpack(self):
+        l = [0x1234, 0x5678, 0x90ab]
+        packed = array("I", l).tostring()
+        p = PropertyValueList.unpack(packed)
+        self.assertEqual(p, l)
+        self.assertEqual(p.pack(), packed)
+
+    def test_list(self):
+        l = [0x1234, 0x5678, 0x90ab]
+        p = PropertyValueList(l)
+        self.assertEqual(len(p), len(l))
+        self.assertEqual(list(p), l)
+        self.assertEqual(p, l)
+        for i in range(len(l)):
+            self.assertEqual(p[i], l[i])
+        p[0] = 0x4321
+        self.assertEqual(p[0], 0x4321)
+
+    def test_string(self):
+        s = u"foö"
+        p = StringValue(s)
+        self.assertEqual(p, StringValue.unpack(s.encode("Latin-1")))
+        self.assertEqual(p.pack(), s.encode("Latin-1"))
+        self.assertEqual(unicode(p), s)
+
+    def test_utf8_string(self):
+        s = u"foö"
+        p = UTF8String(s)
+        self.assertEqual(p, StringValue.unpack(s.encode("UTF-8")))
+        self.assertEqual(p.pack(), s.encode("UTF-8"))
+        self.assertEqual(unicode(p), s)
+
+class TestWMClass(unittest.TestCase):
+    def test_wm_class(self):
+        s = "xterm\x00XTerm\x00"
+        p = WMClass.unpack(s)
+        self.assertEqual(p.pack(), s)
+        self.assertEqual(p.instance_and_class(), ("xterm", "XTerm"))
 
 class TestWMSizeHints(unittest.TestCase):
     base_size = (4, 4)
