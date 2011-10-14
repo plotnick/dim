@@ -73,6 +73,9 @@ class ClientWindow(object):
                                        [stack_mode])
 
     def focus(self, set_focus=True, time=Time.CurrentTime):
+        if self.wm_state.state != WMState.NormalState:
+            return False
+
         focused = False
         if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
             if set_focus:
