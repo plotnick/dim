@@ -17,14 +17,13 @@ class InitialFocusEvent(object):
         self.time = Time.CurrentTime
 
 def event_focus(event):
-    """Certain events indicate that the event window has the input focus.
-    However, the mechanisms vary slightly depending on the type of event."""
-    if isinstance(event, (FocusInEvent, FocusOutEvent)):
-        return event.focus
+    """Certain events indicate that the event window has the input focus."""
+    if isinstance(event, (FocusInEvent, InitialFocusEvent)):
+        return True
+    elif isinstance(event, FocusOutEvent):
+        return False
     elif isinstance(event, (EnterNotifyEvent, LeaveNotifyEvent)):
         return event.same_screen_focus & 1
-    elif isinstance(event, InitialFocusEvent):
-        return True
     else:
         return False
 
