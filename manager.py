@@ -181,6 +181,15 @@ class WindowManager(EventHandler):
         debug("Ignoring unhandled %s" % event.__class__.__name__)
         pass
 
+    def get_client(self, window):
+        """Retrieve the client with the given top-level window, or raise an
+        UnhandledEvent exception if there is no such client. Intended for use
+        only in event handlers."""
+        try:
+            return self.clients[window]
+        except KeyError:
+            raise UnhandledEvent
+
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
         """Handle a ConfigureWindow request from a top-level window.
@@ -219,13 +228,12 @@ class WindowManager(EventHandler):
         """Update our record of a client's geometry."""
         if event.override_redirect:
             return
-        if event.window in self.clients:
-            client = self.clients[event.window]
-            client.geometry = Geometry(event.x, event.y,
-                                       event.width, event.height,
-                                       event.border_width)
-            debug("Noting geometry for client 0x%x as %s" %
-                  (client.window, client.geometry))
+        client = self.get_client(event.window)
+        client.geometry = Geometry(event.x, event.y,
+                                   event.width, event.height,
+                                   event.border_width)
+        debug("Noting geometry for client 0x%x as %s" %
+              (client.window, client.geometry))
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
@@ -237,21 +245,19 @@ class WindowManager(EventHandler):
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         """Note completion of the transition from Withdrawn → Normal state."""
-        if event.window not in self.clients:
-            return
+        client = self.get_client(event.window)
         try:
-            self.clients[event.window].wm_state = WMState(WMState.NormalState)
-            self.clients[event.window].request_properties()
+            client.wm_state = WMState(WMState.NormalState)
+            client.request_properties()
         except BadWindow:
             pass
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         """Note transition of a client window to the Withdrawn state."""
-        if event.window not in self.clients:
-            return
+        client = self.get_client(event.window)
         try:
-            self.clients[event.window].wm_state = WMState(WMState.WithdrawnState)
+            client.wm_state = WMState(WMState.WithdrawnState)
         except BadWindow:
             pass
 
@@ -278,11 +284,7 @@ class WindowManager(EventHandler):
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
         """Note the change of a window property."""
-        try:
-            client = self.clients[event.window]
-        except KeyError:
-            return
-        client.property_changed(event.atom)
+        self.get_client(event.window).property_changed(event.atom)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):

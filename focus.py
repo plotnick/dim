@@ -58,7 +58,7 @@ class FocusPolicy(WindowManager):
 
     def focus(self, event):
         """Set the input focus to the event window."""
-        client = self.get_client(event)
+        client = self.get_client(event.event)
         if client == self.current_focus:
             debug("Ignoring re-focus of window 0x%x" % client.window)
             return True
@@ -78,12 +78,6 @@ class FocusPolicy(WindowManager):
             self.current_focus.unfocus()
             self.current_focus = None
             return True
-
-    def get_client(self, event):
-        try:
-            return self.clients[event.event]
-        except KeyError:
-            raise UnhandledEvent(event)
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
