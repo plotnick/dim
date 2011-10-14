@@ -22,6 +22,7 @@ class ClientWindow(object):
         self.conn = conn
         self.window = window
         self.manager = manager
+        self.atoms = manager.atoms
         self._geometry = None
         self.decorator = manager.decorator(self)
 
@@ -78,10 +79,10 @@ class ClientWindow(object):
                 self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                              self.window, time)
             focused = True
-        if self.atom("WM_TAKE_FOCUS") in self.wm_protocols:
+        if self.atoms["WM_TAKE_FOCUS"] in self.wm_protocols:
             send_client_message(self.conn, self.window, 0, 32,
-                                self.atom("WM_PROTOCOLS"),
-                                [self.atom("WM_TAKE_FOCUS"), time, 0, 0, 0])
+                                self.atoms["WM_PROTOCOLS"],
+                                [self.atoms["WM_TAKE_FOCUS"], time, 0, 0, 0])
             focused = True
         if focused:
             self.decorator.focus()
@@ -90,12 +91,9 @@ class ClientWindow(object):
     def unfocus(self):
         self.decorator.unfocus()
 
-    def atom(self, x):
-        return self.manager.atoms[x] if isinstance(x, basestring) else x
-
     def get_property(self, name, type):
         reply = self.conn.core.GetProperty(False, self.window,
-                                           self.atom(name), self.atom(type),
+                                           self.atoms[name], self.atoms[type],
                                            0, 0xffffffff).reply()
         if reply.type:
             return reply.value.buf()
@@ -110,7 +108,7 @@ class ClientWindow(object):
         else:
             raise ValueError("unknown property value type")
         self.conn.core.ChangeProperty(mode, self.window,
-                                      self.atom(name), self.atom(type),
+                                      self.atoms[name], self.atoms[type],
                                       format, data_len, data)
 
     def get_ewmh_name(self, name):
