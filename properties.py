@@ -120,7 +120,7 @@ class PropertyField(object):
         if instance.flags & self.flag:
             return self.type(*(getattr(instance, s) for s in self.slots))
         else:
-            if hasattr(self.defaults, "__call__"):
+            if callable(self.defaults):
                 return self.type(*self.defaults(instance))
             elif isinstance(self.defaults, (list, tuple)):
                 return self.type(*self.defaults)                
@@ -239,5 +239,3 @@ class WMHints(PropertyValue):
                                   ("_icon_x", "_icon_y"))
     icon_mask = PropertyField(IconMaskHint, int, "_icon_mask")
     window_group = PropertyField(WindowGroupHint, int, "_window_group")
-
-
