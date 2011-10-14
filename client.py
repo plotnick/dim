@@ -3,6 +3,7 @@
 """The clients of a window manager are top-level windows. This module provides
 classes and routines for dealing with those as such."""
 
+from array import array
 from codecs import decode
 from logging import debug, info, warning, error
 from struct import Struct
@@ -71,12 +72,20 @@ class ClientWindow(object):
                                        [stack_mode])
 
     def focus(self, set_focus=True, time=Time.CurrentTime):
+        focused = False
         if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
             if set_focus:
                 self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                              self.window, time)
+            focused = True
+        if self.atom("WM_TAKE_FOCUS") in self.wm_protocols:
+            send_client_message(self.conn, self.window, 0, 32,
+                                self.atom("WM_PROTOCOLS"),
+                                [self.atom("WM_TAKE_FOCUS"), time, 0, 0, 0])
+            focused = True
+        if focused:
             self.decorator.focus()
-            return self
+        return focused
 
     def unfocus(self):
         self.decorator.unfocus()
@@ -170,6 +179,12 @@ class ClientWindow(object):
         window = self.get_property("WM_TRANSIENT_FOR", "WINDOW")
         if window:
             return formatter.unpack_from(window)[0]
+
+    @property
+    def wm_protocols(self):
+        """Retrieve the WM_PROTOCOLS property (ICCCM §4.1.2.7)."""
+        protocols = self.get_property("WM_PROTOCOLS", "ATOM")
+        return array("I", str(protocols)) if protocols else ()
 
     @property
     def wm_state(self):
