@@ -140,7 +140,7 @@ class MoveResize(WindowManager):
                 button not in (self.move_button, self.resize_button):
             raise UnhandledEvent(event)
 
-        client = self.get_client(event.child)
+        client = self.get_client(window)
         self.button_press = Position(event.root_x, event.root_y)
         if button == self.move_button:
             self.client_update = ClientMove(client,

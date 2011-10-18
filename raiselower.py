@@ -41,11 +41,7 @@ class RaiseLower(WindowManager):
                 button not in (self.raise_button, self.lower_button):
             raise UnhandledEvent(event)
 
-        try:
-            client = self.clients[window]
-        except KeyError:
-            raise UnhandledEvent(event)
-
+        client = self.get_client(window)
         if button == self.raise_button:
             client.restack(StackMode.TopIf)
         elif button == self.lower_button:
