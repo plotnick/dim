@@ -44,7 +44,8 @@ class ClientProperty(object):
         return value
 
     def __set__(self, instance, value):
-        instance.set_property(self.name, self.type.property_type, value)
+        if instance.property_values.get(self.name, None) != value:
+            instance.set_property(self.name, self.type.property_type, value)
 
     def __delete__(self, instance):
         instance.invalidate_cached_property(self.name)
@@ -183,10 +184,11 @@ class ClientWindow(object):
                                       format, data_len, data)
 
     def request_properties(self):
-        """Request all of the client properties for which we don't have cached
-        values. Does not wait for any of the replies."""
+        """Request the client properties for which we don't have a cached
+        value or a pending request. Does not wait for any of the replies."""
         for name in self.properties:
-            if name not in self.property_values:
+            if (name not in self.property_values and
+                name not in self.property_cookies):
                 self.property_cookies[name] = self.get_property(name)
 
     def invalidate_cached_property(self, name):
