@@ -65,13 +65,12 @@ class WindowManager(EventHandler):
                                              button, modifiers).check()
 
         # Adopt any suitable top-level windows.
-        self.scan()
+        self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
 
-    def scan(self):
-        """Scan for top-level windows to manage."""
-        tree = self.conn.core.QueryTree(self.screen.root).reply()
-        for child in tree.children:
-            self.manage(child)
+    def adopt(self, windows):
+        """Adopt existing top-level windows."""
+        for window in windows:
+            self.manage(window)
 
     def manage(self, window):
         """Manage a window and return the client instance."""
@@ -332,14 +331,12 @@ class ReparentingWindowManager(WindowManager):
     def normalize(self, client):
         if not client.reparenting:
             self.conn.core.MapWindow(client.frame)
-            super(ReparentingWindowManager, self).normalize(client)
-        return client
+            return super(ReparentingWindowManager, self).normalize(client)
 
     def withdraw(self, client):
         if not client.reparenting:
-            super(ReparentingWindowManager, self).withdraw(client)
             self.conn.core.UnmapWindow(client.frame)
-        return client
+            return super(ReparentingWindowManager, self).withdraw(client)
 
     def get_client(self, window, client_only=False):
         if window in self.clients:

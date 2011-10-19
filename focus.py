@@ -42,27 +42,48 @@ class FocusPolicy(WindowManager):
         self.current_focus = None
         super(FocusPolicy, self).__init__(*args, **kwargs)
 
-        # Try to determine which client currently has the focus.
-        focus = self.conn.core.GetInputFocus().reply().focus
-        if focus == InputFocus.PointerRoot:
+    def adopt(self, windows):
+        self.reparenting_initial_clients = set()
+        for window in windows:
+            client = self.manage(window)
+            if client and client.frame and client.reparenting:
+                self.reparenting_initial_clients.add(client)
+        self.initial_focus()
+
+    def normalize(self, client):
+        if super(FocusPolicy, self).normalize(client):
+            if self.reparenting_initial_clients is not None:
+                self.reparenting_initial_clients.discard(client)
+                self.initial_focus()
+            return client
+
+    def initial_focus(self):
+        """Query for and set the initial focus."""
+        # We need to wait to set the initial focus until all of the initial
+        # clients are done reparenting (if they need reparenting). Otherwise,
+        # the pointer might be over a window that is temporarily unmapped but
+        # that ought to get the initial focus.
+        if self.reparenting_initial_clients:
+            return
+        else:
+            self.reparenting_initial_clients = None
+
+        def focus(window):
+            debug("Setting initial focus to window 0x%x." % window)
+            self.focus(self.get_client(window), InitialFocusEvent(window))
+
+        window = self.conn.core.GetInputFocus().reply().focus
+        if window == InputFocus.PointerRoot:
             # We're in PointerRoot mode (i.e., focus-follows-mouse), so we
             # need to query the server for the window currently containing
             # the pointer.
             reply = self.conn.core.QueryPointer(self.screen.root).reply()
             if reply and reply.child:
-                self.initial_focus(reply.child)
+                focus(reply.child)
             else:
                 info("No window currently has the focus.")
         else:
-            self.initial_focus(focus)
-
-    def initial_focus(self, window):
-        """Set the initial focus to the given window."""
-        debug("Setting initial focus to window 0x%x." % window)
-        try:
-            self.focus(self.get_client(window), InitialFocusEvent(window))
-        except UnhandledEvent:
-            pass
+            focus(window)
 
     def focus(self, client, event):
         """Set the input focus to the event window."""
