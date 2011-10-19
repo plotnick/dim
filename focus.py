@@ -86,18 +86,15 @@ class FocusPolicy(WindowManager):
             focus(window)
 
     def focus(self, client, event):
-        """Set the input focus to the event window."""
-        if client == self.current_focus:
-            debug("Ignoring re-focus of window 0x%x." % client.window)
+        """Set the input focus to the client window."""
+        if client is self.current_focus:
             return True
         debug("Attempting to focus window 0x%x." % client.window)
         if client.focus(self.set_focus, event_time(event)):
             self.unfocus(event)
             if is_focus_event(event):
-                # If the event claims we have the focus now, don't bother
-                # waiting for a FocusIn event to record the current focus.
                 self.current_focus = client
-            return client
+                return True
 
     def unfocus(self, event):
         """Unfocus the currently focused client."""
@@ -112,13 +109,8 @@ class FocusPolicy(WindowManager):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             raise UnhandledEvent(event)
-        client = self.get_client(event.event)
-        if self.current_focus and self.current_focus != client:
-            debug("Window 0x%x stole the focus." % client.window)
-            self.focus(client, event)
-        else:
-            debug("Window 0x%x got focus." % client.window)
-            self.current_focus = client
+        debug("Window 0x%x got the focus." % event.event)
+        self.focus(self.get_client(event.event), event)
 
 class FocusFollowsMouse(FocusPolicy):
     """Let the input focus follow the pointer. We track which top-level
