@@ -37,9 +37,10 @@ if __name__ == "__main__":
                               logging.WARNING,
                         format="%(levelname)s: %(message)s")
 
+    conn = xcb.connect(options.display)
     wm = type("WM",
               (focus_modes[options.focus_mode], MoveResize, RaiseLower),
-              dict())(xcb.connect(options.display))
+              dict())(conn)
     try:
         wm.event_loop()
     except KeyboardInterrupt:
@@ -47,3 +48,4 @@ if __name__ == "__main__":
     finally:
         for client in wm.clients.values():
             client.decorator.undecorate()
+        conn.flush()
