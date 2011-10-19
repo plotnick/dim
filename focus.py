@@ -16,8 +16,8 @@ class InitialFocusEvent(object):
         self.event = window
         self.time = Time.CurrentTime
 
-def event_focus(event):
-    """Certain events indicate that the event window has the input focus."""
+def is_focus_event(event):
+    """Return true if the event window has the input focus."""
     if isinstance(event, (FocusInEvent, InitialFocusEvent)):
         return True
     elif isinstance(event, FocusOutEvent):
@@ -72,7 +72,7 @@ class FocusPolicy(WindowManager):
         debug("Attempting to focus window 0x%x" % client.window)
         if client.focus(self.set_focus, event_time(event)):
             self.unfocus(event)
-            if event_focus(event):
+            if is_focus_event(event):
                 # If the event claims we have the focus now, don't bother
                 # waiting for a FocusIn event to record the current focus.
                 self.current_focus = client
