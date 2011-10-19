@@ -115,12 +115,12 @@ class FrameDecorator(Decorator):
 
     def undecorate(self):
         self.conn.core.UnmapWindow(self.client.frame)
-        offset = -1 * self.offset
+        self.restore_border()
+        geometry = self.client.geometry - self.offset
         self.conn.core.ReparentWindow(self.client.window,
                                       self.client.manager.screen.root,
-                                      offset.x, offset.y)
+                                      geometry.x, geometry.y)
         self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
-        self.restore_border()
 
     def frame_geometry(self):
         return (self.client.geometry._replace(border_width=self.border_width),
