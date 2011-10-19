@@ -87,7 +87,7 @@ class WindowManager(EventHandler):
         if window in self.clients:
             return self.clients[window]
 
-        debug("Managing window 0x%x" % window)
+        debug("Managing window 0x%x." % window)
 
         client = self.clients[window] = ClientWindow(self.conn, window, self)
         client.decorator.decorate()
@@ -113,7 +113,7 @@ class WindowManager(EventHandler):
             
     def unmanage(self, window):
         """Unmanage the client with the given top-level window."""
-        debug("Unmanaging window 0x%x" % window)
+        debug("Unmanaging window 0x%x." % window)
         return self.clients.pop(window, None)
 
     def place(self, client, geometry):
@@ -122,7 +122,7 @@ class WindowManager(EventHandler):
         geometry. The geometry recorded in the client instance will be updated
         only when we receive the corresponding ConfigureNotify event."""
         if geometry != client.geometry:
-            debug("Placing client 0x%x at %s" % (client.window, geometry))
+            debug("Placing client 0x%x at %s." % (client.window, geometry))
             self.conn.core.ConfigureWindow(client.window,
                                            (ConfigWindow.X |
                                             ConfigWindow.Y |
@@ -183,7 +183,7 @@ class WindowManager(EventHandler):
             return self.conn.poll_for_event()
 
     def unhandled_event(self, event):
-        debug("Ignoring unhandled %s on window 0x%x" %
+        debug("Ignoring unhandled %s on window 0x%x." %
               (event.__class__.__name__,
                event.event if hasattr(event, "event") else event.window))
 
@@ -210,18 +210,18 @@ class WindowManager(EventHandler):
             requested_geometry = Geometry(event.x, event.y,
                                           event.width, event.height,
                                           event.border_width)
-            debug("Client 0x%x requested geometry %s" %
+            debug("Client 0x%x requested geometry %s." %
                   (client.window, requested_geometry))
             old_geometry = client.geometry
             new_geometry = self.place(client, requested_geometry)
             if (new_geometry == old_geometry or
                 is_move_only(old_geometry, new_geometry)):
-                debug("Sending synthetic ConfigureNotify to client 0x%x" %
+                debug("Sending synthetic ConfigureNotify to client 0x%x." %
                       client.window)
                 configure_notify(self.conn, client.window, *new_geometry)
         else:
             # Just grant the request.
-            debug("Granting ConfigureWindow request for unmanaged window 0x%x" %
+            debug("Granting ConfigureWindow request for unmanaged window 0x%x." %
                   event.window)
             self.conn.core.ConfigureWindow(event.window, event.value_mask,
                 select_values(event.value_mask,
@@ -243,13 +243,13 @@ class WindowManager(EventHandler):
         client.geometry = Geometry(event.x, event.y,
                                    event.width, event.height,
                                    event.border_width)
-        debug("Noting geometry for client 0x%x as %s" %
+        debug("Noting geometry for client 0x%x as %s." %
               (client.window, client.geometry))
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
         """Map a top-level window on behalf of a client."""
-        debug("Granting MapRequest for client 0x%x" % event.window)
+        debug("Granting MapRequest for client 0x%x." % event.window)
         client = self.manage(event.window)
         self.conn.core.MapWindow(event.window)
 
@@ -287,11 +287,11 @@ class WindowManager(EventHandler):
         an update from the server."""
         if event.request == Mapping.Keyboard:
             try:
-                debug("Refreshing keymap: %d codes starting at %d" %
+                debug("Refreshing keymap: %d codes starting at %d." %
                       (event.count, event.first_keycode))
                 self.keymap.refresh(event.first_keycode, event.count)
             except KeymapError as e:
-                warning("Unable to refresh partial keymap: %s" % e)
+                warning("Unable to refresh partial keymap: %s." % e)
                 # Do a full refresh. If that fails, just bail out.
                 self.keymap.refresh()
 
@@ -303,10 +303,10 @@ class WindowManager(EventHandler):
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):
         if event.window != self.screen.root:
-            debug("Ignoring client message to non-root window 0x%x" %
+            debug("Ignoring client message to non-root window 0x%x." %
                   event.window)
         if event.type == self.atoms["WM_EXIT"]:
-            info("Received exit message; shutting down")
+            info("Received exit message; shutting down.")
             raise ExitWindowManager
 
 class ReparentingWindowManager(WindowManager):
@@ -370,7 +370,7 @@ class ReparentingWindowManager(WindowManager):
         client.geometry = Geometry(event.x, event.y,
                                    event.width, event.height,
                                    event.border_width)
-        debug("Noting frame geometry for client 0x%x as %s" %
+        debug("Noting frame geometry for client 0x%x as %s." %
               (client.window, client.geometry))
 
 def compress(handler):

@@ -58,7 +58,7 @@ class FocusPolicy(WindowManager):
 
     def initial_focus(self, window):
         """Set the initial focus to the given window."""
-        debug("Setting initial focus to window 0x%x" % window)
+        debug("Setting initial focus to window 0x%x." % window)
         try:
             self.focus(self.get_client(window), InitialFocusEvent(window))
         except UnhandledEvent:
@@ -67,9 +67,9 @@ class FocusPolicy(WindowManager):
     def focus(self, client, event):
         """Set the input focus to the event window."""
         if client == self.current_focus:
-            debug("Ignoring re-focus of window 0x%x" % client.window)
+            debug("Ignoring re-focus of window 0x%x." % client.window)
             return True
-        debug("Attempting to focus window 0x%x" % client.window)
+        debug("Attempting to focus window 0x%x." % client.window)
         if client.focus(self.set_focus, event_time(event)):
             self.unfocus(event)
             if is_focus_event(event):
@@ -81,7 +81,7 @@ class FocusPolicy(WindowManager):
     def unfocus(self, event):
         """Unfocus the currently focused client."""
         if self.current_focus:
-            debug("Unfocusing window 0x%x" % self.current_focus.window)
+            debug("Unfocusing window 0x%x." % self.current_focus.window)
             self.current_focus.unfocus()
             self.current_focus = None
             return True
@@ -93,10 +93,10 @@ class FocusPolicy(WindowManager):
             raise UnhandledEvent(event)
         client = self.get_client(event.event)
         if self.current_focus and self.current_focus != client:
-            debug("Window 0x%x stole the focus" % client.window)
+            debug("Window 0x%x stole the focus." % client.window)
             self.focus(client, event)
         else:
-            debug("Window 0x%x got focus" % client.window)
+            debug("Window 0x%x got focus." % client.window)
             self.current_focus = client
 
 class FocusFollowsMouse(FocusPolicy):
@@ -120,7 +120,7 @@ class FocusFollowsMouse(FocusPolicy):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             return
-        debug("Window 0x%x entered (%d)" % (event.event, event.detail))
+        debug("Window 0x%x entered (%d)." % (event.event, event.detail))
         self.focus(self.get_client(event.event), event)
 
     @handler(LeaveNotifyEvent)
@@ -128,7 +128,7 @@ class FocusFollowsMouse(FocusPolicy):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             return
-        debug("Window 0x%x left (%d)" % (event.event, event.detail))
+        debug("Window 0x%x left (%d)." % (event.event, event.detail))
         self.unfocus(event)
 
 class SloppyFocus(FocusPolicy):
@@ -141,7 +141,7 @@ class SloppyFocus(FocusPolicy):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             return
-        debug("Window 0x%x entered (%d)" % (event.event, event.detail))
+        debug("Window 0x%x entered (%d)." % (event.event, event.detail))
         self.focus(self.get_client(event.event), event)
 
 class ClickToFocus(FocusPolicy, ReparentingWindowManager):
@@ -192,7 +192,7 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
             client = self.frames[event.event]
         except KeyError:
             raise UnhandledEvent(event)
-        debug("Button %d press in window 0x%x" % (event.detail, event.event))
+        debug("Button %d press in window 0x%x." % (event.detail, event.event))
         if not self.ignore_focus_click:
             self.conn.core.AllowEvents(Allow.ReplayPointer, Time.CurrentTime)
         self.conn.core.UngrabPointer(Time.CurrentTime)

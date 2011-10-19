@@ -140,7 +140,7 @@ class ClientWindow(object):
 
     def focus(self, set_focus=True, time=Time.CurrentTime):
         if self.wm_state.state != WMState.NormalState:
-            debug("Ignoring attempt to focus client not in Normal state")
+            debug("Ignoring attempt to focus client not in Normal state.")
             return False
 
         focused = False
@@ -164,7 +164,7 @@ class ClientWindow(object):
     def get_property(self, name, type=None):
         if type is None:
             type = self.properties[name].property_type
-        debug("Requesting property %s for window 0x%x" % (name, self.window))
+        debug("Requesting property %s for window 0x%x." % (name, self.window))
         return self.conn.core.GetProperty(False, self.window,
                                           self.atoms[name], self.atoms[type],
                                           0, 0xffffffff)
@@ -209,7 +209,7 @@ class ClientWindow(object):
 
     def property_changed(self, atom):
         name = self.atoms.name(atom)
-        debug("Property %s changed on window 0x%x" % (name, self.window))
+        debug("Property %s changed on window 0x%x." % (name, self.window))
         self.invalidate_cached_property(name)
 
     # ICCCM properties
