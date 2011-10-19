@@ -5,14 +5,15 @@ from focus import FocusFollowsMouse, SloppyFocus, ClickToFocus
 from moveresize import MoveResize
 from raiselower import RaiseLower
 
-class WM(ClickToFocus, MoveResize, RaiseLower):
-    pass
-
 if __name__ == "__main__":
     from optparse import OptionParser
     import logging
     import sys
     import xcb
+
+    focus_modes = {"pointer": FocusFollowsMouse,
+                   "sloppy": SloppyFocus,
+                   "click": ClickToFocus}
 
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
@@ -23,6 +24,10 @@ if __name__ == "__main__":
                          help="output version information and exit")
     optparser.add_option("-d", "--display", dest="display",
                          help="the X server display name")
+    optparser.add_option("-f", "--focus-mode", dest="focus_mode",
+                         type="choice", choices=focus_modes.keys(),
+                         default="pointer",
+                         help='focus mode: pointer, sloppy, or click')
     (options, args) = optparser.parse_args()
     if options.version:
         print "Python Window Manager version 0.0"
@@ -32,7 +37,9 @@ if __name__ == "__main__":
                               logging.WARNING,
                         format="%(levelname)s: %(message)s")
 
-    wm = WM(xcb.connect(options.display))
+    wm = type("WM",
+              (focus_modes[options.focus_mode], MoveResize, RaiseLower),
+              dict())(xcb.connect(options.display))
     try:
         wm.event_loop()
     except KeyboardInterrupt:
