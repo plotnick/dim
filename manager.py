@@ -12,7 +12,7 @@ from atom import AtomCache
 from client import ClientWindow
 from color import ColorCache
 from cursor import FontCursor
-from decorator import Decorator
+from decorator import Decorator, FrameDecorator
 from event import UnhandledEvent, EventHandler, handler
 from geometry import *
 from keymap import KeymapError, KeyboardMap
@@ -89,21 +89,26 @@ class WindowManager(EventHandler):
 
         debug("Managing window 0x%x" % window)
 
-        # Add the window to the server's save-set so that it gets
-        # reparented when we die. The server automatically removes
-        # windows from the save-set when they are destroyed.
-        self.conn.core.ChangeSaveSet(SetMode.Insert, window)
+        client = self.clients[window] = ClientWindow(self.conn, window, self)
+        client.decorator.decorate()
 
-        client = ClientWindow(self.conn, window, self)
-        self.clients[window] = client
-
-        # ICCCM §4.1.3.1: "The window manager will place a WM_STATE
-        # property ... on each top-level client window that is not in
-        # the Withdrawn state."
         if attrs.map_state != MapState.Unmapped:
-            client.wm_state = WMState(WMState.NormalState)
-            client.request_properties()
+            self.normalize(client)
 
+        return client
+
+    def normalize(self, client):
+        """Complete the transition of a client from Withdrawn → Normal state."""
+        debug("Client window 0x%x entering Normal state." % client.window)
+        client.wm_state = WMState(WMState.NormalState)
+        client.request_properties()
+        return client
+
+    def withdraw(self, client):
+        """Complete the transition of a client to the Withdrawn state."""
+        debug("Client window 0x%x entering Withdrawn state." % client.window)
+        client.wm_state = WMState(WMState.WithdrawnState)
+        client.decorator.undecorate()
         return client
             
     def unmanage(self, window):
@@ -178,13 +183,19 @@ class WindowManager(EventHandler):
             return self.conn.poll_for_event()
 
     def unhandled_event(self, event):
-        debug("Ignoring unhandled %s" % event.__class__.__name__)
-        pass
+        debug("Ignoring unhandled %s on window 0x%x" %
+              (event.__class__.__name__,
+               event.event if hasattr(event, "event") else event.window))
 
-    def get_client(self, window):
+    def get_client(self, window, client_only=False):
         """Retrieve the client with the given top-level window, or raise an
-        UnhandledEvent exception if there is no such client. Intended for use
-        only in event handlers."""
+        UnhandledEvent exception if there is no such client. Intended for
+        use only in event handlers.
+
+        The second (optional) argument controls whether the window must
+        be a client window, or if it is permissible to return a client
+        instance from its frame. This is used only in subclasses that
+        support reparenting."""
         try:
             return self.clients[window]
         except KeyError:
@@ -227,7 +238,7 @@ class WindowManager(EventHandler):
     def handle_configure_notify(self, event):
         """Update our record of a client's geometry."""
         if event.override_redirect:
-            return
+            raise UnhandledEvent(event)
         client = self.get_client(event.window)
         client.geometry = Geometry(event.x, event.y,
                                    event.width, event.height,
@@ -239,25 +250,28 @@ class WindowManager(EventHandler):
     def handle_map_request(self, event):
         """Map a top-level window on behalf of a client."""
         debug("Granting MapRequest for client 0x%x" % event.window)
+        client = self.manage(event.window)
         self.conn.core.MapWindow(event.window)
-        self.manage(event.window)
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
-        """Note completion of the transition from Withdrawn → Normal state."""
-        client = self.get_client(event.window)
+        """Note the mapping of a top-level window."""
+        if event.override_redirect:
+            raise UnhandledEvent(event)
+        debug("Window 0x%x mapped." % event.window)
         try:
-            client.wm_state = WMState(WMState.NormalState)
-            client.request_properties()
+            self.normalize(self.get_client(event.window, True))
         except BadWindow:
             pass
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        """Note transition of a client window to the Withdrawn state."""
-        client = self.get_client(event.window)
+        """Note the unmapping of a top-level window."""
+        if event.from_configure:
+            raise UnhandledEvent(event)
+        debug("Window 0x%x unmapped." % event.window)
         try:
-            client.wm_state = WMState(WMState.WithdrawnState)
+            self.withdraw(self.get_client(event.window, True))
         except BadWindow:
             pass
 
@@ -294,6 +308,70 @@ class WindowManager(EventHandler):
         if event.type == self.atoms["WM_EXIT"]:
             info("Received exit message; shutting down")
             raise ExitWindowManager
+
+class ReparentingWindowManager(WindowManager):
+    def __init__(self, *args, **kwargs):
+        self.frames = {} # client frames, indexed by window ID
+        super(ReparentingWindowManager, self).__init__(*args, **kwargs)
+
+    def manage(self, window):
+        client = super(ReparentingWindowManager, self).manage(window)
+        if client:
+            self.frames[client.frame] = client
+        return client
+
+    def unmanage(self, window):
+        client = super(ReparentingWindowManager, self).unmanage(window)
+        if client:
+            self.frames.pop(client.frame)
+        return client
+
+    def decorator(self, client):
+        return FrameDecorator(self.conn, client)
+
+    def normalize(self, client):
+        if not client.reparenting:
+            self.conn.core.MapWindow(client.frame)
+            super(ReparentingWindowManager, self).normalize(client)
+        return client
+
+    def withdraw(self, client):
+        if not client.reparenting:
+            super(ReparentingWindowManager, self).withdraw(client)
+            self.conn.core.UnmapWindow(client.frame)
+        return client
+
+    def get_client(self, window, client_only=False):
+        if window in self.clients:
+            return self.clients[window]
+        elif not client_only and window in self.frames:
+            return self.frames[window]
+        else:
+            raise UnhandledEvent
+
+    @handler(ReparentNotifyEvent)
+    def handle_reparent_notify(self, event):
+        if event.override_redirect:
+            raise UnhandledEvent(event)
+        client = self.get_client(event.window)
+        if client.reparenting:
+            debug("Done reparenting window 0x%x." % client.window)
+            client.reparenting = False
+            client._geometry = None
+
+    @handler(ConfigureNotifyEvent)
+    def handle_configure_notify(self, event):
+        """Update our record of a client's frame's geometry. Once reparented,
+        the client window's geometry is essentially useless."""
+        try:
+            client = self.frames[event.window]
+        except KeyError:
+            return
+        client.geometry = Geometry(event.x, event.y,
+                                   event.width, event.height,
+                                   event.border_width)
+        debug("Noting frame geometry for client 0x%x as %s" %
+              (client.window, client.geometry))
 
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.

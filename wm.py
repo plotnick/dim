@@ -1,16 +1,12 @@
 #!/usr/bin/env python
 # -*- mode: Python; coding: utf-8 -*-
 
-from decorator import BorderDecorator
 from focus import FocusFollowsMouse, SloppyFocus, ClickToFocus
 from moveresize import MoveResize
 from raiselower import RaiseLower
 
-class WM(SloppyFocus, MoveResize, RaiseLower):
-    def decorator(self, client):
-        return BorderDecorator(self.conn, client,
-                               focused_color="red",
-                               unfocused_color="blue")
+class WM(ClickToFocus, MoveResize, RaiseLower):
+    pass
 
 if __name__ == "__main__":
     from optparse import OptionParser

@@ -73,32 +73,33 @@ class ClientWindow(object):
 
     __metaclass__ = ClientWindowClass
 
+    client_event_mask = (EventMask.EnterWindow |
+                         EventMask.LeaveWindow |
+                         EventMask.FocusChange |
+                         EventMask.PropertyChange)
+
     def __init__(self, conn, window, manager):
         self.conn = conn
         self.window = window
         self.manager = manager
         self.atoms = manager.atoms
-        self._geometry = None
         self.decorator = manager.decorator(self)
+        self.frame = None
+        self._geometry = None
         self.property_values = {}
         self.property_cookies = {}
-
-        self.conn.core.ChangeWindowAttributes(self.window,
-                                              CW.EventMask,
-                                              [EventMask.EnterWindow |
-                                               EventMask.LeaveWindow |
-                                               EventMask.FocusChange |
-                                               EventMask.PropertyChange])
+        self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
+                                              [self.client_event_mask])
 
     @property
     def geometry(self):
         if self._geometry is None:
-            debug("Fetching geometry for client 0x%x" % self.window)
-            geometry = self.conn.core.GetGeometry(self.window).reply()
-            if geometry:
-                self._geometry = Geometry(geometry.x, geometry.y,
-                                          geometry.width, geometry.height,
-                                          geometry.border_width)
+            cookie = self.conn.core.GetGeometry(self.frame or self.window)
+            reply = cookie.reply()
+            if reply:
+                self._geometry = Geometry(reply.x, reply.y,
+                                          reply.width, reply.height,
+                                          reply.border_width)
         return self._geometry
 
     @geometry.setter
@@ -106,32 +107,40 @@ class ClientWindow(object):
         assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
         self._geometry = geometry
 
-    def move(self, position):
-        self.conn.core.ConfigureWindow(self.window,
-                                       ConfigWindow.X | ConfigWindow.Y,
+    def move(self, position, mask=ConfigWindow.X | ConfigWindow.Y):
+        self.conn.core.ConfigureWindow(self.frame or self.window, mask,
                                        map(int16, position))
 
-    def resize(self, size):
-        self.conn.core.ConfigureWindow(self.window,
-                                       ConfigWindow.Width | ConfigWindow.Height,
-                                       map(int16, size))
+    def resize(self, size, mask=ConfigWindow.Width | ConfigWindow.Height):
+        if self.frame:
+            self.conn.core.ConfigureWindow(self.frame, mask, map(int16, size))
+        self.conn.core.ConfigureWindow(self.window, mask, map(int16, size))
 
-    def update_geometry(self, geometry):
-        self.conn.core.ConfigureWindow(self.window,
-                                       (ConfigWindow.X |
-                                        ConfigWindow.Y |
-                                        ConfigWindow.Width |
-                                        ConfigWindow.Height |
-                                        ConfigWindow.BorderWidth),
-                                       map(int16, geometry))
+    def update_geometry(self, geometry,
+                        frame_mask=(ConfigWindow.X |
+                                    ConfigWindow.Y |
+                                    ConfigWindow.Width |
+                                    ConfigWindow.Height |
+                                    ConfigWindow.BorderWidth),
+                        window_mask=ConfigWindow.Width | ConfigWindow.Height):
+        if self.frame:
+            self.conn.core.ConfigureWindow(self.frame, frame_mask,
+                                           map(int16, geometry))
+            self.conn.core.ConfigureWindow(self.window, window_mask,
+                                           [int16(geometry.width),
+                                            int16(geometry.height)])
+        else:
+            self.conn.core.ConfigureWindow(self.window, frame_mask,
+                                           map(int16, geometry))
 
     def restack(self, stack_mode):
-        self.conn.core.ConfigureWindow(self.window,
+        self.conn.core.ConfigureWindow(self.frame or self.window,
                                        ConfigWindow.StackMode,
                                        [stack_mode])
 
     def focus(self, set_focus=True, time=Time.CurrentTime):
         if self.wm_state.state != WMState.NormalState:
+            debug("Ignoring attempt to focus client not in Normal state")
             return False
 
         focused = False
