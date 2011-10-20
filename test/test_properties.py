@@ -7,6 +7,7 @@ import unittest
 import xcb
 from xcb.xproto import *
 
+from geometry import *
 from properties import *
 
 class TestProp(PropertyValue):
@@ -99,8 +100,8 @@ class TestWMSizeHints(unittest.TestCase):
         self.assertEqual(hints.min_size, (1, 1))
         self.assertEqual(hints.max_size, (0x7fffffff, 0x7fffffff))
         self.assertEqual(hints.resize_inc, (1, 1))
-        self.assertEqual(hints.min_aspect, (None, None))
-        self.assertEqual(hints.max_aspect, (None, None))
+        self.assertEqual(hints.min_aspect[:], (None, None))
+        self.assertEqual(hints.max_aspect[:], (None, None))
         self.assertEqual(hints.base_size, (1, 1))
         self.assertEqual(hints.win_gravity, Gravity.NorthWest)
 
@@ -169,6 +170,71 @@ class TestWMSizeHints(unittest.TestCase):
                             max_size=self.aspect,
                             win_gravity=self.gravity)
         self.assertEqual(hints, hints.unpack(hints.pack()))
+
+class TestConstrainWindowSize(unittest.TestCase):
+    min_size = Rectangle(10, 17)
+    max_size = Rectangle(100, 170)
+    resize_inc = Rectangle(6, 13)
+    base_size = Rectangle(4, 4)
+    min_aspect = AspectRatio(4, 3)
+    max_aspect = AspectRatio(16, 10)
+
+    def assertConstraint(self, size, expected_size):
+        self.assertEqual(self.hints.constrain_window_size(size), expected_size)
+
+    def test_min_size(self):
+        self.hints = WMSizeHints(min_size=self.min_size)
+        self.assertConstraint(Rectangle(-2, -4), self.min_size)
+        self.assertConstraint(Rectangle(0, 0), self.min_size)
+        self.assertConstraint(self.min_size, self.min_size)
+        self.assertConstraint(Rectangle(25, 25), Rectangle(25, 25))
+
+    def test_max_size(self):
+        self.hints = WMSizeHints(max_size=self.max_size)
+        self.assertConstraint(self.min_size, self.min_size)
+        self.assertConstraint(self.max_size, self.max_size)
+        self.assertConstraint(self.max_size + Rectangle(1, 1), self.max_size)
+        self.assertConstraint(self.max_size * 2, self.max_size)
+
+    def test_size_resize_inc(self):
+        self.hints = WMSizeHints(resize_inc=self.resize_inc)
+        self.assertConstraint(Rectangle(3, 5), Rectangle(1, 1))
+        self.assertConstraint(Rectangle(7, 14), Rectangle(7, 14))
+        self.assertConstraint(Rectangle(14, 19), Rectangle(13, 14))
+        self.assertConstraint(Rectangle(14, 27), Rectangle(13, 27))
+
+    def test_base_inc(self):
+        self.hints = WMSizeHints(resize_inc=self.resize_inc,
+                                 base_size=self.base_size)
+        self.assertConstraint(Rectangle(0, 0), self.base_size)
+        self.assertConstraint(self.base_size, self.base_size)
+        self.assertConstraint(Rectangle(5, 5), self.base_size)
+        self.assertConstraint(Rectangle(6, 13), self.base_size)
+        self.assertConstraint(Rectangle(10, 17), Rectangle(10, 17))
+        self.assertConstraint(Rectangle(12, 17), Rectangle(10, 17))
+        self.assertConstraint(Rectangle(16, 17), Rectangle(16, 17))
+        self.assertConstraint(Rectangle(22, 30), Rectangle(22, 30))
+
+    def test_min_base_inc(self):
+        self.hints = WMSizeHints(min_size=self.min_size,
+                                 resize_inc=self.resize_inc,
+                                 base_size=self.base_size)
+        self.assertConstraint(Rectangle(0, 0), self.min_size)
+        self.assertConstraint(self.base_size, self.min_size)
+        self.assertConstraint(self.min_size, self.min_size)
+        self.assertConstraint(Rectangle(12, 17), self.min_size)
+        self.assertConstraint(Rectangle(16, 17), Rectangle(16, 17))
+        self.assertConstraint(Rectangle(22, 30), Rectangle(22, 30))
+
+    def test_aspect(self):
+        self.hints = WMSizeHints(min_aspect=self.min_aspect,
+                                 max_aspect=self.max_aspect)
+        self.assertConstraint(Rectangle(1600, 900), Rectangle(1600, 1000))
+        self.assertConstraint(Rectangle(1600, 1000), Rectangle(1600, 1000))
+        self.assertConstraint(Rectangle(1600, 1100), Rectangle(1600, 1100))
+        self.assertConstraint(Rectangle(1600, 1200), Rectangle(1600, 1200))
+        self.assertConstraint(Rectangle(1600, 1200), Rectangle(1600, 1200))
+        self.assertConstraint(Rectangle(1600, 1300), Rectangle(1600, 1200))
 
 class TestWMHints(unittest.TestCase):
     def test_default_wm_hints(self):

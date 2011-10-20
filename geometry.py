@@ -1,10 +1,9 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from collections import namedtuple
-from operator import add, sub
+from operator import add, sub, lt, le, eq, ne, gt, ge
 
-__all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
-           "is_move_only", "constrain_size"]
+__all__ = ["Position", "Rectangle", "Geometry", "AspectRatio", "is_move_only"]
 
 def make_tuple_adder(op):
     def add_sub_tuple(self, other):
@@ -39,6 +38,11 @@ def make_geometry_adder(op):
             return NotImplemented
     return add_sub_geometry
 
+def make_aspect_comparison(comp):
+    def compare_aspect(self, other):
+        return comp(self.width * other[1], self.height * other[0])
+    return compare_aspect
+
 Position = namedtuple("Position", "x, y")
 Position.__add__ = Position.__radd__ = make_tuple_adder(add)
 Position.__sub__ = make_tuple_adder(sub)
@@ -68,10 +72,22 @@ Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
 Geometry.__unicode__ = lambda self: u"%u×%u%+d%+d" % \
     (self.width, self.height, self.x, self.y)
 
-AspectRatio = namedtuple("AspectRatio", "numerator, denominator")
-AspectRatio.__nonzero__ = lambda self: self.numerator != 0
-AspectRatio.__str__ = lambda self: "%u/%u" % self
-AspectRatio.__unicode__ = lambda self: u"%u⁄%u" % self
+AspectRatio = namedtuple("AspectRatio", "width, height")
+AspectRatio.__nonzero__ = lambda self: \
+    self.width is not None and self.height is not None and \
+    self.width != 0 and self.height != 0
+AspectRatio.__lt__ = make_aspect_comparison(lt)
+AspectRatio.__le__ = make_aspect_comparison(le)
+AspectRatio.__eq__ = make_aspect_comparison(eq)
+AspectRatio.__ne__ = make_aspect_comparison(ne)
+AspectRatio.__gt__ = make_aspect_comparison(gt)
+AspectRatio.__ge__ = make_aspect_comparison(ge)
+AspectRatio.__str__ = lambda self: "%u:%u" % self
+AspectRatio.__unicode__ = lambda self: u"%u∶%u" % self
+AspectRatio.crop = lambda self, rect: \
+    Rectangle(rect.width, rect.width * self.height // self.width) \
+        if self.width > self.height \
+        else Rectangle(rect.height * self.width // self.height, rect.height)
 
 def is_move_only(old, new):
     """Returns True if the new geometry represents a move without a resize
@@ -81,16 +97,3 @@ def is_move_only(old, new):
             (new.width == old.width) and
             (new.height == old.height) and
             (new.border_width == old.border_width))
-
-def constrain_size(size, hints):
-    """Given a window's potential size and size hints, return the closest
-    allowable size.
-
-    This function does not yet handle aspect ratios."""
-    base = hints.base_size
-    min_size = hints.min_size
-    inc = hints.resize_inc
-    def constrain(size, i):
-        return max((((size[i] - base[i]) // inc[i]) * inc[i]) + base[i],
-                   min_size[i])
-    return Rectangle(constrain(size, 0), constrain(size, 1))

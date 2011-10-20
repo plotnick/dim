@@ -73,7 +73,7 @@ class ClientResize(ClientUpdate):
     def update(self, delta):
         delta = Position(delta.x * self.octant.x, delta.y * self.octant.y)
         old_size = Rectangle(self.geometry.width, self.geometry.height)
-        new_size = constrain_size(old_size + delta, self.size_hints)
+        new_size = self.size_hints.constrain_window_size(old_size + delta)
         if new_size != old_size:
             offset = Position(new_size.width - old_size.width \
                                   if self.octant.x < 0 \

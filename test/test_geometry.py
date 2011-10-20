@@ -1,5 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from operator import lt, gt
 import unittest
 
 from geometry import *
@@ -54,9 +55,19 @@ class TestGeometryClasses(unittest.TestCase):
     def test_aspect_ratio(self):
         a = AspectRatio(16, 9)
         self.assertTrue(a)
-        self.assertEqual(a, (16, 9))
-        self.assertEqual(str(a), "16/9")
+        self.assertEqual(a, (1600, 900))
+        self.assertTrue(a < (1600, 800))
+        self.assertFalse(a < (1600, 1200))
+        self.assertFalse(a > (1600, 800))
+        self.assertTrue(a > (1600, 1200))
+        self.assertEqual(str(a), "16:9")
+        self.assertFalse(AspectRatio(None, None))
         self.assertFalse(AspectRatio(0, 100))
+        self.assertFalse(AspectRatio(0, 0))
+        self.assertEqual(AspectRatio(16, 9).crop(Rectangle(1600, 800)),
+                         Rectangle(1600, 900))
+        self.assertEqual(AspectRatio(3, 4).crop(Rectangle(1600, 1600)),
+                         Rectangle(1200, 1600))
 
 class TestIsMoveOnly(unittest.TestCase):
     """Test case for the is_move_only function."""
@@ -74,53 +85,6 @@ class TestIsMoveOnly(unittest.TestCase):
         self.assertFalse(is_move_only(g, Geometry(2, 2, 2, 2, 1)))
         self.assertFalse(is_move_only(g, Geometry(2, 2, 1, 1, 2)))
         self.assertTrue(is_move_only(g, Geometry(2, 2, 1, 1, 1)))
-
-class TestConstrainSize(unittest.TestCase):
-    """Test case for the constrain_size function."""
-
-    min_size = Rectangle(10, 17)
-    resize_inc = Rectangle(6, 13)
-    base_size = Rectangle(4, 4)
-
-    def assertConstraint(self, size, expected_size):
-        self.assertEqual(constrain_size(size, self.hints), expected_size)
-
-    def test_constrain_size_min_size(self):
-        self.hints = WMSizeHints(min_size=self.min_size)
-        self.assertConstraint(Rectangle(-2, -4), self.min_size)
-        self.assertConstraint(Rectangle(0, 0), self.min_size)
-        self.assertConstraint(self.min_size, self.min_size)
-        self.assertConstraint(Rectangle(25, 25), Rectangle(25, 25))
-
-    def test_constrain_size_resize_inc(self):
-        self.hints = WMSizeHints(resize_inc=self.resize_inc)
-        self.assertConstraint(Rectangle(3, 5), Rectangle(1, 1))
-        self.assertConstraint(Rectangle(7, 14), Rectangle(7, 14))
-        self.assertConstraint(Rectangle(14, 19), Rectangle(13, 14))
-        self.assertConstraint(Rectangle(14, 27), Rectangle(13, 27))
-
-    def test_constrain_base_inc(self):
-        self.hints = WMSizeHints(resize_inc=self.resize_inc,
-                                 base_size=self.base_size)
-        self.assertConstraint(Rectangle(0, 0), self.base_size)
-        self.assertConstraint(self.base_size, self.base_size)
-        self.assertConstraint(Rectangle(5, 5), self.base_size)
-        self.assertConstraint(Rectangle(6, 13), self.base_size)
-        self.assertConstraint(Rectangle(10, 17), Rectangle(10, 17))
-        self.assertConstraint(Rectangle(12, 17), Rectangle(10, 17))
-        self.assertConstraint(Rectangle(16, 17), Rectangle(16, 17))
-        self.assertConstraint(Rectangle(22, 30), Rectangle(22, 30))
-
-    def test_constrain_min_base_inc(self):
-        self.hints = WMSizeHints(min_size=self.min_size,
-                                 resize_inc=self.resize_inc,
-                                 base_size=self.base_size)
-        self.assertConstraint(Rectangle(0, 0), self.min_size)
-        self.assertConstraint(self.base_size, self.min_size)
-        self.assertConstraint(self.min_size, self.min_size)
-        self.assertConstraint(Rectangle(12, 17), self.min_size)
-        self.assertConstraint(Rectangle(16, 17), Rectangle(16, 17))
-        self.assertConstraint(Rectangle(22, 30), Rectangle(22, 30))
 
 if __name__ == "__main__":
     unittest.main()

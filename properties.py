@@ -4,6 +4,7 @@
 
 from array import array
 from codecs import decode
+from operator import lt, gt
 from struct import Struct
 
 from xcb.xproto import Gravity
@@ -286,8 +287,8 @@ class WMSizeHints(PropertyValue):
                  "_min_width", "_min_height",
                  "_max_width", "_max_height",
                  "_width_inc", "_height_inc",
-                 "_min_aspect_numerator", "_min_aspect_denominator",
-                 "_max_aspect_numerator", "_max_aspect_denominator",
+                 "_min_aspect_width", "_min_aspect_height",
+                 "_max_aspect_width", "_max_aspect_height",
                  "_base_width", "_base_height",
                  "_win_gravity")
     property_format = 32
@@ -321,12 +322,10 @@ class WMSizeHints(PropertyValue):
                                ("_width_inc", "_height_inc"),
                                (1, 1))
     min_aspect = PropertyField(PAspect, AspectRatio,
-                               ("_min_aspect_numerator",
-                                "_min_aspect_denominator"),
+                               ("_min_aspect_width", "_min_aspect_height"),
                                (None, None))
     max_aspect = PropertyField(PAspect, AspectRatio,
-                               ("_max_aspect_numerator",
-                                "_max_aspect_denominator"),
+                               ("_max_aspect_width", "_max_aspect_height"),
                                (None, None))
     base_size = PropertyField(PBaseSize, Rectangle,
                               ("_base_width", "_base_height"),
@@ -336,6 +335,35 @@ class WMSizeHints(PropertyValue):
     win_gravity = PropertyField(PWinGravity, int,
                                 "_win_gravity",
                                 Gravity.NorthWest)
+
+    def constrain_window_size(self, size):
+        """Given a potential window size, return the closest allowable size."""
+        def constrain_aspect(size):
+            if not (self.flags & WMSizeHints.PAspect):
+                return size
+            if self.flags & WMSizeHints.PBaseSize:
+                size -= self.base_size
+            max_aspect = self.max_aspect
+            min_aspect = self.min_aspect
+            if max_aspect and max_aspect < size:
+                size = max_aspect.crop(size)
+            if min_aspect and min_aspect > size:
+                size = min_aspect.crop(size)
+            return size
+        def constrain_inc(size):
+            if not (self.flags & WMSizeHints.PResizeInc):
+                return size
+            base = self.base_size
+            inc = self.resize_inc
+            i = (size.width - base.width) // inc.width
+            j = (size.height - base.height) // inc.height
+            return Rectangle(base.width + (i * inc.width),
+                             base.height + (j * inc.height))
+        def constrain_min_max(size):
+            def min_max(i):
+                return min(max(size[i], self.min_size[i]), self.max_size[i])
+            return Rectangle(min_max(0), min_max(1))
+        return constrain_min_max(constrain_inc(constrain_aspect(size)))
 
 class WMHints(PropertyValue):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
