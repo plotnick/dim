@@ -3,7 +3,10 @@
 from collections import namedtuple
 from operator import add, sub, lt, le, eq, ne, gt, ge
 
-__all__ = ["Position", "Rectangle", "Geometry", "AspectRatio", "is_move_only"]
+from xcb.xproto import Gravity
+
+__all__ = ["Position", "Rectangle", "Geometry", "AspectRatio", "is_move_only",
+           "offset_gravity", "gravity_offset"]
 
 def make_tuple_adder(op):
     def add_sub_tuple(self, other):
@@ -59,18 +62,20 @@ Rectangle.__str__ = lambda self: "%ux%u" % self
 Rectangle.__unicode__ = lambda self: u"%u×%u" % self
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
-Geometry.resize = lambda self, other: \
-    self._replace(width=other.width, height=other.height)
 Geometry.__add__ = Geometry.__radd__ = make_geometry_adder(add)
 Geometry.__sub__ = make_geometry_adder(sub)
 Geometry.__nonzero__ = lambda self: \
     (self.x != 0 or self.y != 0 or
      self.width != 0 or self.height != 0 or
      self.border_width != 0)
-Geometry.__str__ = lambda self: "%ux%u%+d%+d" % \
-    (self.width, self.height, self.x, self.y)
-Geometry.__unicode__ = lambda self: u"%u×%u%+d%+d" % \
-    (self.width, self.height, self.x, self.y)
+Geometry.__str__ = lambda self: \
+    str(self.size()) + str(self.position())
+Geometry.__unicode__ = lambda self: \
+    unicode(self.size()) + unicode(self.position())
+Geometry.position = lambda self: Position(self.x, self.y)
+Geometry.size = lambda self: Rectangle(self.width, self.height)
+Geometry.resize = lambda self, other: \
+    self._replace(width=other.width, height=other.height)
 
 AspectRatio = namedtuple("AspectRatio", "width, height")
 AspectRatio.__nonzero__ = lambda self: \
@@ -97,3 +102,26 @@ def is_move_only(old, new):
             (new.width == old.width) and
             (new.height == old.height) and
             (new.border_width == old.border_width))
+
+# When dealing with window gravity, it's sometimes more convenient to use
+# a slightly richer representation than the simple enumeration specified
+# by the X11 protocol. Gravity values are just labels for the 8-cell Moore
+# neighborhood surrounding a center (including the center). We can label
+# them instead by their normalized Cartesian coordinates:
+#     ┌──────┬──────┬──────┐
+#     │ -1-1 │ +0-1 │ +1-1 │
+#     ├──────┼──────┼──────┤
+#     │ -1+0 │ +0+0 │ +1+0 │
+#     ├──────┼──────┼──────┤
+#     │ -1+1 │ +0+1 │ +1+1 │
+#     └──────┴──────┴──────┘
+offset_gravity = {Position(-1, -1): Gravity.NorthWest,
+                  Position(+0, -1): Gravity.North,
+                  Position(+1, -1): Gravity.NorthEast,
+                  Position(-1, +0): Gravity.West,
+                  Position(+0, +0): Gravity.Center,
+                  Position(+1, +0): Gravity.East,
+                  Position(-1, +1): Gravity.SouthWest,
+                  Position(+0, +1): Gravity.South,
+                  Position(+1, +1): Gravity.SouthEast}
+gravity_offset = dict((v, k) for k, v in offset_gravity.items())

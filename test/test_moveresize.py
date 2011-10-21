@@ -62,60 +62,60 @@ class TestClientResize(unittest.TestCase):
         resize.rollback()
         self.assertEqual(client.geometry, g)
         
-
-    def test_resize_bottom_right(self):
-        self.simple_resize_test(Position(10, 25),
-                                XC_bottom_right_corner,
-                                Position(5, 10),
-                                width=+5, height=+10)
-
-    def test_resize_center(self):
-        self.simple_resize_test(Position(7, 15),
-                                XC_bottom_right_corner,
-                                Position(5, 10),
-                                width=+5, height=+10)
-
-    def test_resize_bottom_side(self):
-        self.simple_resize_test(Position(5, 25),
-                                XC_bottom_side,
-                                Position(5, 10),
-                                height=+10)
-
-    def test_resize_bottom_left(self):
-        self.simple_resize_test(Position(1, 25),
-                                XC_bottom_left_corner,
-                                Position(5, 10),
-                                x=+5, width=-5, height=+10)
-
-    def test_resize_left_side(self):
-        self.simple_resize_test(Position(1, 15),
-                                XC_left_side,
-                                Position(5, 10),
-                                x=+5, width=-5)
-
-    def test_resize_top_left(self):
+    def test_resize_northwest(self):
         self.simple_resize_test(Position(1, 1),
                                 XC_top_left_corner,
                                 Position(5, 10),
                                 x=+5, width=-5, y=+10, height=-10)
 
-    def test_resize_top_side(self):
+    def test_resize_north(self):
         self.simple_resize_test(Position(5, 1),
                                 XC_top_side,
                                 Position(5, 10),
                                 y=+10, height=-10)
 
-    def test_resize_top_right(self):
+    def test_resize_northeast(self):
         self.simple_resize_test(Position(10, 1),
                                 XC_top_right_corner,
                                 Position(5, 10),
                                 width=+5, y=+10, height=-10)
 
-    def test_resize_right_side(self):
+    def test_resize_west(self):
+        self.simple_resize_test(Position(1, 15),
+                                XC_left_side,
+                                Position(5, 10),
+                                x=+5, width=-5)
+
+
+    def test_resize_center(self):
+        self.simple_resize_test(Position(7, 15),
+                                XC_fleur,
+                                Position(5, 10),
+                                x=+5, y=+10)
+
+    def test_resize_east(self):
         self.simple_resize_test(Position(10, 15),
                                 XC_right_side,
                                 Position(5, 10),
                                 width=+5)
+
+    def test_resize_southwest(self):
+        self.simple_resize_test(Position(1, 25),
+                                XC_bottom_left_corner,
+                                Position(5, 10),
+                                x=+5, width=-5, height=+10)
+
+    def test_resize_south(self):
+        self.simple_resize_test(Position(5, 25),
+                                XC_bottom_side,
+                                Position(5, 10),
+                                height=+10)
+
+    def test_resize_southeast(self):
+        self.simple_resize_test(Position(10, 25),
+                                XC_bottom_right_corner,
+                                Position(5, 10),
+                                width=+5, height=+10)
 
     def test_constrained_resize(self):
         g = Geometry(x=0, y=0, width=484, height=316, border_width=1)
@@ -189,7 +189,7 @@ class TestMoveResize(WMTestCase):
         self.event_loop(lambda: self.window.geometry == \
                             self.initial_geometry + delta)
 
-    def test_resize_bottom_right(self):
+    def test_resize_southeast(self):
         mod1 = self.modmap[MapIndex._1][0]
         but3 = self.pointer_map[3]
         delta = Position(5, 10)
@@ -203,7 +203,7 @@ class TestMoveResize(WMTestCase):
         self.event_loop(lambda: self.window.geometry == \
                             self.initial_geometry + Rectangle._make(delta))
 
-    def test_resize_top_left(self):
+    def test_resize_northwest(self):
         mod1 = self.modmap[MapIndex._1][0]
         but3 = self.pointer_map[3]
         delta = Position(5, 10)

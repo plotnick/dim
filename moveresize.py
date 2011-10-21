@@ -10,7 +10,7 @@ from event import UnhandledEvent, handler
 from geometry import *
 from keysym import *
 from manager import WindowManager, compress
-from xutil import GrabButtons
+from xutil import *
 
 class ClientUpdate(object):
     """A transactional client configuration change."""
@@ -49,51 +49,44 @@ class ClientResize(ClientUpdate):
         self.geometry = client.geometry
         self.size_hints = client.wm_normal_hints
 
-        # Determine which octant of the client window the initial button
-        # press occurred in. An octant is a represented by a position whose
-        # coordinates are ±1 or 0:
-        #     ┌──────┬──────┬──────┐
-        #     │ -1-1 │ +0-1 │ +1-1 │
-        #     ├──────┼──────┼──────┤
-        #     │ -1+0 │ +1+1 │ +1+0 │
-        #     ├──────┼──────┼──────┤
-        #     │ -1+1 │ +0+1 │ +1+1 │
-        #     └──────┴──────┴──────┘
-        # (Yes, Virginia, there are nine octants. But two of them are the
-        # same, and so there are effectively only eight.)
+        # We'll use the offset gravity representation; see comment in the
+        # geometry module for details. Technically, this is anti-gravity,
+        # since we'll be moving the specified reference point instead of
+        # keeping it fixed, but the concept is the same.
         def third(point, start, length):
             thirds = (start + length // 3, start + 2 * length // 3)
             return (-1 if point < thirds[0] else
                      0 if point < thirds[1] else
                      1)
-        octant = (third(point.x, self.geometry.x, self.geometry.width),
+        offset = (third(point.x, self.geometry.x, self.geometry.width),
                   third(point.y, self.geometry.y, self.geometry.height))
-        self.octant = Position(*(octant if octant != (0, 0) else (+1, +1)))
+        self.gravity = Position(*offset)
 
     def update(self, delta):
-        delta = Position(delta.x * self.octant.x, delta.y * self.octant.y)
-        old_size = Rectangle(self.geometry.width, self.geometry.height)
-        new_size = self.size_hints.constrain_window_size(old_size + delta)
-        if new_size != old_size:
-            offset = Position(new_size.width - old_size.width \
-                                  if self.octant.x < 0 \
-                                  else 0,
-                              new_size.height - old_size.height \
-                                  if self.octant.y < 0 \
-                                  else 0)
-            self.client.update_geometry(self.geometry.resize(new_size) - offset)
+        if self.gravity == (0, 0):
+            # Center gravity is just a move.
+            self.client.move(self.geometry.position() + delta)
+            return
+
+        # Depending on the gravity, resizing may involve a move, too.
+        size = self.geometry.size()
+        dsize = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
+        new_size = self.size_hints.constrain_window_size(size + dsize)
+        offset = (new_size.width - size.width if self.gravity.x < 0 else 0,
+                  new_size.height - size.height if self.gravity.y < 0 else 0)
+        self.client.update_geometry(self.geometry.resize(new_size) - offset)
 
     @property
-    def cursor(self, cursors={(+0, +0): XC_cross,
-                              (-1, -1): XC_top_left_corner,
+    def cursor(self, cursors={(-1, -1): XC_top_left_corner,
                               (+0, -1): XC_top_side,
                               (+1, -1): XC_top_right_corner,
+                              (-1, +0): XC_left_side,
+                              (+0, +0): XC_fleur,
                               (+1, +0): XC_right_side,
-                              (+1, +1): XC_bottom_right_corner,
-                              (+0, +1): XC_bottom_side,
                               (-1, +1): XC_bottom_left_corner,
-                              (-1, +0): XC_left_side}):
-        return cursors[self.octant]
+                              (+0, +1): XC_bottom_side,
+                              (+1, +1): XC_bottom_right_corner}):
+        return cursors[self.gravity]
 
     def rollback(self):
         self.client.update_geometry(self.geometry)
