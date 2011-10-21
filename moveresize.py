@@ -76,6 +76,16 @@ class ClientResize(ClientUpdate):
                   new_size.height - size.height if self.gravity.y < 0 else 0)
         self.client.update_geometry(self.geometry.resize(new_size) - offset)
 
+    def rollback(self):
+        self.client.update_geometry(self.geometry)
+        super(ClientResize, self).rollback()
+
+    def cycle_gravity(self, gravities=sorted(offset_gravity,
+                                             key=lambda x: x.phase())):
+        i = gravities.index(self.gravity)
+        self.gravity = gravities[(i + 1) % len(gravities)]
+        self.geometry = self.client.geometry
+
     @property
     def cursor(self, cursors={(-1, -1): XC_top_left_corner,
                               (+0, -1): XC_top_side,
@@ -87,10 +97,6 @@ class ClientResize(ClientUpdate):
                               (+0, +1): XC_bottom_side,
                               (+1, +1): XC_bottom_right_corner}):
         return cursors[self.gravity]
-
-    def rollback(self):
-        self.client.update_geometry(self.geometry)
-        super(ClientResize, self).rollback()
 
 class MoveResize(WindowManager):
     __grab_event_mask = (EventMask.ButtonPress |
@@ -121,6 +127,11 @@ class MoveResize(WindowManager):
         self.conn.core.ChangeActivePointerGrab(self.cursors[cursor],
                                                Time.CurrentTime,
                                                self.__grab_event_mask)
+
+    def query_pointer(self):
+        """Return the current pointer position."""
+        reply = self.conn.core.QueryPointer(self.screen.root).reply()
+        return Position(reply.root_x, reply.root_y)
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
@@ -163,11 +174,9 @@ class MoveResize(WindowManager):
     def handle_motion_notify(self, event):
         if not self.client_update:
             raise UnhandledEvent(event)
-        if event.detail == Motion.Hint:
-            q = self.conn.core.QueryPointer(self.screen.root).reply()
-            p = Position(q.root_x, q.root_y)
-        else:
-            p = Position(event.root_x, event.root_y)
+        p = (self.query_pointer() \
+                 if event.detail == Motion.Hint \
+                 else Position(event.root_x, event.root_y))
         self.client_update.update(p - self.button_press)
 
     @handler(KeyPressEvent)
@@ -179,3 +188,7 @@ class MoveResize(WindowManager):
                 self.client_update.rollback()
             finally:
                 self.client_update = None
+        elif XK_space in self.keymap[event.detail]:
+            self.button_press = self.query_pointer()
+            self.client_update.cycle_gravity()
+            self.change_cursor(self.client_update.cursor)
