@@ -18,6 +18,7 @@ class TestGeometryClasses(unittest.TestCase):
         self.assertEqual(p - p, (0, 0))
         self.assertEqual(p * 2, (200, -100))
         self.assertEqual(p * 2, 2 * p)
+        self.assertEqual(p // 2, (50, -25))
         self.assertEqual(str(p), "+100-50")
         self.assertFalse(Position(0, 0))
 
@@ -32,6 +33,7 @@ class TestGeometryClasses(unittest.TestCase):
         self.assertEqual(r - r, (0, 0))
         self.assertEqual(r * 2, (6, 10))
         self.assertEqual(r * 2, 2 * r)
+        self.assertEqual(r // 2, (1, 2))
         self.assertEqual(str(r), "3x5")
         self.assertFalse(Rectangle(0, 0))
 

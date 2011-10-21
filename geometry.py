@@ -26,6 +26,13 @@ def multiply_tuple(self, other):
     else:
         return NotImplemented
 
+def floor_divide_tuple(self, other):
+    """Divide the components of a named tuple by a scalar."""
+    if isinstance(other, (int, float)):
+        return self._make(x // other for x in self)
+    else:
+        return NotImplemented
+
 def make_geometry_adder(op):
     def add_sub_geometry(self, other):
         """Translate a geometry by a relative position or a scalar, or
@@ -50,6 +57,7 @@ Position = namedtuple("Position", "x, y")
 Position.__add__ = Position.__radd__ = make_tuple_adder(add)
 Position.__sub__ = make_tuple_adder(sub)
 Position.__mul__ = Position.__rmul__ = multiply_tuple
+Position.__floordiv__ = floor_divide_tuple
 Position.__nonzero__ = lambda self: self.x != 0 or self.y != 0
 Position.__str__ = lambda self: "%+d%+d" % self
 
@@ -57,6 +65,7 @@ Rectangle = namedtuple("Rectangle", "width, height")
 Rectangle.__add__ = Rectangle.__radd__ = make_tuple_adder(add)
 Rectangle.__sub__ = make_tuple_adder(sub)
 Rectangle.__mul__ = Rectangle.__rmul__ = multiply_tuple
+Rectangle.__floordiv__ = floor_divide_tuple
 Rectangle.__nonzero__ = lambda self: self.width != 0 or self.height != 0
 Rectangle.__str__ = lambda self: "%ux%u" % self
 Rectangle.__unicode__ = lambda self: u"%u×%u" % self
