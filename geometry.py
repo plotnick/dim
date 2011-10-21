@@ -1,5 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from cmath import phase
 from collections import namedtuple
 from operator import add, sub, lt, le, eq, ne, gt, ge
 
@@ -60,6 +61,8 @@ Position.__mul__ = Position.__rmul__ = multiply_tuple
 Position.__floordiv__ = floor_divide_tuple
 Position.__nonzero__ = lambda self: self.x != 0 or self.y != 0
 Position.__str__ = lambda self: "%+d%+d" % self
+Position.__abs__ = lambda self: abs(complex(*self))
+Position.phase = lambda self: phase(complex(*self))
 
 Rectangle = namedtuple("Rectangle", "width, height")
 Rectangle.__add__ = Rectangle.__radd__ = make_tuple_adder(add)
