@@ -20,13 +20,15 @@ class RaiseLower(WindowManager):
         assert raise_lower_mods != 0, "Invalid modifiers for raise/lower"
         assert raise_button != lower_button, \
             "Can't have raise and lower on the same button"
-        self.raise_lower_mods = raise_lower_mods
-        self.raise_button = raise_button
-        self.lower_button = lower_button
+        self.__modifiers = raise_lower_mods
+        self.__buttons = {
+            raise_button: lambda client: client.restack(StackMode.TopIf),
+            lower_button: lambda client: client.restack(StackMode.BottomIf)
+        }
 
         kwargs.update(grab_buttons=grab_buttons.merge({
-            (self.raise_button, self.raise_lower_mods): self.__grab_event_mask,
-            (self.lower_button, self.raise_lower_mods): self.__grab_event_mask
+            (raise_button, raise_lower_mods): self.__grab_event_mask,
+            (lower_button, raise_lower_mods): self.__grab_event_mask
         }))
         super(RaiseLower, self).__init__(conn, screen, **kwargs)
 
@@ -37,13 +39,8 @@ class RaiseLower(WindowManager):
         window = event.child
 
         if not window or \
-                modifiers != self.raise_lower_mods or \
-                button not in (self.raise_button, self.lower_button):
+                modifiers != self.__modifiers or \
+                button not in self.__buttons:
             raise UnhandledEvent(event)
 
-        client = self.get_client(window)
-        if button == self.raise_button:
-            client.restack(StackMode.TopIf)
-        elif button == self.lower_button:
-            client.restack(StackMode.BottomIf)
-        raise UnhandledEvent(event)
+        self.__buttons[button](self.get_client(window))

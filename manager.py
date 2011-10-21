@@ -139,13 +139,6 @@ class WindowManager(EventHandler):
         """Return a decorator for the given client."""
         return Decorator(self.conn, client)
 
-    def grab_keyboard(self):
-        self.conn.core.GrabKeyboard(False, self.screen.root, Time.CurrentTime,
-                                    GrabMode.Async, GrabMode.Async)
-
-    def ungrab_keyboard(self):
-        self.conn.core.UngrabKeyboard(Time.CurrentTime)
-
     def event_loop(self):
         """The main event loop of the window manager."""
         # We use a select-based loop instead of XCB's wait_for_event because

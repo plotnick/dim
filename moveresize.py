@@ -15,54 +15,73 @@ from xutil import *
 class ClientUpdate(object):
     """A transactional client configuration change."""
 
-    def __init__(self, client, start=lambda: None, end=lambda: None):
+    def __init__(self, client, pointer, cleanup, change_cursor):
         self.client = client
-        self.end = end
-        start()
+        self.geometry = client.geometry
+        self.pointer = pointer
+        self.cleanup = cleanup
+        self.change_cursor = change_cursor
 
-    def update(self, delta):
+    def delta(self, pointer):
+        return pointer - self.pointer
+
+    def update(self, pointer):
         pass
             
-    def commit(self):
-        self.end()
+    def commit(self, time):
+        self.cleanup(time)
 
-    def rollback(self):
-        self.end()
+    def rollback(self, time):
+        self.cleanup(time)
 
 class ClientMove(ClientUpdate):
     cursor = XC_fleur
 
-    def __init__(self, client, *args):
-        super(ClientMove, self).__init__(client, *args)
-        self.position = Position(client.geometry.x, client.geometry.y)
+    def __init__(self, *args):
+        super(ClientMove, self).__init__(*args)
+        self.position = self.geometry.position()
+        self.change_cursor(self.cursor)
 
-    def update(self, delta):
-        self.client.move(self.position + delta)
+    def update(self, pointer):
+        self.client.move(self.position + self.delta(pointer))
 
-    def rollback(self):
+    def rollback(self, time=Time.CurrentTime):
         self.client.move(self.position)
-        super(ClientMove, self).rollback()
+        super(ClientMove, self).rollback(time)
 
 class ClientResize(ClientUpdate):
-    def __init__(self, client, point, *args):
-        super(ClientResize, self).__init__(client, *args)
-        self.geometry = client.geometry
-        self.size_hints = client.wm_normal_hints
+    # Indexed by gravity offset.
+    cursors = {(-1, -1): XC_top_left_corner,
+               (+0, -1): XC_top_side,
+               (+1, -1): XC_top_right_corner,
+               (-1, +0): XC_left_side,
+               (+0, +0): XC_fleur,
+               (+1, +0): XC_right_side,
+               (-1, +1): XC_bottom_left_corner,
+               (+0, +1): XC_bottom_side,
+               (+1, +1): XC_bottom_right_corner}
+
+    def __init__(self, *args):
+        super(ClientResize, self).__init__(*args)
+        self.initial_geometry = self.geometry
+        self.size_hints = self.client.wm_normal_hints
 
         # We'll use the offset gravity representation; see comment in the
         # geometry module for details. Technically, this is anti-gravity,
         # since we'll be moving the specified reference point instead of
         # keeping it fixed, but the concept is the same.
-        def third(point, start, length):
+        def third(pointer, start, length):
             thirds = (start + length // 3, start + 2 * length // 3)
-            return (-1 if point < thirds[0] else
-                     0 if point < thirds[1] else
+            return (-1 if pointer < thirds[0] else
+                     0 if pointer < thirds[1] else
                      1)
-        offset = (third(point.x, self.geometry.x, self.geometry.width),
-                  third(point.y, self.geometry.y, self.geometry.height))
+        offset = (third(self.pointer.x, self.geometry.x, self.geometry.width),
+                  third(self.pointer.y, self.geometry.y, self.geometry.height))
         self.gravity = Position(*offset)
+        self.change_cursor(self.cursors[self.gravity])
 
-    def update(self, delta):
+    def update(self, pointer):
+        delta = self.delta(pointer)
         if self.gravity == (0, 0):
             # Center gravity is just a move.
             self.client.move(self.geometry.position() + delta)
@@ -76,27 +95,18 @@ class ClientResize(ClientUpdate):
                   new_size.height - size.height if self.gravity.y < 0 else 0)
         self.client.update_geometry(self.geometry.resize(new_size) - offset)
 
-    def rollback(self):
-        self.client.update_geometry(self.geometry)
-        super(ClientResize, self).rollback()
+    def rollback(self, time=Time.CurrentTime):
+        self.client.update_geometry(self.initial_geometry)
+        super(ClientResize, self).rollback(time)
 
-    def cycle_gravity(self, gravities=sorted(offset_gravity,
-                                             key=lambda x: x.phase())):
+    def cycle_gravity(self, pointer, time,
+                      gravities=sorted(offset_gravity,
+                                       key=lambda x: x.phase())):
         i = gravities.index(self.gravity)
         self.gravity = gravities[(i + 1) % len(gravities)]
+        self.change_cursor(self.cursors[self.gravity], time)
         self.geometry = self.client.geometry
-
-    @property
-    def cursor(self, cursors={(-1, -1): XC_top_left_corner,
-                              (+0, -1): XC_top_side,
-                              (+1, -1): XC_top_right_corner,
-                              (-1, +0): XC_left_side,
-                              (+0, +0): XC_fleur,
-                              (+1, +0): XC_right_side,
-                              (-1, +1): XC_bottom_left_corner,
-                              (+0, +1): XC_bottom_side,
-                              (+1, +1): XC_bottom_right_corner}):
-        return cursors[self.gravity]
+        self.pointer = pointer
 
 class MoveResize(WindowManager):
     __grab_event_mask = (EventMask.ButtonPress |
@@ -112,21 +122,15 @@ class MoveResize(WindowManager):
             "Invalid modifiers for move/resize"
         assert move_button != resize_button, \
             "Can't have move and resize on the same button"
-        self.move_resize_mods = move_resize_mods
-        self.move_button = move_button
-        self.resize_button = resize_button
-        self.client_update = None
+        self.__modifiers = move_resize_mods
+        self.__buttons = {move_button: ClientMove, resize_button: ClientResize}
+        self.moveresize = None
         
         kwargs.update(grab_buttons=grab_buttons.merge({
-            (self.move_button, self.move_resize_mods): self.__grab_event_mask,
-            (self.resize_button, self.move_resize_mods): self.__grab_event_mask
+            (move_button, move_resize_mods): self.__grab_event_mask,
+            (resize_button, move_resize_mods): self.__grab_event_mask
         }))
         super(MoveResize, self).__init__(conn, screen, **kwargs)
-
-    def change_cursor(self, cursor):
-        self.conn.core.ChangeActivePointerGrab(self.cursors[cursor],
-                                               Time.CurrentTime,
-                                               self.__grab_event_mask)
 
     def query_pointer(self):
         """Return the current pointer position."""
@@ -140,55 +144,50 @@ class MoveResize(WindowManager):
         window = event.child
 
         if not window or \
-                modifiers != self.move_resize_mods or \
-                button not in (self.move_button, self.resize_button):
+                modifiers != self.__modifiers or \
+                button not in self.__buttons:
             raise UnhandledEvent(event)
 
-        client = self.get_client(window)
-        self.button_press = Position(event.root_x, event.root_y)
-        if button == self.move_button:
-            self.client_update = ClientMove(client,
-                                            self.grab_keyboard,
-                                            self.ungrab_keyboard)
-        elif button == self.resize_button:
-            self.client_update = ClientResize(client,
-                                              self.button_press,
-                                              self.grab_keyboard,
-                                              self.ungrab_keyboard)
-        self.change_cursor(self.client_update.cursor)
-        raise UnhandledEvent(event)
+        self.conn.core.GrabKeyboard(False, self.screen.root, event.time,
+                                    GrabMode.Async, GrabMode.Async)
+
+        def ungrab(time=Time.CurrentTime):
+            self.conn.core.UngrabPointer(time)
+            self.conn.core.UngrabKeyboard(time)
+        def change_cursor(cursor, time=Time.CurrentTime):
+            self.conn.core.ChangeActivePointerGrab(self.cursors[cursor], time,
+                                                   self.__grab_event_mask)
+        action = self.__buttons[button]
+        self.moveresize = action(self.get_client(window),
+                                 Position(event.root_x, event.root_y),
+                                 ungrab, change_cursor)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
-        if not self.client_update:
+        if not self.moveresize:
             raise UnhandledEvent(event)
-        try:
-            self.client_update.commit()
-        except:
-            self.client_update.rollback()
-        finally:
-            self.client_update = None
+        self.moveresize.commit(event.time)
+        self.moveresize = None
 
     @handler(MotionNotifyEvent)
     @compress
     def handle_motion_notify(self, event):
-        if not self.client_update:
+        if not self.moveresize:
             raise UnhandledEvent(event)
-        p = (self.query_pointer() \
-                 if event.detail == Motion.Hint \
-                 else Position(event.root_x, event.root_y))
-        self.client_update.update(p - self.button_press)
+        self.moveresize.update(self.query_pointer() \
+                                   if event.detail == Motion.Hint \
+                                   else Position(event.root_x, event.root_y))
 
     @handler(KeyPressEvent)
     def handle_key_press(self, event):
-        if not self.client_update:
+        if not self.moveresize:
             raise UnhandledEvent(event)
-        if XK_Escape in self.keymap[event.detail]:
-            try:
-                self.client_update.rollback()
-            finally:
-                self.client_update = None
-        elif XK_space in self.keymap[event.detail]:
-            self.button_press = self.query_pointer()
-            self.client_update.cycle_gravity()
-            self.change_cursor(self.client_update.cursor)
+        keysym = self.keymap.lookup_key(event.detail, event.state)
+        if keysym == XK_Escape:
+            self.moveresize.rollback(event.time)
+            self.moveresize = None
+        elif keysym == XK_Return:
+            self.moveresize.commit(event.time)
+            self.moveresize = None
+        elif keysym == XK_space:
+            self.moveresize.cycle_gravity(self.query_pointer(), event.time)

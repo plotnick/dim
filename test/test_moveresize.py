@@ -37,23 +37,30 @@ class TestClientMove(unittest.TestCase):
     def test_move(self):
         g = Geometry(x=5, y=10, width=20, height=30, border_width=1)
         client = MockClient(self, g)
-        move = ClientMove(client)
+        def cleanup(time):
+            self.assertEqual(time, Time.CurrentTime)
+        def change_cursor(cursor):
+            self.assertEqual(cursor, ClientMove.cursor)
+        move = ClientMove(client, Position(0, 0), cleanup, change_cursor)
 
-        delta = Position(5, 10)
-        move.update(delta)
-        self.assertEqual(client.geometry, g + delta)
+        pointer = Position(5, 10)
+        move.update(pointer)
+        self.assertEqual(client.geometry, g + pointer)
 
         move.rollback()
         self.assertEqual(client.geometry, g)
 
 class TestClientResize(unittest.TestCase):
-    def simple_resize_test(self, point, cursor, delta, **offsets):
+    def simple_resize_test(self, pointer, cursor, delta, **offsets):
         g = Geometry(x=0, y=0, width=15, height=30, border_width=1)
         client = MockClient(self, g)
-        resize = ClientResize(client, point)
-        self.assertEqual(resize.cursor, cursor)
+        def cleanup(time):
+            self.assertEqual(time, Time.CurrentTime)
+        def change_cursor(new_cursor):
+            self.assertEqual(cursor, new_cursor)
+        resize = ClientResize(client, pointer, cleanup, change_cursor)
 
-        resize.update(delta)
+        resize.update(pointer + delta)
         d = g._asdict()
         for k, v in offsets.items():
             d[k] += v
@@ -85,7 +92,6 @@ class TestClientResize(unittest.TestCase):
                                 XC_left_side,
                                 Position(5, 10),
                                 x=+5, width=-5)
-
 
     def test_resize_center(self):
         self.simple_resize_test(Position(7, 15),
@@ -125,16 +131,20 @@ class TestClientResize(unittest.TestCase):
         client = MockClient(self, g, WMSizeHints(min_size=min,
                                                  resize_inc=inc,
                                                  base_size=base))
-        resize = ClientResize(client, Position(480, 300))
-        self.assertEqual(resize.cursor, XC_bottom_right_corner)
+        def cleanup(time):
+            self.assertEqual(time, Time.CurrentTime)
+        def change_cursor(cursor):
+            self.assertEqual(cursor, XC_bottom_right_corner)
+        pointer = Position(480, 300)
+        resize = ClientResize(client, pointer, cleanup, change_cursor)
 
-        resize.update(Position(5, 10)) # < resize increment
+        resize.update(pointer + Position(5, 10)) # < resize increment
         self.assertEqual(client.geometry, g)
-        resize.update(Position._make(inc))
+        resize.update(pointer + Position._make(inc))
         self.assertEqual(client.geometry, g.resize(inc + (g.width, g.height)))
-        resize.update(Position(-2 * inc.width, -2 * inc.height))
+        resize.update(pointer + Position(-2 * inc.width, -2 * inc.height))
         self.assertEqual(client.geometry, g + Rectangle._make(-2 * inc))
-        resize.update(Position(-1000, -1000))
+        resize.update(pointer + Position(-1000, -1000))
         self.assertEqual(client.geometry, g.resize(min))
 
         resize.rollback()
