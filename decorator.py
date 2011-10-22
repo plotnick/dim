@@ -7,6 +7,7 @@ from logging import debug, info, warning, error
 from xcb.xproto import *
 
 from geometry import *
+from xutil import textitem16
 
 class Decorator(object):
     def __init__(self, conn, client,
@@ -188,9 +189,14 @@ class TitleDecorator(FrameDecorator):
         self.conn.core.ClearArea(False, self.titlebar, 0, 0, 0, 0)
         if title:
             debug('Drawing title "%s".' % title)
+
+            # Cache the string we're drawing for refresh.
             self.title = title
-            self.conn.core.ImageText8(len(title), self.titlebar,
-                                      self.title_gc, x, self.baseline, title)
+
+            text_items = list(textitem16(title))
+            self.conn.core.PolyText16(self.titlebar, self.title_gc,
+                                      x, self.baseline,
+                                      len(text_items), "".join(text_items))
 
     def frame_geometry(self):
         geometry = self.client.geometry._replace(border_width=self.border_width)
