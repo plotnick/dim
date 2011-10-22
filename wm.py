@@ -12,15 +12,12 @@ from raiselower import RaiseLower
 
 class BaseWM(ReparentingWindowManager, MoveResize, RaiseLower):
     def init_gcs(self):
-        self.title_font = conn.generate_id()
-        self.conn.core.OpenFont(self.title_font, len("fixed"), "fixed")
-
         self.title_gc = conn.generate_id()
         self.conn.core.CreateGC(self.title_gc, self.screen.root,
                                 GC.Foreground | GC.Background | GC.Font,
                                 [self.screen.white_pixel,
                                  self.screen.black_pixel,
-                                 self.title_font])
+                                 self.fonts["fixed"]])
 
     def decorator(self, client):
         return TitleDecorator(self.conn, client, self.title_gc)

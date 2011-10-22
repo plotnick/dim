@@ -14,6 +14,7 @@ from color import ColorCache
 from cursor import FontCursor
 from decorator import Decorator, FrameDecorator
 from event import UnhandledEvent, EventHandler, handler
+from font import FontCache
 from geometry import *
 from keymap import KeymapError, KeyboardMap
 from properties import *
@@ -43,6 +44,7 @@ class WindowManager(EventHandler):
         self.atoms = AtomCache(conn)
         self.colors = ColorCache(conn, self.screen.default_colormap)
         self.cursors = FontCursor(conn)
+        self.fonts = FontCache(conn)
         self.keymap = KeyboardMap(conn)
         self.next_event = None
         self.subwindow_handlers = {}
