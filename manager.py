@@ -45,6 +45,7 @@ class WindowManager(EventHandler):
         self.cursors = FontCursor(conn)
         self.keymap = KeyboardMap(conn)
         self.next_event = None
+        self.subwindow_handlers = {}
 
         # Make this client a window manager by selecting (at least)
         # SubstructureRedirect events on the root window. If another client
@@ -64,8 +65,14 @@ class WindowManager(EventHandler):
                                              self.screen.root, Cursor._None,
                                              button, modifiers).check()
 
+        # Set up fonts, graphics contexts, &c.
+        self.init_gcs()
+
         # Adopt any suitable top-level windows.
         self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
+
+    def init_gcs(self):
+        pass
 
     def adopt(self, windows):
         """Adopt existing top-level windows."""
@@ -110,10 +117,11 @@ class WindowManager(EventHandler):
         client.decorator.undecorate()
         return client
             
-    def unmanage(self, window):
-        """Unmanage the client with the given top-level window."""
-        debug("Unmanaging window 0x%x." % window)
-        return self.clients.pop(window, None)
+    def unmanage(self, client):
+        """Unmanage the given client."""
+        debug("Unmanaging client window 0x%x." % client.window)
+        client.decorator.undecorate()
+        return self.clients.pop(client.window)
 
     def place(self, client, geometry):
         """Place a client window and return the geometry actually configured,
@@ -174,11 +182,6 @@ class WindowManager(EventHandler):
         else:
             return self.conn.poll_for_event()
 
-    def unhandled_event(self, event):
-        debug("Ignoring unhandled %s on window 0x%x." %
-              (event.__class__.__name__,
-               event.event if hasattr(event, "event") else event.window))
-
     def get_client(self, window, client_only=False):
         """Retrieve the client with the given top-level window, or raise an
         UnhandledEvent exception if there is no such client. Intended for
@@ -192,6 +195,26 @@ class WindowManager(EventHandler):
             return self.clients[window]
         except KeyError:
             raise UnhandledEvent
+
+    def register_subwindow_handler(self, event_class, window, handler):
+        debug("Registering %s handler for subwindow 0x%x." %
+              (event_class.__name__, window))
+        if event_class not in self.subwindow_handlers:
+            self.subwindow_handlers[event_class] = {}
+        self.subwindow_handlers[event_class][window] = handler
+
+    def unhandled_event(self, event):
+        def event_window(event):
+            # This is totally wrong.
+            return event.event if hasattr(event, "event") else event.window
+        window = event_window(event)
+        event_class = type(event)
+        if event_class in self.subwindow_handlers:
+            if window in self.subwindow_handlers[event_class]:
+                self.subwindow_handlers[event_class][window](event)
+        else:
+            debug("Ignoring unhandled %s on window 0x%x." %
+                  (event.__class__.__name__, window))
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
@@ -269,9 +292,12 @@ class WindowManager(EventHandler):
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
-        """Note the destruction of a top-level window, and unmanage the
-        corresponding client."""
-        self.unmanage(event.window)
+        """Note the destruction of a managed window."""
+        for event_class, handlers in self.subwindow_handlers.items():
+            if handlers.pop(event.window, None):
+                debug("Removed %s handler for subwindow 0x%x." %
+                      (event_class.__name__, event.window))
+        self.unmanage(self.get_client(event.window))
 
     @handler(MappingNotifyEvent)
     def handle_mapping_notify(self, event):
@@ -312,11 +338,9 @@ class ReparentingWindowManager(WindowManager):
             self.frames[client.frame] = client
         return client
 
-    def unmanage(self, window):
-        client = super(ReparentingWindowManager, self).unmanage(window)
-        if client:
-            self.frames.pop(client.frame)
-        return client
+    def unmanage(self, client):
+        self.frames.pop(client.frame)
+        return super(ReparentingWindowManager, self)
 
     def decorator(self, client):
         return FrameDecorator(self.conn, client)
