@@ -145,9 +145,14 @@ class TitleDecorator(FrameDecorator):
                         EventMask.EnterWindow |
                         EventMask.LeaveWindow)
 
-    def __init__(self, conn, client, title_gc, **kwargs):
+    def __init__(self, conn, client, title_gc, title_padding=6, **kwargs):
         super(TitleDecorator, self).__init__(conn, client, **kwargs)
         self.title_gc = title_gc
+        info = client.manager.fonts.info(title_gc)
+        self.baseline = title_padding // 2 + info.font_ascent
+        self.titlebar_height = (info.font_ascent +
+                                info.font_descent +
+                                title_padding)
 
     def decorate(self):
         super(TitleDecorator, self).decorate()
@@ -177,7 +182,7 @@ class TitleDecorator(FrameDecorator):
         if event.count == 0:
             self.draw_title(self.title)
 
-    def draw_title(self, title=None):
+    def draw_title(self, title=None, x=5):
         if title is None:
             title = self.client.wm_name
         self.conn.core.ClearArea(False, self.titlebar, 0, 0, 0, 0)
@@ -185,9 +190,9 @@ class TitleDecorator(FrameDecorator):
             debug('Drawing title "%s".' % title)
             self.title = title
             self.conn.core.ImageText8(len(title), self.titlebar,
-                                      self.title_gc, 5, 15, title)
+                                      self.title_gc, x, self.baseline, title)
 
-    def frame_geometry(self, titlebar_height=20):
+    def frame_geometry(self):
         geometry = self.client.geometry._replace(border_width=self.border_width)
-        geometry += Rectangle(0, titlebar_height)
-        return (geometry, Position(0, titlebar_height))
+        geometry += Rectangle(0, self.titlebar_height)
+        return (geometry, Position(0, self.titlebar_height))
