@@ -11,13 +11,15 @@ from moveresize import MoveResize
 from raiselower import RaiseLower
 
 class BaseWM(ReparentingWindowManager, MoveResize, RaiseLower):
+    title_font = "fixed"
+
     def init_gcs(self):
         self.title_gc = conn.generate_id()
         self.conn.core.CreateGC(self.title_gc, self.screen.root,
                                 GC.Foreground | GC.Background | GC.Font,
                                 [self.screen.white_pixel,
                                  self.screen.black_pixel,
-                                 self.fonts["fixed"]])
+                                 self.fonts[self.title_font]])
 
     def decorator(self, client):
         return TitleDecorator(self.conn, client, self.title_gc)
@@ -45,6 +47,9 @@ if __name__ == "__main__":
                          type="choice", choices=focus_modes.keys(),
                          default="pointer",
                          help='focus mode: pointer, sloppy, or click')
+    optparser.add_option("-t", "--title-font", dest="title_font",
+                         default="fixed",
+                         help="client window title font")
     (options, args) = optparser.parse_args()
     if options.version:
         print "Python Window Manager version 0.0"
@@ -57,7 +62,7 @@ if __name__ == "__main__":
     conn = xcb.connect(options.display)
     wm = type("WM",
               (focus_modes[options.focus_mode], BaseWM),
-              dict())(conn)
+              dict(title_font=options.title_font))(conn)
     try:
         wm.event_loop()
     except KeyboardInterrupt:
