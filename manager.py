@@ -68,13 +68,23 @@ class WindowManager(EventHandler):
                                              button, modifiers).check()
 
         # Set up fonts, graphics contexts, &c.
-        self.init_gcs()
+        self.init_graphics()
 
         # Adopt any suitable top-level windows.
         self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
 
-    def init_gcs(self):
-        pass
+    def init_graphics(self):
+        self.black_gc = self.conn.generate_id()
+        self.conn.core.CreateGC(self.black_gc, self.screen.root,
+                                GC.Foreground | GC.Background,
+                                [self.screen.black_pixel,
+                                 self.screen.white_pixel])
+
+        self.white_gc = self.conn.generate_id()
+        self.conn.core.CreateGC(self.white_gc, self.screen.root,
+                                GC.Foreground | GC.Background,
+                                [self.screen.white_pixel,
+                                 self.screen.black_pixel])
 
     def adopt(self, windows):
         """Adopt existing top-level windows."""

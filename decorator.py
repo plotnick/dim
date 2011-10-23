@@ -6,6 +6,7 @@ from logging import debug, info, warning, error
 
 from xcb.xproto import *
 
+from color import *
 from geometry import *
 from xutil import textitem16
 
@@ -140,20 +141,66 @@ class FrameDecorator(Decorator):
                                               CW.BorderPixel,
                                               [self.unfocused_color])
 
+class TitlebarConfig(object):
+    def __init__(self, manager, fg_color, bg_color, font):
+        assert isinstance(fg_color, Color)
+        assert isinstance(bg_color, Color)
+        assert isinstance(font, (str, int))
+
+        conn = manager.conn
+        root = manager.screen.root
+        font = manager.fonts[font] if isinstance(font, str) else font
+        info = manager.fonts.info(font)
+
+        # Padding is based on the font descent, plus 2 pixels for the relief
+        # edge, with a small scaling factor.
+        pad = (info.font_descent + 2) * 6 // 5
+        self.height = 2 * pad + info.font_ascent + info.font_descent
+        self.baseline = pad + info.font_ascent
+
+        self.black_gc = manager.black_gc
+
+        self.fg_gc = conn.generate_id()
+        conn.core.CreateGC(self.fg_gc, root,
+                           GC.Foreground | GC.Background | GC.Font,
+                           [manager.colors[fg_color],
+                            manager.colors[bg_color],
+                            font])
+
+        self.bg_gc = conn.generate_id()
+        conn.core.CreateGC(self.bg_gc, root,
+                           GC.Foreground | GC.Background,
+                           [manager.colors[bg_color],
+                            manager.colors[fg_color]])
+
+        high, low = self.highlight(bg_color)
+        self.highlight_gc = conn.generate_id()
+        conn.core.CreateGC(self.highlight_gc, root,
+                           GC.Foreground, [manager.colors[high]])
+        self.lowlight_gc = conn.generate_id()
+        conn.core.CreateGC(self.lowlight_gc, root,
+                           GC.Foreground, [manager.colors[low]])
+
+    @staticmethod
+    def highlight(color):
+        h, s, v = color.hsv()
+        return (HSVColor(h, s, (3.0 + v) / 4.0),
+                HSVColor(h, s, (1.0 + v) / 4.0))
+
 class TitleDecorator(FrameDecorator):
     frame_event_mask = (EventMask.SubstructureRedirect |
                         EventMask.SubstructureNotify |
                         EventMask.EnterWindow |
                         EventMask.LeaveWindow)
 
-    def __init__(self, conn, client, title_gc, title_padding=6, **kwargs):
-        super(TitleDecorator, self).__init__(conn, client, **kwargs)
-        self.title_gc = title_gc
-        info = client.manager.fonts.info(title_gc)
-        self.baseline = title_padding // 2 + info.font_ascent
-        self.titlebar_height = (info.font_ascent +
-                                info.font_descent +
-                                title_padding)
+    def __init__(self, conn, client,
+                 focused_title_config, unfocused_title_config,
+                 **kwargs):
+        self.title_configs = (unfocused_title_config, focused_title_config)
+        self.config = self.title_configs[0] # reassigned by focus, unfocus
+        super(TitleDecorator, self).__init__(conn, client,
+                                             unfocused_color="black",
+                                             **kwargs)
 
     def decorate(self):
         super(TitleDecorator, self).decorate()
@@ -166,9 +213,7 @@ class TitleDecorator(FrameDecorator):
                                     0, 0, self.geometry.width, self.offset.y, 0,
                                     WindowClass.InputOutput,
                                     self.screen.root_visual,
-                                    CW.BackPixel | CW.EventMask,
-                                    [self.screen.black_pixel,
-                                     EventMask.Exposure])
+                                    CW.EventMask, [EventMask.Exposure])
         self.conn.core.MapWindow(self.titlebar)
         self.client.manager.register_subwindow_handler(ExposeEvent,
                                                        self.titlebar,
@@ -178,27 +223,49 @@ class TitleDecorator(FrameDecorator):
         super(TitleDecorator, self).undecorate()
         self.conn.core.DestroyWindow(self.titlebar)
 
-    def refresh(self, event):
-        assert isinstance(event, ExposeEvent)
-        if event.count == 0:
+    def refresh(self, event=None):
+        if event is None or \
+                (isinstance(event, ExposeEvent) and event.count == 0):
             self.draw_title(self.title)
 
     def draw_title(self, title=None, x=5):
         if title is None:
             title = self.client.wm_name
-        self.conn.core.ClearArea(False, self.titlebar, 0, 0, 0, 0)
-        if title:
-            debug('Drawing title "%s".' % title)
 
+        w = self.geometry.width - 1
+        h = self.config.height - 2
+        self.conn.core.PolyFillRectangle(self.titlebar, self.config.bg_gc,
+                                         1, [0, 0, w, h])
+
+        # Give the titlebar a subtle relief effect.
+        self.conn.core.PolyLine(CoordMode.Origin, self.titlebar,
+                                self.config.highlight_gc,
+                                3, [0, h, 0, 0, w, 0])
+        self.conn.core.PolyLine(CoordMode.Origin, self.titlebar,
+                                self.config.lowlight_gc,
+                                3, [w, 1, w, h, 1, h])
+        self.conn.core.PolyLine(CoordMode.Origin, self.titlebar,
+                                self.config.black_gc,
+                                2, [0, h + 1, w, h + 1])
+
+        if title:
             # Cache the string we're drawing for refresh.
             self.title = title
 
             text_items = list(textitem16(title))
-            self.conn.core.PolyText16(self.titlebar, self.title_gc,
-                                      x, self.baseline,
+            self.conn.core.PolyText16(self.titlebar, self.config.fg_gc,
+                                      x, self.config.baseline,
                                       len(text_items), "".join(text_items))
 
     def frame_geometry(self):
-        geometry = self.client.geometry._replace(border_width=self.border_width)
-        geometry += Rectangle(0, self.titlebar_height)
-        return (geometry, Position(0, self.titlebar_height))
+        geometry = self.client.geometry._replace(border_width=1)
+        geometry += Rectangle(0, self.config.height)
+        return (geometry, Position(0, self.config.height))
+
+    def focus(self):
+        self.config = self.title_configs[1]
+        self.refresh()
+
+    def unfocus(self):
+        self.config = self.title_configs[0]
+        self.refresh()

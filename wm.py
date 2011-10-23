@@ -3,7 +3,8 @@
 
 from xcb.xproto import *
 
-from decorator import TitleDecorator
+from color import RGBi
+from decorator import TitlebarConfig, TitleDecorator
 from event import handler
 from focus import FocusFollowsMouse, SloppyFocus, ClickToFocus
 from manager import ReparentingWindowManager, compress
@@ -13,16 +14,21 @@ from raiselower import RaiseLower
 class BaseWM(ReparentingWindowManager, MoveResize, RaiseLower):
     title_font = "fixed"
 
-    def init_gcs(self):
-        self.title_gc = conn.generate_id()
-        self.conn.core.CreateGC(self.title_gc, self.screen.root,
-                                GC.Foreground | GC.Background | GC.Font,
-                                [self.screen.white_pixel,
-                                 self.screen.black_pixel,
-                                 self.fonts[self.title_font]])
+    def init_graphics(self):
+        super(BaseWM, self).init_graphics()
+        self.focused_title_config = TitlebarConfig(self,
+                                                   RGBi(1.0, 1.0, 1.0),
+                                                   RGBi(0.0, 0.0, 0.0),
+                                                   self.title_font)
+        self.unfocused_title_config = TitlebarConfig(self,
+                                                     RGBi(0.0, 0.0, 0.0),
+                                                     RGBi(0.75, 0.75, 0.75),
+                                                     self.title_font)
 
     def decorator(self, client):
-        return TitleDecorator(self.conn, client, self.title_gc)
+        return TitleDecorator(self.conn, client,
+                              self.focused_title_config,
+                              self.unfocused_title_config)
 
 if __name__ == "__main__":
     from optparse import OptionParser
