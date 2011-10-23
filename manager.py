@@ -20,10 +20,32 @@ from keymap import KeymapError, KeyboardMap
 from properties import *
 from xutil import *
 
+__all__ = ["ExitWindowManager", "NoSuchClient", "compress",
+           "WindowManager", "ReparentingWindowManager"]
+
 class ExitWindowManager(Exception):
     """An event handler may raise an exception of this type in order to break
     out of the main event loop."""
     pass
+
+class NoSuchClient(UnhandledEvent):
+    """Raised to indicate that there is no client currentlly being managed
+    with the given top-level window."""
+    pass
+
+def compress(handler):
+    """Decorator factory that wraps an event handler method with compression.
+    That is, if the next event is available and of the same type as the current
+    event, it is handled by simply returning and waiting for the next event.
+    Otherwise, the normal handler is invoked as usual.
+
+    Depends on the event interface defined used by the WindowManager class."""
+    @wraps(handler)
+    def compressed_handler(self, event):
+        if isinstance(self.peek_next_event(), type(event)):
+            return
+        return handler(self, event)
+    return compressed_handler
 
 class WindowManager(EventHandler):
     """A window manager for one X screen.
@@ -206,7 +228,7 @@ class WindowManager(EventHandler):
         try:
             return self.clients[window]
         except KeyError:
-            raise UnhandledEvent
+            raise NoSuchClient
 
     def register_subwindow_handler(self, event_class, window, handler):
         debug("Registering %s handler for subwindow 0x%x." %
@@ -398,15 +420,3 @@ class ReparentingWindowManager(WindowManager):
                                    event.border_width)
         debug("Noting frame geometry for client 0x%x as %s." %
               (client.window, client.geometry))
-
-def compress(handler):
-    """Decorator factory that wraps an event handler method with compression.
-    That is, if the next event is available and of the same type as the current
-    event, it is handled by simply returning and waiting for the next event.
-    Otherwise, the normal handler is invoked as usual."""
-    @wraps(handler)
-    def compressed_handler(self, event):
-        if isinstance(self.peek_next_event(), type(event)):
-            return
-        return handler(self, event)
-    return compressed_handler

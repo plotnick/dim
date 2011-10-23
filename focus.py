@@ -5,7 +5,7 @@ from logging import basicConfig as logconfig, debug, info, warning, error
 from xcb.xproto import *
 
 from event import UnhandledEvent, handler
-from manager import WindowManager, ReparentingWindowManager
+from manager import NoSuchClient, WindowManager, ReparentingWindowManager
 
 __all__ = ["FocusFollowsMouse", "SloppyFocus", "ClickToFocus"]
 
@@ -69,8 +69,12 @@ class FocusPolicy(WindowManager):
             self.reparenting_initial_clients = None
 
         def focus(window):
+            try:
+                client = self.get_client(window)
+            except NoSuchClient:
+                return
             debug("Setting initial focus to window 0x%x." % window)
-            self.focus(self.get_client(window), InitialFocusEvent(window))
+            self.focus(client, InitialFocusEvent(window))
 
         window = self.conn.core.GetInputFocus().reply().focus
         if window == InputFocus.PointerRoot:
