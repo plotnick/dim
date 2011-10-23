@@ -8,6 +8,9 @@ import re
 
 from xutil import card16, int16
 
+__all__ = ["Color", "RGBColor", "RGBi", "HSVColor",
+           "InvalidColorSpec", "parse_color", "ColorCache"]
+
 class Color(tuple):
     __slots__ = ()
 
@@ -46,20 +49,20 @@ class HSVColor(Color, namedtuple("HSV", "hue, saturation, value")):
     def rgb(self):
         return self.rgbi().rgb()
 
-class InvalidColorName(Exception):
+class InvalidColorSpec(Exception):
     pass
 
 def parse_color(name, pattern=re.compile("#([0-9a-z]+)$", re.I)):
     """Parse a device-independent hexadecimal color specification."""
     match = pattern.match(name)
     if not match:
-        raise InvalidColorName
+        raise InvalidColorSpec
     spec = match.group(1)
 
     # Adapted from XParseColor.
     n = len(spec)
     if n != 3 and n != 6 and n != 9 and n != 12:
-        raise InvalidColorName
+        raise InvalidColorSpec
     n //= 3
     g = b = 0
     i = 0
@@ -89,7 +92,7 @@ class ColorCache(object):
                 return self.colors[key]
             try:
                 color = parse_color(key)
-            except InvalidColorName:
+            except InvalidColorSpec:
                 # Assume the key is a color name, and ask the server to
                 # look it up.
                 reply = self.conn.core.AllocNamedColor(self.cmap,
