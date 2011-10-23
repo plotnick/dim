@@ -3,19 +3,22 @@
 from __future__ import division
 
 from collections import namedtuple
-from colorsys import rgb_to_hsv, hsv_to_rgb
+from colorsys import rgb_to_hsv, rgb_to_hls, hsv_to_rgb, hls_to_rgb
 import re
 
 from xutil import card16, int16
 
-__all__ = ["Color", "RGBColor", "RGBi", "HSVColor",
+__all__ = ["Color", "RGBColor", "RGBi", "HSVColor", "HLSColor",
            "InvalidColorSpec", "parse_color", "ColorCache"]
 
 class Color(tuple):
     __slots__ = ()
 
     def rgb(self):
-        return None
+        return self.rgbi().rgb()
+
+    def rgbi(self):
+        return self.rgb().rgbi()
 
 class RGBColor(Color, namedtuple("RGB", "red, green, blue")):
     __slots__ = ()
@@ -29,6 +32,9 @@ class RGBColor(Color, namedtuple("RGB", "red, green, blue")):
 
     def hsv(self):
         return HSVColor(*rgb_to_hsv(*self.rgbi()))
+
+    def hls(self):
+        return HLSColor(*rgb_to_hls(*self.rgbi()))
 
 class RGBi(RGBColor):
     __slots__ = ()
@@ -46,8 +52,11 @@ class HSVColor(Color, namedtuple("HSV", "hue, saturation, value")):
     def rgbi(self):
         return RGBi(*hsv_to_rgb(*self))
 
-    def rgb(self):
-        return self.rgbi().rgb()
+class HLSColor(Color, namedtuple("HLS", "hue, lightness, saturation")):
+    __slots__ = ()
+
+    def rgbi(self):
+        return RGBi(*hls_to_rgb(*self))
 
 class InvalidColorSpec(Exception):
     pass
