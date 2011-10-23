@@ -3,7 +3,7 @@
 from __future__ import division
 
 from collections import namedtuple
-from math import isnan
+from colorsys import rgb_to_hsv, hsv_to_rgb
 import re
 
 from xutil import card16, int16
@@ -20,18 +20,12 @@ class RGBColor(Color, namedtuple("RGB", "red, green, blue")):
     def rgb(self):
         return self
 
-    def hsv(self):
-        # See the Wikipedia article on HSL and HSV.
+    def rgbi(self):
         r, g, b = self
-        v = max(r, g, b)
-        c = v - min(r, g, b)
-        s = 0 if c == 0 else c / v
-        h = (float("NaN") if c == 0 else
-             ((g - b) / c) % 6 if v == r else
-             ((b - r) / c) + 2 if v == g else
-             ((r - g) / c) + 4)
-        h *= 60
-        return HSVColor(h, s, v)
+        return RGBi(r / 0xffff, g / 0xffff, b / 0xffff)
+
+    def hsv(self):
+        return HSVColor(*rgb_to_hsv(*self.rgbi()))
 
 class RGBi(RGBColor):
     __slots__ = ()
@@ -40,37 +34,17 @@ class RGBi(RGBColor):
         r, g, b = self
         return RGBColor(int16(r * 0xffff), int16(g * 0xffff), int16(b * 0xffff))
 
+    def rgbi(self):
+        return self
+
 class HSVColor(Color, namedtuple("HSV", "hue, saturation, value")):
     __slots__ = ()
 
     def rgbi(self):
-        # See the Wikipedia article on HSL and HSV.
-        h, s, v = self
-        h %= 360
-        assert 0.0 <= s <= 1.0
-        assert 0.0 <= v <= 1.0
-
-        c = v * s
-        i = h / 60
-        x = c * (1 - abs((i % 2) - 1))
-        r, g, b = ((0, 0, 0) if isnan(h) else
-                   (c, x, 0) if 0 <= i < 1 else 
-                   (x, c, 0) if 1 <= i < 2 else
-                   (0, c, x) if 2 <= i < 3 else
-                   (0, x, c) if 3 <= i < 4 else
-                   (x, 0, c) if 4 <= i < 5 else
-                   (c, 0, x))
-        m = v - c
-        return RGBi(r + m, g + m, b + m)
+        return RGBi(*hsv_to_rgb(*self))
 
     def rgb(self):
         return self.rgbi().rgb()
-
-    def __eq__(self, other):
-        return ((True if isnan(self.hue) and isnan(other.hue) else
-                 self.hue == other.hue) and
-                self.saturation == other.saturation and
-                self.value == other.value)
 
 class InvalidColorName(Exception):
     pass
