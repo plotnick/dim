@@ -8,6 +8,7 @@ from xcb.xproto import *
 import xcb.xtest
 
 from cursor import *
+from decorator import Decorator
 from geometry import *
 from keymap import *
 from moveresize import ClientMove, ClientResize, MoveResize
@@ -18,6 +19,8 @@ class MockClient(object):
     def __init__(self, test, geometry, size_hints=WMSizeHints()):
         self.test = test
         self.geometry = geometry
+        self.screen = None
+        self.decorator = Decorator(None, self)
         self.wm_normal_hints = size_hints
 
     def move(self, position):

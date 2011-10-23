@@ -82,7 +82,10 @@ class ClientWindow(object):
         self.conn = conn
         self.window = window
         self.manager = manager
+        self.screen = manager.screen
         self.atoms = manager.atoms
+        self.colors = manager.atoms
+        self.fonts = manager.fonts
         self.decorator = manager.decorator(self)
         self.frame = None
         self._geometry = None
@@ -211,6 +214,9 @@ class ClientWindow(object):
         name = self.atoms.name(atom)
         debug("Property %s changed on window 0x%x." % (name, self.window))
         self.invalidate_cached_property(name)
+
+        if name == "WM_NAME" or name == "_NET_WM_NAME":
+            self.decorator.name_changed()
 
     # ICCCM properties
     wm_name = ClientProperty("WM_NAME", String)

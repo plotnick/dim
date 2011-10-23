@@ -11,16 +11,10 @@ from geometry import *
 from xutil import textitem16
 
 class Decorator(object):
-    def __init__(self, conn, client,
-                 border_width=2,
-                 focused_color="black",
-                 unfocused_color="lightgrey"):
+    def __init__(self, conn, client):
         self.conn = conn
         self.client = client
-        self.screen = client.manager.screen
-        self.border_width = border_width
-        self.focused_color = self.client.manager.colors[focused_color]
-        self.unfocused_color = self.client.manager.colors[unfocused_color]
+        self.screen = client.screen
 
     def decorate(self):
         """Decorate the client window."""
@@ -38,18 +32,26 @@ class Decorator(object):
         """Indicate that the client window has lost the input focus."""
         pass
 
-    def save_border(self):
-        """Retrieve and store the border width of the client window."""
-        self.original_border_width = self.client.geometry.border_width
+    def message(self, message):
+        """Display a message on behalf of the client."""
+        pass
 
-    def restore_border(self):
-        """Restore the client window's original border."""
-        self.conn.core.ConfigureWindow(self.client.window,
-                                       ConfigWindow.BorderWidth,
-                                       [self.original_border_width])
+    def name_changed(self):
+        """Update display of the client name."""
+        pass
 
 class BorderDecorator(Decorator):
     """Decorate a client window with a simple border."""
+
+    def __init__(self, conn, client,
+                 border_width=2,
+                 focused_color="black",
+                 unfocused_color="lightgrey"):
+        super(BorderDecorator, self).__init__(conn, client)
+        self.border_width = border_width
+        self.focused_color = self.client.colors[focused_color]
+        self.unfocused_color = self.client.colors[unfocused_color]
+
     def decorate(self):
         self.save_border()
         self.conn.core.ConfigureWindow(self.client.window,
@@ -76,7 +78,17 @@ class BorderDecorator(Decorator):
                                               CW.BorderPixel,
                                               [self.unfocused_color])
 
-class FrameDecorator(Decorator):
+    def save_border(self):
+        """Retrieve and store the border width of the client window."""
+        self.original_border_width = self.client.geometry.border_width
+
+    def restore_border(self):
+        """Restore the client window's original border width."""
+        self.conn.core.ConfigureWindow(self.client.window,
+                                       ConfigWindow.BorderWidth,
+                                       [self.original_border_width])
+
+class FrameDecorator(BorderDecorator):
     """Create a frame (i.e., a new parent) for a client window."""
 
     frame_event_mask = (EventMask.SubstructureRedirect |
@@ -85,6 +97,7 @@ class FrameDecorator(Decorator):
                         EventMask.LeaveWindow)
 
     def decorate(self):
+        # Set the client's border to 0, since we'll put one on the frame.
         self.save_border()
         self.conn.core.ConfigureWindow(self.client.window,
                                        ConfigWindow.BorderWidth, [0])
@@ -119,7 +132,7 @@ class FrameDecorator(Decorator):
 
     def undecorate(self):
         self.conn.core.UnmapWindow(self.client.frame)
-        self.restore_border()
+        super(FrameDecorator, self).undecorate()
         self.conn.core.ReparentWindow(self.client.window,
                                       self.screen.root,
                                       self.client.geometry.x,
@@ -128,18 +141,9 @@ class FrameDecorator(Decorator):
         self.conn.core.DestroyWindow(self.client.frame)
 
     def frame_geometry(self):
+        """Compute and return the geometry for the frame."""
         return (self.client.geometry._replace(border_width=self.border_width),
                 Position(0, 0))
-
-    def focus(self):
-        self.conn.core.ChangeWindowAttributes(self.client.frame,
-                                              CW.BorderPixel,
-                                              [self.focused_color])
-
-    def unfocus(self):
-        self.conn.core.ChangeWindowAttributes(self.client.frame,
-                                              CW.BorderPixel,
-                                              [self.unfocused_color])
 
 class TitlebarConfig(object):
     def __init__(self, manager, fg_color, bg_color, font):
@@ -205,7 +209,7 @@ class TitleDecorator(FrameDecorator):
     def decorate(self):
         super(TitleDecorator, self).decorate()
 
-        self.title = self.client.wm_name
+        self.title = None
         self.titlebar = self.conn.generate_id()
         self.conn.core.CreateWindow(self.screen.root_depth,
                                     self.titlebar,
@@ -223,6 +227,20 @@ class TitleDecorator(FrameDecorator):
         super(TitleDecorator, self).undecorate()
         self.conn.core.DestroyWindow(self.titlebar)
 
+    def focus(self):
+        self.config = self.title_configs[1]
+        self.refresh()
+
+    def unfocus(self):
+        self.config = self.title_configs[0]
+        self.refresh()
+
+    def message(self, message):
+        self.draw_title(message)
+
+    def name_changed(self):
+        self.draw_title(None)
+
     def refresh(self, event=None):
         if event is None or \
                 (isinstance(event, ExposeEvent) and event.count == 0):
@@ -230,7 +248,7 @@ class TitleDecorator(FrameDecorator):
 
     def draw_title(self, title=None, x=5):
         if title is None:
-            title = self.client.wm_name
+            title = self.client.net_wm_name or self.client.wm_name
 
         w = self.geometry.width - 1
         h = self.config.height - 2
@@ -261,11 +279,3 @@ class TitleDecorator(FrameDecorator):
         geometry = self.client.geometry._replace(border_width=1)
         geometry += Rectangle(0, self.config.height)
         return (geometry, Position(0, self.config.height))
-
-    def focus(self):
-        self.config = self.title_configs[1]
-        self.refresh()
-
-    def unfocus(self):
-        self.config = self.title_configs[0]
-        self.refresh()

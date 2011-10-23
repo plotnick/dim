@@ -30,9 +30,11 @@ class ClientUpdate(object):
             
     def commit(self, time):
         self.cleanup(time)
+        self.client.decorator.message(None)
 
     def rollback(self, time):
         self.cleanup(time)
+        self.client.decorator.message(None)
 
 class ClientMove(ClientUpdate):
     cursor = XC_fleur
@@ -43,7 +45,9 @@ class ClientMove(ClientUpdate):
         self.change_cursor(self.cursor)
 
     def update(self, pointer):
-        self.client.move(self.position + self.delta(pointer))
+        position = self.position + self.delta(pointer)
+        self.client.move(position)
+        self.client.decorator.message(position)
 
     def rollback(self, time=Time.CurrentTime):
         self.client.move(self.position)
@@ -93,7 +97,9 @@ class ClientResize(ClientUpdate):
         new_size = self.size_hints.constrain_window_size(size + dsize)
         offset = (new_size.width - size.width if self.gravity.x < 0 else 0,
                   new_size.height - size.height if self.gravity.y < 0 else 0)
-        self.client.update_geometry(self.geometry.resize(new_size) - offset)
+        geometry = self.geometry.resize(new_size) - offset
+        self.client.update_geometry(geometry)
+        self.client.decorator.message(geometry)
 
     def rollback(self, time=Time.CurrentTime):
         self.client.update_geometry(self.initial_geometry)
