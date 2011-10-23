@@ -21,12 +21,12 @@ def popcount(x):
 
 def int16(x):
     """Truncate an integer to 16 bits, ignoring sign."""
-    return x & 0xffff
+    return int(x) & 0xffff
 
 def card16(x):
     """Truncate an unsigned integer to 16 bits."""
     assert x >= 0, "invalid cardinal %d" % x
-    return x & 0xffff
+    return int(x) & 0xffff
 
 def is_synthetic_event(event):
     """Returns True if the given event was produced via a SendEvent request."""
