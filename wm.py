@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     conn = xcb.connect(options.display)
     wm = type("WM",
-              (BaseWM, focus_modes[options.focus_mode]),
+              (focus_modes[options.focus_mode], BaseWM),
               dict(title_font=options.title_font))(conn)
     try:
         wm.event_loop()
