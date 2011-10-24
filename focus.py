@@ -214,7 +214,8 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         except KeyError:
             raise UnhandledEvent(event)
         debug("Button %d press in window 0x%x." % (event.detail, event.event))
-        if not self.ignore_focus_click:
-            self.conn.core.AllowEvents(Allow.ReplayPointer, Time.CurrentTime)
-        self.conn.core.UngrabPointer(Time.CurrentTime)
+        if self.ignore_focus_click:
+            self.conn.core.UngrabPointer(event.time)
+        else:
+            self.conn.core.AllowEvents(Allow.ReplayPointer, event.time)
         self.focus(client, event)
