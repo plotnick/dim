@@ -86,8 +86,10 @@ class ClientWindow(object):
         self.manager = manager
         self.screen = manager.screen
         self.atoms = manager.atoms
-        self.colors = manager.atoms
+        self.colors = manager.colors
+        self.cursors = manager.cursors
         self.fonts = manager.fonts
+        self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
         self.frame = None
         self._geometry = None
