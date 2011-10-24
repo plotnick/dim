@@ -26,7 +26,7 @@ class BaseWM(ReparentingWindowManager, MoveResize, RaiseLower):
                                                      self.title_font)
 
     def decorator(self, client):
-        return TitleDecorator(self.conn, client,
+        return TitleDecorator(self.conn, client, 1,
                               self.focused_title_config,
                               self.unfocused_title_config)
 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     conn = xcb.connect(options.display)
     wm = type("WM",
-              (focus_modes[options.focus_mode], BaseWM),
+              (BaseWM, focus_modes[options.focus_mode]),
               dict(title_font=options.title_font))(conn)
     try:
         wm.event_loop()

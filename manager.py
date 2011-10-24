@@ -131,6 +131,7 @@ class WindowManager(EventHandler):
 
         client = self.clients[window] = ClientWindow(self.conn, window, self)
         client.decorator.decorate()
+        client.decorator.unfocus()
 
         if attrs.map_state != MapState.Unmapped:
             self.normalize(client)

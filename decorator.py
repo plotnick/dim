@@ -10,22 +10,42 @@ from color import *
 from geometry import *
 from xutil import textitem16
 
-__all__ = ["Decorator", "BorderDecorator", "FrameDecorator", "TitleDecorator",
-           "TitlebarConfig"]
+__all__ = ["Decorator", "BorderHighlightFocus", "FrameDecorator",
+           "TitlebarConfig", "TitleDecorator"]
 
 class Decorator(object):
-    def __init__(self, conn, client):
+    """A decorator is responsible for drawing and maintaining the decoration
+    applied to a client window. Such decoration may be as trivial as changing
+    the top-level window's border width and color, or as complex as providing
+    a new parent frame with a title bar and other such amenities.
+
+    Subclasses may in general be composed to provide composite decorations."""
+
+    def __init__(self, conn, client, border_width=1, **kwargs):
         self.conn = conn
         self.client = client
         self.screen = client.screen
+        self.border_window = client.window
+        self.border_width = border_width
 
     def decorate(self):
         """Decorate the client window."""
-        pass
+        self.original_border_width = self.client.geometry.border_width
+        self.conn.core.ConfigureWindow(self.border_window,
+                                       ConfigWindow.BorderWidth,
+                                       [self.border_width])
 
     def undecorate(self):
         """Remove all decorations from the client window."""
-        pass
+        self.conn.core.ConfigureWindow(self.border_window,
+                                       ConfigWindow.BorderWidth,
+                                       [self.original_border_width])
+
+        # X11 offers no way of retrieving the border color or pixmap of
+        # a window, so we'll simply assume a black border.
+        self.conn.core.ChangeWindowAttributes(self.border_window,
+                                              CW.BorderPixel,
+                                              [self.screen.black_pixel])
 
     def focus(self):
         """Indicate that the client window has the input focus."""
@@ -43,98 +63,80 @@ class Decorator(object):
         """Update display of the client name."""
         pass
 
-class BorderDecorator(Decorator):
-    """Decorate a client window with a simple border."""
 
-    def __init__(self, conn, client,
-                 border_width=2,
-                 focused_color="black",
-                 unfocused_color="lightgrey"):
-        super(BorderDecorator, self).__init__(conn, client)
-        self.border_width = border_width
+class BorderHighlightFocus(Decorator):
+    """Indicate the current focus via changes to the border color."""
+
+    def __init__(self, conn, client, border_width=2,
+                 focused_color="black", unfocused_color="lightgrey",
+                 **kwargs):
+        super(BorderHighlightFocus, self).__init__(conn, client, border_width,
+                                                   **kwargs)
         self.focused_color = self.client.colors[focused_color]
         self.unfocused_color = self.client.colors[unfocused_color]
 
-    def decorate(self):
-        self.save_border()
-        self.conn.core.ConfigureWindow(self.client.window,
-                                       ConfigWindow.BorderWidth,
-                                       [self.border_width])
-        self.unfocus()
-
-    def undecorate(self):
-        self.restore_border()
-
-        # X11 offers no way of retrieving the border color or pixmap of
-        # a window, so we'll simply assume a black border.
-        self.conn.core.ChangeWindowAttributes(self.client.window,
-                                              CW.BorderPixel,
-                                              [self.screen.black_pixel])
-
     def focus(self):
-        self.conn.core.ChangeWindowAttributes(self.client.window,
+        self.conn.core.ChangeWindowAttributes(self.border_window,
                                               CW.BorderPixel,
                                               [self.focused_color])
+        super(BorderHighlightFocus, self).focus()
 
     def unfocus(self):
-        self.conn.core.ChangeWindowAttributes(self.client.window,
+        self.conn.core.ChangeWindowAttributes(self.border_window,
                                               CW.BorderPixel,
                                               [self.unfocused_color])
+        super(BorderHighlightFocus, self).unfocus()
 
-    def save_border(self):
-        """Retrieve and store the border width of the client window."""
-        self.original_border_width = self.client.geometry.border_width
-
-    def restore_border(self):
-        """Restore the client window's original border width."""
-        self.conn.core.ConfigureWindow(self.client.window,
-                                       ConfigWindow.BorderWidth,
-                                       [self.original_border_width])
-
-class FrameDecorator(BorderDecorator):
-    """Create a frame (i.e., a new parent) for a client window."""
+class FrameDecorator(Decorator):
+    """Create a frame (i.e., a new parent) for a client window. This class
+    requires a reparenting window manager."""
 
     frame_event_mask = (EventMask.SubstructureRedirect |
                         EventMask.SubstructureNotify |
                         EventMask.EnterWindow |
                         EventMask.LeaveWindow)
 
+    def __init__(self, *args, **kwargs):
+        super(FrameDecorator, self).__init__(*args, **kwargs)
+        self.frame_border_width = self.border_width
+        self.border_width = 0
+
     def decorate(self):
-        # Set the client's border to 0, since we'll put one on the frame.
-        self.save_border()
-        self.conn.core.ConfigureWindow(self.client.window,
-                                       ConfigWindow.BorderWidth, [0])
+        super(FrameDecorator, self).decorate()
 
         # We'll set a flag on the client so that the event handlers can
         # distinguish events generated as a result of the ReparentWindow
         # request.
         self.client.reparenting = True
 
-        self.client.frame = self.conn.generate_id()
+        window = self.client.window
+        frame = self.conn.generate_id()
         self.geometry, self.offset = self.frame_geometry()
-        debug("Creating frame 0x%x for client window 0x%x." %
-              (self.client.frame, self.client.window))
-        self.conn.core.CreateWindow(self.screen.root_depth,
-                                    self.client.frame,
+        debug("Creating frame 0x%x for client window 0x%x." % (frame, window))
+        self.conn.core.CreateWindow(self.screen.root_depth, frame,
                                     self.screen.root,
                                     self.geometry.x, self.geometry.y,
                                     self.geometry.width, self.geometry.height,
                                     self.geometry.border_width,
                                     WindowClass.InputOutput,
                                     self.screen.root_visual,
-                                    (CW.BorderPixel |
-                                     CW.OverrideRedirect |
-                                     CW.EventMask),
-                                    [self.unfocused_color,
-                                     True,
-                                     self.frame_event_mask])
-        self.conn.core.ReparentWindow(self.client.window,
-                                      self.client.frame,
+                                    (CW.OverrideRedirect | CW.EventMask),
+                                    [True, self.frame_event_mask])
+        self.conn.core.ReparentWindow(window, frame,
                                       self.offset.x, self.offset.y)
-        self.conn.core.ChangeSaveSet(SetMode.Insert, self.client.window)
+        self.conn.core.ChangeSaveSet(SetMode.Insert, window)
+
+        # It's important not to assign this attribute any earlier, since
+        # various client methods may try to access it. We don't want that
+        # to happen until all of the initialization above is finished.
+        self.client.frame = frame
+
+        # Changes to the border should now be applied to the frame.
+        self.border_window = frame
 
     def undecorate(self):
         self.conn.core.UnmapWindow(self.client.frame)
+        self.border_window = self.client.window
         super(FrameDecorator, self).undecorate()
         self.conn.core.ReparentWindow(self.client.window,
                                       self.screen.root,
@@ -142,10 +144,12 @@ class FrameDecorator(BorderDecorator):
                                       self.client.geometry.y)
         self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
         self.conn.core.DestroyWindow(self.client.frame)
+        self.client.frame = None
 
     def frame_geometry(self):
-        """Compute and return the geometry for the frame."""
-        return (self.client.geometry._replace(border_width=self.border_width),
+        """Compute and return a geometry for the frame."""
+        geometry = self.client.geometry
+        return (geometry._replace(border_width=self.frame_border_width),
                 Position(0, 0))
 
 class TitlebarConfig(object):
@@ -200,19 +204,20 @@ class TitleDecorator(FrameDecorator):
                         EventMask.EnterWindow |
                         EventMask.LeaveWindow)
 
-    def __init__(self, conn, client,
-                 focused_title_config, unfocused_title_config,
+    def __init__(self, conn, client, border_width=1,
+                 focused_title_config=None, unfocused_title_config=None,
                  **kwargs):
+        super(TitleDecorator, self).__init__(conn, client, border_width,
+                                             **kwargs)
+        assert (isinstance(focused_title_config, TitlebarConfig) and
+                isinstance(unfocused_title_config, TitlebarConfig))
         self.title_configs = (unfocused_title_config, focused_title_config)
         self.config = self.title_configs[0] # reassigned by focus, unfocus
-        super(TitleDecorator, self).__init__(conn, client,
-                                             unfocused_color="black",
-                                             **kwargs)
+        self.title = None
 
     def decorate(self):
         super(TitleDecorator, self).decorate()
 
-        self.title = None
         self.titlebar = self.conn.generate_id()
         self.conn.core.CreateWindow(self.screen.root_depth,
                                     self.titlebar,
@@ -227,16 +232,18 @@ class TitleDecorator(FrameDecorator):
                                                        self.refresh)
 
     def undecorate(self):
-        super(TitleDecorator, self).undecorate()
         self.conn.core.DestroyWindow(self.titlebar)
+        super(TitleDecorator, self).undecorate()
 
     def focus(self):
         self.config = self.title_configs[1]
         self.refresh()
+        super(TitleDecorator, self).focus()
 
     def unfocus(self):
         self.config = self.title_configs[0]
         self.refresh()
+        super(TitleDecorator, self).unfocus()
 
     def message(self, message):
         self.draw_title(message)
@@ -279,6 +286,6 @@ class TitleDecorator(FrameDecorator):
                                       len(text_items), "".join(text_items))
 
     def frame_geometry(self):
-        geometry = self.client.geometry._replace(border_width=1)
-        geometry += Rectangle(0, self.config.height)
-        return (geometry, Position(0, self.config.height))
+        geometry, offset = super(TitleDecorator, self).frame_geometry()
+        return (geometry + Rectangle(0, self.config.height),
+                offset + Position(0, self.config.height))
