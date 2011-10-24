@@ -92,6 +92,7 @@ class ClientWindow(object):
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
         self.frame = None
+        self.reparenting = False
         self._geometry = None
         self.property_values = {}
         self.property_cookies = {}
