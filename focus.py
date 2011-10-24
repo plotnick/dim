@@ -146,7 +146,11 @@ class FocusFollowsMouse(FocusPolicy):
                 event.detail == NotifyDetail.Inferior:
             return
         debug("Window 0x%x left (%d)." % (event.event, event.detail))
-        self.unfocus(event)
+        if self.current_focus and \
+                event.event == (self.current_focus.frame \
+                                    if self.current_focus.frame \
+                                    else self.current_focus.window):
+            self.unfocus(event)
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer
