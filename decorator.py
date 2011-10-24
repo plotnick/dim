@@ -196,7 +196,7 @@ class TitlebarConfig(object):
     def highlight(color):
         h, s, v = color.hsv()
         return (HSVColor(h, s, (3.0 + v) / 4.0),
-                HSVColor(h, s, (1.0 + v) / 4.0))
+                HSVColor(h, s, (2.0 + v) / 5.0))
 
 class TitleDecorator(FrameDecorator):
     frame_event_mask = (EventMask.SubstructureRedirect |
