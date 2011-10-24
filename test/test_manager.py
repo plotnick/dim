@@ -243,7 +243,7 @@ class TestWMEventLoop(WMTestCase):
         """Test the window manager's event loop"""
         n = 100
         self.jiggle_window(n)
-        self.event_loop(lambda: self.wm_thread.wm.events_received == n)
+        self.event_loop(lambda: self.wm_thread.wm.events_received >= n)
 
 class EventCompressionTester(EventLoopTester):
     @handler(ConfigureNotifyEvent)

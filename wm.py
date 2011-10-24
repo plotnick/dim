@@ -72,8 +72,4 @@ if __name__ == "__main__":
     try:
         wm.event_loop()
     except KeyboardInterrupt:
-        pass
-    finally:
-        for client in wm.clients.values():
-            client.decorator.undecorate()
-        conn.flush()
+        wm.shutdown()

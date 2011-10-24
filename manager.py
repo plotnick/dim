@@ -95,6 +95,12 @@ class WindowManager(EventHandler):
         # Adopt any suitable top-level windows.
         self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
 
+    def shutdown(self):
+        """Unmanage all clients."""
+        for client in self.clients.values():
+            self.unmanage(client)
+        self.conn.flush()
+
     def init_graphics(self):
         self.black_gc = self.conn.generate_id()
         self.conn.core.CreateGC(self.black_gc, self.screen.root,
@@ -197,6 +203,7 @@ class WindowManager(EventHandler):
                     try:
                         self.handle_event(event)
                     except ExitWindowManager:
+                        self.shutdown()
                         return
                 else:
                     break
@@ -375,7 +382,7 @@ class ReparentingWindowManager(WindowManager):
 
     def unmanage(self, client):
         self.frames.pop(client.frame)
-        return super(ReparentingWindowManager, self)
+        return super(ReparentingWindowManager, self).unmanage(client)
 
     def decorator(self, client):
         return FrameDecorator(self.conn, client)
