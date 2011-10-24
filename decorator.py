@@ -10,6 +10,9 @@ from color import *
 from geometry import *
 from xutil import textitem16
 
+__all__ = ["Decorator", "BorderDecorator", "FrameDecorator", "TitleDecorator",
+           "TitlebarConfig"]
+
 class Decorator(object):
     def __init__(self, conn, client):
         self.conn = conn

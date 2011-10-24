@@ -11,6 +11,8 @@ from geometry import *
 from properties import *
 from xutil import *
 
+__all__ = ["ClientWindow"]
+
 class ClientProperty(object):
     """A descriptor class for client properties."""
 

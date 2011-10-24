@@ -12,6 +12,8 @@ from keysym import *
 from manager import WindowManager, compress
 from xutil import *
 
+__all__ = ["MoveResize"]
+
 class ClientUpdate(object):
     """A transactional client configuration change."""
 

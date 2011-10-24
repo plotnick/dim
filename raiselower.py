@@ -9,6 +9,8 @@ from event import UnhandledEvent, handler
 from manager import WindowManager
 from xutil import GrabButtons
 
+__all__ = ["RaiseLower"]
+
 class RaiseLower(WindowManager):
     __grab_event_mask = EventMask.ButtonPress
 
