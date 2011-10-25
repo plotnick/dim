@@ -7,7 +7,7 @@ from xcb.xproto import *
 from event import UnhandledEvent, handler
 from manager import NoSuchClient, WindowManager, ReparentingWindowManager
 
-__all__ = ["FocusFollowsMouse", "SloppyFocus", "ClickToFocus"]
+__all__ = ["FocusPolicy", "SloppyFocus", "ClickToFocus"]
 
 class FocusPolicy(WindowManager):
     """A focus policy determines how and when to assign the input focus to the
