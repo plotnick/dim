@@ -146,24 +146,24 @@ class ClientWindow(object):
                                        ConfigWindow.StackMode,
                                        [stack_mode])
 
-    def focus(self, set_focus=True, time=Time.CurrentTime):
+    def focus(self, time=Time.CurrentTime):
+        """Offer the input focus to the client. See ICCCM §4.1.7."""
         if self.wm_state.state != WMState.NormalState:
             debug("Ignoring attempt to focus client not in Normal state.")
             return False
 
         focused = False
         if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
-            if set_focus:
-                self.conn.core.SetInputFocus(InputFocus.PointerRoot,
-                                             self.window, time)
+            debug("Setting input focus to window 0x%x (%d)." %
+                  (self.window, time))
+            self.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                         self.window, time)
             focused = True
         if self.atoms["WM_TAKE_FOCUS"] in self.wm_protocols:
             send_client_message(self.conn, self.window, 0, 32,
                                 self.atoms["WM_PROTOCOLS"],
                                 [self.atoms["WM_TAKE_FOCUS"], time, 0, 0, 0])
             focused = True
-        if focused:
-            self.decorator.focus()
         return focused
 
     def unfocus(self):

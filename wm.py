@@ -6,7 +6,7 @@ from xcb.xproto import *
 from color import RGBi
 from decorator import TitlebarConfig, TitleDecorator
 from event import handler
-from focus import FocusFollowsMouse, SloppyFocus, ClickToFocus
+from focus import SloppyFocus, ClickToFocus
 from manager import ReparentingWindowManager, compress
 from moveresize import MoveResize
 from raiselower import RaiseLower
@@ -36,9 +36,7 @@ if __name__ == "__main__":
     import sys
     import xcb
 
-    focus_modes = {"pointer": FocusFollowsMouse,
-                   "sloppy": SloppyFocus,
-                   "click": ClickToFocus}
+    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
 
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
@@ -51,8 +49,8 @@ if __name__ == "__main__":
                          help="the X server display name")
     optparser.add_option("-f", "--focus-mode", dest="focus_mode",
                          type="choice", choices=focus_modes.keys(),
-                         default="pointer",
-                         help='focus mode: pointer, sloppy, or click')
+                         default="sloppy",
+                         help='focus mode: sloppy or click')
     optparser.add_option("-t", "--title-font", dest="title_font",
                          default="fixed",
                          help="client window title font")

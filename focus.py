@@ -9,35 +9,13 @@ from manager import NoSuchClient, WindowManager, ReparentingWindowManager
 
 __all__ = ["FocusFollowsMouse", "SloppyFocus", "ClickToFocus"]
 
-class InitialFocusEvent(object):
-    """A pseudo-event class used for establishing the initial focus at WM
-    start-up time."""
-    def __init__(self, window):
-        self.event = window
-        self.time = Time.CurrentTime
-
-def is_focus_event(event):
-    """Return true if the event window has the input focus."""
-    if isinstance(event, (FocusInEvent, InitialFocusEvent)):
-        return True
-    elif isinstance(event, FocusOutEvent):
-        return False
-    elif isinstance(event, (EnterNotifyEvent, LeaveNotifyEvent)):
-        return event.same_screen_focus & 1
-    else:
-        return False
-
-def event_time(event):
-    """Not all events have a timestamp (e.g., FocusIn/FocusOut); this function
-    simply returns CurrentTime if the event lacks a time."""
-    return event.time if hasattr(event, "time") else Time.CurrentTime
-
 class FocusPolicy(WindowManager):
     """A focus policy determines how and when to assign the input focus to the
     client windows."""
 
     def __init__(self, *args, **kwargs):
         self.current_focus = None
+        self.pending_focus = ()
         super(FocusPolicy, self).__init__(*args, **kwargs)
 
     def adopt(self, windows):
@@ -72,7 +50,7 @@ class FocusPolicy(WindowManager):
             except NoSuchClient:
                 return
             debug("Setting initial focus to window 0x%x." % window)
-            self.focus(client, InitialFocusEvent(window))
+            self.focus(client, Time.CurrentTime, False)
 
         window = self.conn.core.GetInputFocus().reply().focus
         if window == InputFocus.PointerRoot:
@@ -87,28 +65,30 @@ class FocusPolicy(WindowManager):
         else:
             focus(window)
 
-    def focus(self, client, event, set_focus=True):
-        """Set the input focus to the client window.
-
-        The set_focus argument is passed on to the Client.focus method,
-        where it is used to determine whether or not to actually issue
-        a SetInputFocus request."""
+    def focus(self, client, time, have_focus):
+        """Give the given client the input focus."""
         if client is self.current_focus:
             return True
-        debug("Attempting to focus window 0x%x." % client.window)
-        if client.focus(set_focus, event_time(event)):
-            self.unfocus(event)
-            if is_focus_event(event):
-                self.current_focus = client
-                return True
-
-    def unfocus(self, event):
-        """Unfocus the currently focused client."""
-        if self.current_focus:
-            debug("Unfocusing window 0x%x." % self.current_focus.window)
-            self.current_focus.unfocus()
-            self.current_focus = None
+        if not have_focus and self.pending_focus != (client, time):
+            debug("Attempting to focus client window 0x%x." % client.window)
+            self.pending_focus = (client, time)
+            if not client.focus(time):
+                return False
+        if have_focus:
+            debug("Client window 0x%x now has the focus." % client.window)
+            client.decorator.focus()
+            self.current_focus = client
             return True
+
+    def unfocus(self, client):
+        """Unfocus the currently focused client."""
+        debug("Unfocusing client window 0x%x." % client.window)
+        client.unfocus()
+        if client is self.current_focus:
+            self.current_focus = None
+        elif self.current_focus:
+            warning("Unfocused client was not the current focus; 0x%x was." %
+                    self.current_focus.window)
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
@@ -116,7 +96,15 @@ class FocusPolicy(WindowManager):
                 event.detail == NotifyDetail.Inferior:
             raise UnhandledEvent(event)
         debug("Window 0x%x got the focus." % event.event)
-        self.focus(self.get_client(event.event), event, False)
+        self.focus(self.get_client(event.event), Time.CurrentTime, True)
+
+    @handler(FocusOutEvent)
+    def handle_focus_out(self, event):
+        if event.mode != NotifyMode.Normal or \
+                event.detail == NotifyDetail.Inferior:
+            raise UnhandledEvent(event)
+        debug("Window 0x%x lost the focus." % event.event)
+        self.unfocus(self.get_client(event.event))
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer
@@ -129,38 +117,8 @@ class SloppyFocus(FocusPolicy):
                 event.detail == NotifyDetail.Inferior:
             return
         debug("Window 0x%x entered (%d)." % (event.event, event.detail))
-        self.focus(self.get_client(event.event), event)
-
-class FocusFollowsMouse(SloppyFocus):
-    """Let the input focus follow the pointer. We track which top-level
-    window currently has focus only so that we can correctly update the
-    client decoration."""
-
-    def __init__(self, *args):
-        super(FocusFollowsMouse, self).__init__(*args)
-
-        # Set focus mode to PointerRoot (i.e., focus-follows-mouse). This is
-        # the one and only time this policy will make a SetInputFocus request
-        # (note the default value for the set_focus argument to the focus
-        # method, below.)
-        self.conn.core.SetInputFocus(InputFocus.PointerRoot,
-                                     InputFocus.PointerRoot,
-                                     Time.CurrentTime)
-
-    def focus(self, client, event, set_focus=False):
-        super(FocusFollowsMouse, self).focus(client, event, set_focus)
-
-    @handler(LeaveNotifyEvent)
-    def handle_leave_notify(self, event):
-        if event.mode != NotifyMode.Normal or \
-                event.detail == NotifyDetail.Inferior:
-            return
-        debug("Window 0x%x left (%d)." % (event.event, event.detail))
-        if self.current_focus and \
-                event.event == (self.current_focus.frame \
-                                    if self.current_focus.frame \
-                                    else self.current_focus.window):
-            self.unfocus(event)
+        self.focus(self.get_client(event.event), event.time,
+                   event.same_screen_focus & 1)
 
 class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     """Focus ignores the movement of the pointer, and changes only when
@@ -180,18 +138,18 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     def manage(self, window):
         client = super(ClickToFocus, self).manage(window)
         if client:
-            self.grab_focus_click(client.frame)
+            self.grab_focus_click(client)
         return client
 
-    def grab_focus_click(self, window):
-        self.conn.core.GrabButton(False, window,
+    def grab_focus_click(self, client):
+        self.conn.core.GrabButton(False, client.frame,
                                   EventMask.ButtonPress,
                                   GrabMode.Sync, GrabMode.Async,
                                   Window._None, Cursor._None,
                                   1, ModMask.Any)
 
-    def focus(self, client, event, set_focus=True):
-        super(ClickToFocus, self).focus(client, event, set_focus)
+    def focus(self, client, time, have_focus):
+        super(ClickToFocus, self).focus(client, time, have_focus)
 
         # Once a client is focused, we can release our grab. This is purely
         # an optimization: we don't want to be responsible for proxying all
@@ -199,10 +157,10 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         # when the client loses focus.
         self.conn.core.UngrabButton(1, client.frame, ModMask.Any)
 
-    def unfocus(self, event):
-        if self.current_focus:
-            self.grab_focus_click(self.current_focus.frame)
-        super(ClickToFocus, self).unfocus(event)
+    def unfocus(self, client):
+        if client is self.current_focus:
+            self.grab_focus_click(client)
+        super(ClickToFocus, self).unfocus(client)
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
@@ -215,4 +173,4 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
             self.conn.core.UngrabPointer(event.time)
         else:
             self.conn.core.AllowEvents(Allow.ReplayPointer, event.time)
-        self.focus(client, event)
+        self.focus(client, event.time, False)
