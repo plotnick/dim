@@ -38,11 +38,15 @@ class ClientProperty(object):
             cookie = instance.get_property(self.name)
 
         # Construct a new value from the reply data and cache it.
-        reply = cookie.reply()
+        try:
+            reply = cookie.reply()
+        except BadWindow:
+            warning("Error fetching property %s for client window 0x%x." %
+                    (self.name, instance.window))
+            return self.default
         value = owner.properties[self.name].unpack(reply.value.buf()) \
             if reply and reply.type else self.default
         instance.property_values[self.name] = value
-
         return value
 
     def __set__(self, instance, value):
@@ -148,7 +152,7 @@ class ClientWindow(object):
 
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. See ICCCM §4.1.7."""
-        if self.wm_state.state != WMState.NormalState:
+        if self.wm_state and self.wm_state.state != WMState.NormalState:
             debug("Ignoring attempt to focus client not in Normal state.")
             return False
 
