@@ -14,7 +14,7 @@ __all__ = ["RaiseLower"]
 class RaiseLower(WindowManager):
     __grab_event_mask = EventMask.ButtonPress
 
-    def __init__(self, conn, screen=None,
+    def __init__(self, display=None, screen=None,
                  raise_lower_mods=ModMask.Shift | ModMask._1,
                  raise_button=1, lower_button=3,
                  grab_buttons=GrabButtons(),
@@ -32,7 +32,7 @@ class RaiseLower(WindowManager):
             (raise_button, raise_lower_mods): self.__grab_event_mask,
             (lower_button, raise_lower_mods): self.__grab_event_mask
         }))
-        super(RaiseLower, self).__init__(conn, screen, **kwargs)
+        super(RaiseLower, self).__init__(display, screen, **kwargs)
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):

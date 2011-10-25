@@ -122,7 +122,7 @@ class MoveResize(WindowManager):
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
 
-    def __init__(self, conn, screen=None,
+    def __init__(self, display=None, screen=None,
                  move_resize_mods=ModMask._1, move_button=1, resize_button=3,
                  grab_buttons=GrabButtons(),
                  **kwargs):
@@ -138,7 +138,7 @@ class MoveResize(WindowManager):
             (move_button, move_resize_mods): self.__grab_event_mask,
             (resize_button, move_resize_mods): self.__grab_event_mask
         }))
-        super(MoveResize, self).__init__(conn, screen, **kwargs)
+        super(MoveResize, self).__init__(display, screen, **kwargs)
 
     def query_pointer(self):
         """Return the current pointer position."""

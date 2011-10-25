@@ -58,48 +58,22 @@ class WindowManager(EventHandler):
                        EventMask.SubstructureNotify |
                        EventMask.SubstructureRedirect)
 
-    def __init__(self, conn, screen=None, grab_buttons=GrabButtons()):
-        self.conn = conn
-        self.screen = conn.get_setup().roots[screen if screen is not None else
-                                             conn.pref_screen]
+    def __init__(self, display=None, screen=None, grab_buttons=GrabButtons()):
+        self.conn = xcb.connect(display)
+        if screen is None:
+            screen = self.conn.pref_screen
+        self.screen = self.conn.get_setup().roots[screen]
+        self.grab_buttons = grab_buttons
+
         self.clients = {} # managed clients, indexed by window ID
-        self.atoms = AtomCache(conn)
-        self.colors = ColorCache(conn, self.screen.default_colormap)
-        self.cursors = FontCursor(conn)
-        self.fonts = FontCache(conn)
-        self.keymap = KeyboardMap(conn)
+        self.atoms = AtomCache(self.conn)
+        self.colors = ColorCache(self.conn, self.screen.default_colormap)
+        self.cursors = FontCursor(self.conn)
+        self.fonts = FontCache(self.conn)
+        self.keymap = KeyboardMap(self.conn)
         self.next_event = None
         self.subwindow_handlers = {}
-
-        # Make this client a window manager by selecting (at least)
-        # SubstructureRedirect events on the root window. If another client
-        # has already done so (i.e., there's already a window manager
-        # running on this screen), the check will raise an exception.
-        assert self.root_event_mask & EventMask.SubstructureRedirect, \
-            "A window manager must select for SubstructureRedirect."
-        self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
-            CW.EventMask, [self.root_event_mask]).check()
-
-        # Establish passive grabs for buttons on the root window. Subclasses
-        # will add their own entries to the grab_buttons argument.
-        for key, mask in grab_buttons.items():
-            button, modifiers = key
-            self.conn.core.GrabButtonChecked(False, self.screen.root, mask,
-                                             GrabMode.Async, GrabMode.Async,
-                                             self.screen.root, Cursor._None,
-                                             button, modifiers).check()
-
-        # Set up fonts, graphics contexts, &c.
         self.init_graphics()
-
-        # Adopt any suitable top-level windows.
-        self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
-
-    def shutdown(self):
-        """Unmanage all clients."""
-        for client in self.clients.values():
-            self.unmanage(client)
-        self.conn.flush()
 
     def init_graphics(self):
         self.black_gc = self.conn.generate_id()
@@ -114,6 +88,41 @@ class WindowManager(EventHandler):
                                 [self.screen.white_pixel,
                                  self.screen.black_pixel])
 
+    def start(self):
+        """Start the window manager. This method must only be called once."""
+        # Make this client a window manager by selecting (at least)
+        # SubstructureRedirect events on the root window. If another client
+        # has already done so (i.e., there's already a window manager
+        # running on this screen), the check will raise an exception.
+        assert self.root_event_mask & EventMask.SubstructureRedirect, \
+            "A window manager must select for SubstructureRedirect."
+        self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
+            CW.EventMask, [self.root_event_mask]).check()
+
+        # Establish passive grabs for buttons on the root window. Subclasses
+        # will add their own entries to the grab_buttons argument.
+        for key, mask in self.grab_buttons.items():
+            button, modifiers = key
+            self.conn.core.GrabButtonChecked(False, self.screen.root, mask,
+                                             GrabMode.Async, GrabMode.Async,
+                                             self.screen.root, Cursor._None,
+                                             button, modifiers).check()
+
+        # Adopt any suitable top-level windows.
+        self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
+
+        # Process events from the server.
+        self.event_loop()
+
+    def shutdown(self):
+        """Unmanage all clients and disconnect from the server."""
+        if self.conn:
+            for client in self.clients.values():
+                self.unmanage(client)
+            self.conn.flush()
+            self.conn.disconnect()
+            self.conn = None
+
     def adopt(self, windows):
         """Adopt existing top-level windows."""
         for window in windows:
@@ -121,8 +130,10 @@ class WindowManager(EventHandler):
 
     def manage(self, window):
         """Manage a window and return the client instance."""
-        attrs = self.conn.core.GetWindowAttributes(window).reply()
-        if not attrs:
+        try:
+            attrs = self.conn.core.GetWindowAttributes(window).reply()
+        except BadWindow:
+            warning("Error fetching attributes for window 0x%x." % window)
             return None
 
         # Since we're not a compositing manager, we can simply ignore

@@ -63,11 +63,10 @@ if __name__ == "__main__":
                               logging.WARNING,
                         format="%(levelname)s: %(message)s")
 
-    conn = xcb.connect(options.display)
     wm = type("WM",
               (focus_modes[options.focus_mode], BaseWM),
-              dict(title_font=options.title_font))(conn)
+              dict(title_font=options.title_font))(options.display)
     try:
-        wm.event_loop()
+        wm.start()
     except KeyboardInterrupt:
         wm.shutdown()

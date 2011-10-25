@@ -131,9 +131,10 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     and establishes grabs only on the frames that we create, and not on the
     client windows themselves."""
 
-    def __init__(self, conn, screen=None, ignore_focus_click=False, **kwargs):
+    def __init__(self, display=None, screen=None,
+                 ignore_focus_click=False, **kwargs):
         self.ignore_focus_click = ignore_focus_click
-        super(ClickToFocus, self).__init__(conn, screen, **kwargs)
+        super(ClickToFocus, self).__init__(display, screen, **kwargs)
 
     def manage(self, window):
         client = super(ClickToFocus, self).manage(window)

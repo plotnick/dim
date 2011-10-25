@@ -1,22 +1,19 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from time import sleep
 import unittest
 
 import xcb
 from xcb.xproto import *
-import xcb.xtest
 
 from cursor import *
 from decorator import Decorator
 from geometry import *
-from keymap import *
 from keysym import *
 from moveresize import ClientMove, ClientResize, MoveResize
 from properties import WMSizeHints
 from xutil import int16
 
-from test_manager import TestWindow, WMTestCase
+from test_manager import EventType, TestWindow, WMTestCase
 
 class MockClient(object):
     def __init__(self, test, geometry, size_hints=WMSizeHints()):
@@ -157,13 +154,6 @@ class TestClientResize(unittest.TestCase):
         resize.rollback()
         self.assertEqual(client.geometry, g)
 
-class EventCode(object):
-    KeyPress = 2
-    KeyRelease = 3
-    ButtonPress = 4
-    ButtonRelease = 5
-    MotionNotify = 6
-
 class TestMoveResize(WMTestCase):
     """Integration test for interactive move/resize."""
 
@@ -171,50 +161,35 @@ class TestMoveResize(WMTestCase):
 
     def setUp(self):
         super(TestMoveResize, self).setUp()
-        self.root = self.conn.get_setup().roots[self.conn.pref_screen].root
-        self.xtest = self.conn(xcb.xtest.key)
-        self.modmap = ModifierMap(self.conn)
-        self.keymap = KeyboardMap(self.conn, None, self.modmap)
         self.mod1 = self.modmap[MapIndex._1][0]
-        self.buttons = PointerMap(self.conn)
         self.initial_geometry = Geometry(x=0, y=0, width=100, height=100,
                                          border_width=1)
-        self.window = self.add_window(TestWindow(self.conn,
-                                                 self.initial_geometry))
+        self.window = self.add_window(self.create_window(self.initial_geometry))
         self.window.map()
 
     def relative_position(self, ratio):
         return (self.initial_geometry.position() + 
                 self.initial_geometry.size() * ratio)
 
-    def fake_input(self, type, detail, root_x=0, root_y=0):
-        self.xtest.FakeInputChecked(type, detail, Time.CurrentTime,
-                                    self.root, root_x, root_y, 0).check()
-        sleep(0.0001) # block & yield control
-
-    def warp(self, x, y):
-        self.conn.core.WarpPointerChecked(0, self.root, 0, 0, 0, 0,
-                                          int16(x), int16(y)).check()
-
     def test_move(self):
         delta = Position(5, 10)
-        self.warp(*self.relative_position(0.5)) # center
-        self.fake_input(EventCode.KeyPress, self.mod1)
-        self.fake_input(EventCode.ButtonPress, self.buttons[1])
-        self.fake_input(EventCode.MotionNotify, True, *delta)
-        self.fake_input(EventCode.ButtonRelease, self.buttons[1])
-        self.fake_input(EventCode.KeyRelease, self.mod1)
+        self.warp_pointer(*self.relative_position(0.5)) # center
+        self.fake_input(EventType.KeyPress, self.mod1)
+        self.fake_input(EventType.ButtonPress, self.buttons[1])
+        self.fake_input(EventType.MotionNotify, True, *delta)
+        self.fake_input(EventType.ButtonRelease, self.buttons[1])
+        self.fake_input(EventType.KeyRelease, self.mod1)
         self.event_loop(lambda: self.window.geometry == \
                             self.initial_geometry + delta)
 
     def test_resize_southeast(self):
         delta = Position(5, 10)
-        self.warp(*self.relative_position(0.85)) # southeast corner
-        self.fake_input(EventCode.KeyPress, self.mod1)
-        self.fake_input(EventCode.ButtonPress, self.buttons[3])
-        self.fake_input(EventCode.MotionNotify, True, *delta)
-        self.fake_input(EventCode.ButtonRelease, self.buttons[3])
-        self.fake_input(EventCode.KeyRelease, self.mod1)
+        self.warp_pointer(*self.relative_position(0.85)) # southeast corner
+        self.fake_input(EventType.KeyPress, self.mod1)
+        self.fake_input(EventType.ButtonPress, self.buttons[3])
+        self.fake_input(EventType.MotionNotify, True, *delta)
+        self.fake_input(EventType.ButtonRelease, self.buttons[3])
+        self.fake_input(EventType.KeyRelease, self.mod1)
         self.event_loop(lambda: self.window.geometry == \
                             self.initial_geometry + Rectangle._make(delta))
 
@@ -222,42 +197,42 @@ class TestMoveResize(WMTestCase):
         delta = Position(5, 10)
 
         # Shrink the window just a bit.
-        self.warp(*self.relative_position(0.15)) # northwest corner
-        self.fake_input(EventCode.KeyPress, self.mod1)
-        self.fake_input(EventCode.ButtonPress, self.buttons[3])
-        self.fake_input(EventCode.MotionNotify, True, *delta)
-        self.fake_input(EventCode.ButtonRelease, self.buttons[3])
-        self.fake_input(EventCode.KeyRelease, self.mod1)
+        self.warp_pointer(*self.relative_position(0.15)) # northwest corner
+        self.fake_input(EventType.KeyPress, self.mod1)
+        self.fake_input(EventType.ButtonPress, self.buttons[3])
+        self.fake_input(EventType.MotionNotify, True, *delta)
+        self.fake_input(EventType.ButtonRelease, self.buttons[3])
+        self.fake_input(EventType.KeyRelease, self.mod1)
         self.event_loop(lambda: self.window.geometry == \
                             self.initial_geometry + delta - \
                             Rectangle._make(delta))
 
         # Shrink the window all the way down.
-        self.fake_input(EventCode.KeyPress, self.mod1)
-        self.fake_input(EventCode.ButtonPress, self.buttons[3])
-        self.fake_input(EventCode.MotionNotify, True,
+        self.fake_input(EventType.KeyPress, self.mod1)
+        self.fake_input(EventType.ButtonPress, self.buttons[3])
+        self.fake_input(EventType.MotionNotify, True,
                         self.initial_geometry.width,
                         self.initial_geometry.height)
-        self.fake_input(EventCode.ButtonRelease, self.buttons[3])
-        self.fake_input(EventCode.KeyRelease, self.mod1)
+        self.fake_input(EventType.ButtonRelease, self.buttons[3])
+        self.fake_input(EventType.KeyRelease, self.mod1)
         self.event_loop(lambda: (self.window.geometry.width == 1 and
                                  self.window.geometry.height == 1))
 
     def test_resize_abort(self):
         delta = (20, 30)
-        self.warp(*self.relative_position(0.85)) # southeast corner
-        self.fake_input(EventCode.KeyPress, self.mod1)
-        self.fake_input(EventCode.ButtonPress, self.buttons[3])
-        self.fake_input(EventCode.MotionNotify, True, *delta)
-        self.fake_input(EventCode.KeyRelease, self.mod1)
+        self.warp_pointer(*self.relative_position(0.85)) # southeast corner
+        self.fake_input(EventType.KeyPress, self.mod1)
+        self.fake_input(EventType.ButtonPress, self.buttons[3])
+        self.fake_input(EventType.MotionNotify, True, *delta)
+        self.fake_input(EventType.KeyRelease, self.mod1)
         self.event_loop(lambda: self.window.geometry == \
                             self.initial_geometry + Rectangle._make(delta))
 
         # Abort the resize by pressing "Escape".
         escape = self.keymap.keysym_to_keycode(XK_Escape)
-        self.fake_input(EventCode.KeyPress, escape)
-        self.fake_input(EventCode.KeyRelease, escape)
-        self.fake_input(EventCode.ButtonRelease, self.buttons[3])
+        self.fake_input(EventType.KeyPress, escape)
+        self.fake_input(EventType.KeyRelease, escape)
+        self.fake_input(EventType.ButtonRelease, self.buttons[3])
         self.event_loop(lambda: self.window.geometry == self.initial_geometry)
 
 if __name__ == "__main__":
