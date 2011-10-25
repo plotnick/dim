@@ -107,6 +107,8 @@ class WMTestCase(unittest.TestCase):
     """A test fixture that establishes an X connection and starts the WM in
     a separate thread."""
 
+    # The class of window manager to instantiate. Subclasses may override
+    # this to test other window manager classes.
     wm_class = WindowManager
 
     def setUp(self, start_wm=True):
@@ -133,7 +135,7 @@ class WMTestCase(unittest.TestCase):
         self.conn.flush()
 
     def add_window(self, window):
-        """Create and return a new client window."""
+        """Track a new top-level window."""
         assert isinstance(window, TestWindow)
         self.windows[window.id] = window
         return window
