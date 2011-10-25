@@ -232,7 +232,7 @@ class ClientWindow(object):
     wm_hints = ClientProperty("WM_HINTS", WMHints, WMHints())
     wm_class = ClientProperty("WM_CLASS", WMClass, (None, None))
     wm_transient_for = ClientProperty("WM_TRANSIENT_FOR", WMTransientFor)
-    wm_protocols = ClientProperty("WM_PROTOCOLS", WMProtocols)
+    wm_protocols = ClientProperty("WM_PROTOCOLS", WMProtocols, [])
     wm_state = ClientProperty("WM_STATE", WMState)
 
     # EWMH properties
