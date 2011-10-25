@@ -15,7 +15,7 @@ class FocusPolicy(WindowManager):
 
     def __init__(self, *args, **kwargs):
         self.current_focus = None
-        self.pending_focus = ()
+        self.pending_focus = None
         super(FocusPolicy, self).__init__(*args, **kwargs)
 
     def adopt(self, windows):
@@ -44,40 +44,35 @@ class FocusPolicy(WindowManager):
         else:
             self.reparenting_initial_clients = None
 
-        def focus(window):
+        focus = self.conn.core.GetInputFocus().reply().focus
+        if focus == InputFocus.PointerRoot:
+            # If we're in PointerRoot mode, we need to query the server
+            # again for the window currently containing the pointer.
+            focus = self.conn.core.QueryPointer(self.screen.root).reply().child
+        if focus:
             try:
-                client = self.get_client(window)
+                client = self.get_client(focus)
             except NoSuchClient:
                 return
-            debug("Setting initial focus to window 0x%x." % window)
-            self.focus(client, Time.CurrentTime, False)
-
-        window = self.conn.core.GetInputFocus().reply().focus
-        if window == InputFocus.PointerRoot:
-            # We're in PointerRoot mode (i.e., focus-follows-mouse), so we
-            # need to query the server for the window currently containing
-            # the pointer.
-            reply = self.conn.core.QueryPointer(self.screen.root).reply()
-            if reply and reply.child:
-                focus(reply.child)
-            else:
-                info("No window currently has the focus.")
+            debug("Setting initial focus to window 0x%x." % focus)
+            self.focus(client, Time.CurrentTime, True)
         else:
-            focus(window)
+            debug("No window currently has the focus.")
 
     def focus(self, client, time, have_focus):
         """Give the given client the input focus."""
         if client is self.current_focus:
             return True
-        if not have_focus and self.pending_focus != (client, time):
+        if self.pending_focus != client:
             debug("Attempting to focus client window 0x%x." % client.window)
-            self.pending_focus = (client, time)
+            self.pending_focus = client
             if not client.focus(time):
                 return False
         if have_focus:
             debug("Client window 0x%x now has the focus." % client.window)
             client.decorator.focus()
             self.current_focus = client
+            self.pending_focus = None
             return True
 
     def unfocus(self, client):
