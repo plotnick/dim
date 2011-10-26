@@ -152,10 +152,6 @@ class ClientWindow(object):
 
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. See ICCCM §4.1.7."""
-        if self.wm_state and self.wm_state.state != WMState.NormalState:
-            debug("Ignoring attempt to focus client not in Normal state.")
-            return False
-
         focused = False
         if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
             debug("Setting input focus to window 0x%x (%d)." %
@@ -194,15 +190,17 @@ class ClientWindow(object):
             (format, data_len, data) = value.change_property_args()
         else:
             raise __builtins__.ValueError("unknown property value type")
-
-        # Dump the locally cached value for this property. Only values
-        # from the server are canonical, so we'll wait for a new request
-        # to update the value.
-        self.invalidate_cached_property(name)
-
         self.conn.core.ChangeProperty(mode, self.window,
                                       self.atoms[name], self.atoms[type],
                                       format, data_len, data)
+
+        # We'll accept the given value as provisionally correct until a
+        # PropertyNotify comes in to inform us that the server has a new,
+        # canonical value.
+        self.property_values[name] = value
+
+        # Any pending request for the property value should be canceled.
+        self.property_cookies.pop(name, None)
 
     def request_properties(self):
         """Request the client properties for which we don't have a cached
@@ -237,7 +235,7 @@ class ClientWindow(object):
     wm_class = ClientProperty("WM_CLASS", WMClass, (None, None))
     wm_transient_for = ClientProperty("WM_TRANSIENT_FOR", WMTransientFor)
     wm_protocols = ClientProperty("WM_PROTOCOLS", WMProtocols, [])
-    wm_state = ClientProperty("WM_STATE", WMState)
+    wm_state = ClientProperty("WM_STATE", WMState, WMState())
 
     # EWMH properties
     net_wm_name = ClientProperty("_NET_WM_NAME", UTF8String)

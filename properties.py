@@ -230,9 +230,17 @@ class WMState(PropertyValue):
     IconicState = 3
     InactiveState = 4
 
-    def __init__(self, state, icon=0):
+    def __init__(self, state=WithdrawnState, icon=0):
         self.state = state
         self.icon = icon
+
+    def __eq__(self, other):
+        if isinstance(other, WMState):
+            return self.state == other.state and self.icon == other.icon
+        elif isinstance(other, int):
+            return self.state == other
+        else:
+            return super(WMState, self).__eq__(other)
 
 class PropertyField(object):
     """A descriptor class for property value fields whose presence or absence

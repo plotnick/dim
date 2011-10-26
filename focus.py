@@ -6,6 +6,7 @@ from xcb.xproto import *
 
 from event import UnhandledEvent, handler
 from manager import NoSuchClient, WindowManager, ReparentingWindowManager
+from properties import WMState
 
 __all__ = ["FocusPolicy", "SloppyFocus", "ClickToFocus"]
 
@@ -61,6 +62,8 @@ class FocusPolicy(WindowManager):
 
     def focus(self, client, time, have_focus):
         """Give the given client the input focus."""
+        if client.wm_state != WMState.NormalState:
+            return False
         if client is self.current_focus:
             return True
         if self.pending_focus != client:
@@ -77,6 +80,8 @@ class FocusPolicy(WindowManager):
 
     def unfocus(self, client):
         """Unfocus the currently focused client."""
+        if client.wm_state != WMState.NormalState:
+            return False
         debug("Unfocusing client window 0x%x." % client.window)
         client.unfocus()
         if client is self.current_focus:
