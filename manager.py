@@ -173,6 +173,7 @@ class WindowManager(EventHandler):
         """Unmanage the given client."""
         debug("Unmanaging client window 0x%x." % client.window)
         client.decorator.undecorate()
+        del client.wm_state
         return self.clients.pop(client.window)
 
     def place(self, client, geometry):
