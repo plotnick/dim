@@ -35,7 +35,7 @@ class ClientProperty(object):
         try:
             cookie = instance.property_cookies.pop(self.name)
         except KeyError:
-            cookie = instance.get_property(self.name)
+            cookie = instance.request_property(self.name)
 
         # Construct a new value from the reply data and cache it.
         try:
@@ -45,7 +45,7 @@ class ClientProperty(object):
                     (self.name, instance.window))
             return self.default
         value = owner.properties[self.name].unpack(reply.value.buf()) \
-            if reply and reply.type else self.default
+            if reply.type else self.default
         instance.property_values[self.name] = value
         return value
 
@@ -54,7 +54,7 @@ class ClientProperty(object):
             instance.set_property(self.name, self.type.property_type, value)
 
     def __delete__(self, instance):
-        instance.invalidate_cached_property(self.name)
+        instance.delete_property(self.name)
 
 class ClientWindowClass(type):
     """A metaclass for the ClientWindow class that supports auto-registration
@@ -169,7 +169,9 @@ class ClientWindow(object):
     def unfocus(self):
         self.decorator.unfocus()
 
-    def get_property(self, name, type=None):
+    def request_property(self, name, type=None):
+        """Request the value of a property of the client window, and return
+        a cookie for the request. Does not wait for a reply."""
         if type is None:
             type = self.properties[name].property_type
         debug("Requesting property %s for window 0x%x." % (name, self.window))
@@ -178,6 +180,7 @@ class ClientWindow(object):
                                           0, 0xffffffff)
 
     def set_property(self, name, type, value, mode=PropMode.Replace):
+        """Change the value of a property on the client window."""
         if isinstance(value, unicode):
             format = 8
             data = value.encode("UTF-8")
@@ -208,7 +211,29 @@ class ClientWindow(object):
         for name in self.properties:
             if (name not in self.property_values and
                 name not in self.property_cookies):
-                self.property_cookies[name] = self.get_property(name)
+                self.property_cookies[name] = self.request_property(name)
+
+    def delete_property(self, name):
+        """Remove the given property from the client window."""
+        debug("Deleting property %s on window 0x%x." % (name, self.window))
+        self.conn.core.DeleteProperty(self.window, self.atoms[name])
+        self.invalidate_cached_property(name)
+
+    def property_changed(self, atom, deleted):
+        """Handle a change or deletion of a property."""
+        name = self.atoms.name(atom)
+        debug("Property %s %s on window 0x%x." %
+              (name, ("deleted" if deleted else "changed"), self.window))
+        if deleted:
+            self.invalidate_cached_property(name)
+        else:
+            # Dump our cached value and request (but do not wait for) the
+            # new value from the server.
+            self.property_values.pop(name, None)
+            self.property_cookies[name] = self.request_property(name)
+
+        if name == "WM_NAME" or name == "_NET_WM_NAME":
+            self.decorator.name_changed()
 
     def invalidate_cached_property(self, name):
         """Invalidate any cached request or value for the given property."""
@@ -216,14 +241,6 @@ class ClientWindow(object):
             del self.property_values[name]
         if name in self.property_cookies:
             del self.property_cookies[name]
-
-    def property_changed(self, atom):
-        name = self.atoms.name(atom)
-        debug("Property %s changed on window 0x%x." % (name, self.window))
-        self.invalidate_cached_property(name)
-
-        if name == "WM_NAME" or name == "_NET_WM_NAME":
-            self.decorator.name_changed()
 
     # ICCCM properties
     wm_name = ClientProperty("WM_NAME", String)
