@@ -135,16 +135,17 @@ class FrameDecorator(Decorator):
         self.border_window = frame
 
     def undecorate(self):
-        self.conn.core.UnmapWindow(self.client.frame)
-        self.border_window = self.client.window
-        super(FrameDecorator, self).undecorate()
-        self.conn.core.ReparentWindow(self.client.window,
-                                      self.screen.root,
-                                      self.client.geometry.x,
-                                      self.client.geometry.y)
-        self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
-        self.conn.core.DestroyWindow(self.client.frame)
-        self.client.frame = None
+        if self.client.frame:
+            self.conn.core.UnmapWindow(self.client.frame)
+            self.border_window = self.client.window
+            super(FrameDecorator, self).undecorate()
+            self.conn.core.ReparentWindow(self.client.window,
+                                          self.screen.root,
+                                          self.client.geometry.x,
+                                          self.client.geometry.y)
+            self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
+            self.conn.core.DestroyWindow(self.client.frame)
+            self.client.frame = None
 
     def frame_geometry(self):
         """Compute and return a geometry for the frame."""
@@ -232,8 +233,10 @@ class TitleDecorator(FrameDecorator):
                                                        self.refresh)
 
     def undecorate(self):
-        self.conn.core.DestroyWindow(self.titlebar)
-        super(TitleDecorator, self).undecorate()
+        if self.titlebar:
+            self.conn.core.DestroyWindow(self.titlebar)
+            self.titlebar = None
+            super(TitleDecorator, self).undecorate()
 
     def focus(self):
         self.config = self.title_configs[1]
