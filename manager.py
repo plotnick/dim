@@ -392,7 +392,8 @@ class ReparentingWindowManager(WindowManager):
         return client
 
     def unmanage(self, client):
-        self.frames.pop(client.frame)
+        if client.frame:
+            self.frames.pop(client.frame)
         return super(ReparentingWindowManager, self).unmanage(client)
 
     def decorator(self, client):
@@ -405,8 +406,12 @@ class ReparentingWindowManager(WindowManager):
 
     def withdraw(self, client):
         if not client.reparenting:
+            frame = client.frame
             self.conn.core.UnmapWindow(client.frame)
-            return super(ReparentingWindowManager, self).withdraw(client)
+            try:
+                return super(ReparentingWindowManager, self).withdraw(client)
+            finally:
+                self.frames.pop(frame)
 
     def get_client(self, window, client_only=False):
         if window in self.clients:
