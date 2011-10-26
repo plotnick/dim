@@ -243,8 +243,8 @@ class ClientWindow(object):
             del self.property_cookies[name]
 
     # ICCCM properties
-    wm_name = ClientProperty("WM_NAME", String)
-    wm_icon_name = ClientProperty("WM_ICON_NAME", String)
+    wm_name = ClientProperty("WM_NAME", String, "")
+    wm_icon_name = ClientProperty("WM_ICON_NAME", String, "")
     wm_normal_hints = ClientProperty("WM_NORMAL_HINTS",
                                      WMSizeHints,
                                      WMSizeHints())
@@ -255,5 +255,5 @@ class ClientWindow(object):
     wm_state = ClientProperty("WM_STATE", WMState, WMState())
 
     # EWMH properties
-    net_wm_name = ClientProperty("_NET_WM_NAME", UTF8String)
-    net_wm_icon_name = ClientProperty("_NET_WM_ICON_NAME", UTF8String)
+    net_wm_name = ClientProperty("_NET_WM_NAME", UTF8String, "")
+    net_wm_icon_name = ClientProperty("_NET_WM_ICON_NAME", UTF8String, "")

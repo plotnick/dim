@@ -262,6 +262,8 @@ class TitleDecorator(FrameDecorator):
     def draw_title(self, title=None, x=5):
         if title is None:
             title = self.client.net_wm_name or self.client.wm_name
+        assert title is not None
+        title = unicode(title)
 
         w = self.geometry.width - 1
         h = self.config.height - 2
