@@ -173,10 +173,13 @@ class ClientWindow(object):
         """Request the value of a property of the client window, and return
         a cookie for the request. Does not wait for a reply."""
         if type is None:
-            type = self.properties[name].property_type
+            type = (self.properties[name].property_type
+                    if name in self.properties
+                    else GetPropertyType.Any)
         debug("Requesting property %s for window 0x%x." % (name, self.window))
-        return self.conn.core.GetProperty(False, self.window,
-                                          self.atoms[name], self.atoms[type],
+        name = self.atoms[name] if isinstance(name, str) else name
+        type = self.atoms[type] if isinstance(type, str) else type
+        return self.conn.core.GetProperty(False, self.window, name, type,
                                           0, 0xffffffff)
 
     def set_property(self, name, type, value, mode=PropMode.Replace):
@@ -227,10 +230,11 @@ class ClientWindow(object):
         if deleted:
             self.invalidate_cached_property(name)
         else:
-            # Dump our cached value and request (but do not wait for) the
-            # new value from the server.
+            # Dump our cached value and, if it's a property that we care
+            # about, request (but do not wait for) the new value.
             self.property_values.pop(name, None)
-            self.property_cookies[name] = self.request_property(name)
+            if name in self.properties:
+                self.property_cookies[name] = self.request_property(name)
 
         if name == "WM_NAME" or name == "_NET_WM_NAME":
             self.decorator.name_changed()
