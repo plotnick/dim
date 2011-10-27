@@ -191,9 +191,9 @@ class WindowManager(EventHandler):
                                             ConfigWindow.BorderWidth),
                                            (int16(geometry.x),
                                             int16(geometry.y),
-                                            int16(geometry.width),
-                                            int16(geometry.height),
-                                            int16(geometry.border_width)))
+                                            card16(geometry.width),
+                                            card16(geometry.height),
+                                            card16(geometry.border_width)))
         return geometry
 
     def decorator(self, client):
@@ -296,9 +296,9 @@ class WindowManager(EventHandler):
                 select_values(event.value_mask,
                               [int16(event.x),
                                int16(event.y),
-                               int16(event.width),
-                               int16(event.height),
-                               int16(event.border_width),
+                               card16(event.width),
+                               card16(event.height),
+                               card16(event.border_width),
                                event.sibling,
                                event.stack_mode]))
         self.conn.flush()
