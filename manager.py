@@ -283,8 +283,7 @@ class WindowManager(EventHandler):
                   (client.window, requested_geometry))
             old_geometry = client.geometry
             new_geometry = self.place(client, requested_geometry)
-            if (new_geometry == old_geometry or
-                is_move_only(old_geometry, new_geometry)):
+            if is_move_only(old_geometry, new_geometry):
                 debug("Sending synthetic ConfigureNotify to client 0x%x." %
                       client.window)
                 configure_notify(self.conn, client.window, *new_geometry)

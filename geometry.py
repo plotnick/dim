@@ -107,13 +107,13 @@ AspectRatio.crop = lambda self, rect: \
         else Rectangle(rect.height * self.width // self.height, rect.height)
 
 def is_move_only(old, new):
-    """Returns True if the new geometry represents a move without a resize
-    of the old geometry."""
-    return ((old and new) and
-            (new.x != old.x or new.y != old.y) and
-            (new.width == old.width) and
-            (new.height == old.height) and
-            (new.border_width == old.border_width))
+    """Return true if the new geometry represents a (possibly trivial) move
+    without a resize or border-width change of the old geometry."""
+    return (old is not None and
+            new is not None and
+            new.width == old.width and
+            new.height == old.height and
+            new.border_width == old.border_width)
 
 # When dealing with window gravity, it's sometimes more convenient to use
 # a slightly richer representation than the simple enumeration specified

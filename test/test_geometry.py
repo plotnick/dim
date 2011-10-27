@@ -83,10 +83,10 @@ class TestIsMoveOnly(unittest.TestCase):
     def test_is_move_only(self):
         """Test is_move_only"""
         g = Geometry(1, 1, 1, 1, 1)
-        self.assertFalse(is_move_only(g, Geometry(1, 1, 1, 1, 1)))
-        self.assertFalse(is_move_only(g, Geometry(2, 2, 2, 2, 1)))
-        self.assertFalse(is_move_only(g, Geometry(2, 2, 1, 1, 2)))
-        self.assertTrue(is_move_only(g, Geometry(2, 2, 1, 1, 1)))
+        self.assertFalse(is_move_only(g, Geometry(2, 2, 2, 2, 1))) # resize
+        self.assertFalse(is_move_only(g, Geometry(2, 2, 1, 1, 2))) # bw change
+        self.assertTrue(is_move_only(g, Geometry(2, 2, 1, 1, 1))) # move
+        self.assertTrue(is_move_only(g, g)) # trivial move
 
 if __name__ == "__main__":
     unittest.main()
