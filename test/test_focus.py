@@ -11,11 +11,24 @@ import xcb
 from xcb.xproto import *
 import xcb.xtest
 
-from test_manager import EventType, TestWindow, WMTestCase
+from test_manager import EventType, TestClient, WMTestCase
 
 def center(geometry):
     bw = geometry.border_width
     return geometry.position() + geometry.size() // 2 + Position(bw, bw)
+
+class FocusTestClient(TestClient):
+    def __init__(self, geometry, screen=None, event_mask=EventMask.FocusChange):
+        super(FocusTestClient, self).__init__(geometry, screen, event_mask)
+        self.focused = False
+
+    @handler(FocusInEvent)
+    def handle_focus_in(self, event):
+        self.focused = True
+
+    @handler(FocusOutEvent)
+    def handle_focus_out(self, event):
+        self.focused = False
 
 class FocusPolicyTestCase(WMTestCase):
     """Base class for focus policy integration tests."""
@@ -32,18 +45,22 @@ class FocusPolicyTestCase(WMTestCase):
                                             Time.CurrentTime).check()
         super(FocusPolicyTestCase, self).tearDown()
 
-    def is_focused(self, window):
-        if isinstance(window, TestWindow):
-            window = window.id
-        # The server and the window manager must agree on the focus.
+    def is_focused(self, client):
+        # The server, the window manager, and the client must agree on who
+        # has the input focus.
+        window = client.window
         return (self.conn.core.GetInputFocus().reply().focus == window and
-                self.wm_thread.wm.current_focus.window == window)
+                self.wm_thread.wm.current_focus.window == window and
+                client.focused)
 
-    def assertFocus(self, window):
-        self.assertTrue(self.is_focused(window))
+    def make_focus_test(self, client):
+        return lambda: self.is_focused(client)
 
-    def assertNotFocus(self, window):
-        self.assertFalse(self.is_focused(window))
+    def assertFocus(self, client):
+        self.assertTrue(self.is_focused(client))
+
+    def assertNotFocus(self, client):
+        self.assertFalse(self.is_focused(client))
 
 class TestInitialFocus(FocusPolicyTestCase):
     wm_class = FocusPolicy
@@ -52,14 +69,14 @@ class TestInitialFocus(FocusPolicyTestCase):
         super(TestInitialFocus, self).setUp(start_wm)
 
     def test_initial_focus(self):
-        g = Geometry(0, 0, 100, 100, 5)
-        self.warp_pointer(*center(g))
-        w = self.add_window(self.create_window(g))
-        w.map()
+        geometry = Geometry(0, 0, 100, 100, 5)
+        self.warp_pointer(*center(geometry))
+        client = self.add_client(FocusTestClient(geometry))
+        client.map()
 
-        self.assertNotFocus(w)
+        self.assertNotFocus(client)
         self.wm_thread.start()
-        self.event_loop(lambda: self.is_focused(w))
+        self.loop(self.make_focus_test(client))
 
 class TestSloppyFocus(FocusPolicyTestCase):
     wm_class = SloppyFocus
@@ -71,17 +88,17 @@ class TestSloppyFocus(FocusPolicyTestCase):
         reply = self.conn.core.QueryPointer(self.screen.root).reply()
         self.assertFalse(reply.child, "northwest corner must be clear")
 
-        g = Geometry(5, 5, 100, 100, 1)
-        w = self.add_window(self.create_window(g))
-        w.map()
+        geometry = Geometry(5, 5, 100, 100, 1)
+        client = self.add_client(FocusTestClient(geometry))
+        client.map()
 
         # Move the pointer into the window, and make sure it gets the focus.
-        self.fake_input(EventType.MotionNotify, False, *center(g))
-        self.event_loop(lambda: self.is_focused(w))
+        self.fake_input(EventType.MotionNotify, False, *center(geometry))
+        self.loop(self.make_focus_test(client))
 
         # Now move it back to the root, and ensure that it still has the focus.
         self.fake_input(EventType.MotionNotify, False, 1, 1)
-        self.event_loop(lambda: self.is_focused(w))
+        self.loop(self.make_focus_test(client))
 
 if __name__ == "__main__":
     import logging

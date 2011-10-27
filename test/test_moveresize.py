@@ -13,7 +13,7 @@ from moveresize import ClientMove, ClientResize, MoveResize
 from properties import WMSizeHints
 from xutil import int16
 
-from test_manager import EventType, TestWindow, WMTestCase
+from test_manager import EventType, TestClient, WMTestCase
 
 class MockClient(object):
     def __init__(self, test, geometry, size_hints=WMSizeHints()):
@@ -164,12 +164,19 @@ class TestMoveResize(WMTestCase):
         self.mod1 = self.modmap[MapIndex._1][0]
         self.initial_geometry = Geometry(x=0, y=0, width=100, height=100,
                                          border_width=1)
-        self.window = self.add_window(self.create_window(self.initial_geometry))
-        self.window.map()
+        self.client = self.add_client(TestClient(self.initial_geometry))
+        self.client.map()
+        self.loop(lambda: self.client.managed)
 
     def relative_position(self, ratio):
         return (self.initial_geometry.position() + 
                 self.initial_geometry.size() * ratio)
+
+    def make_geometry_test(self, geometry):
+        return lambda: self.client.geometry == geometry
+
+    def make_geometry_delta_test(self, delta):
+        return self.make_geometry_test(self.initial_geometry + delta)
 
     def test_move(self):
         delta = Position(5, 10)
@@ -179,8 +186,7 @@ class TestMoveResize(WMTestCase):
         self.fake_input(EventType.MotionNotify, True, *delta)
         self.fake_input(EventType.ButtonRelease, self.buttons[1])
         self.fake_input(EventType.KeyRelease, self.mod1)
-        self.event_loop(lambda: self.window.geometry == \
-                            self.initial_geometry + delta)
+        self.loop(self.make_geometry_delta_test(delta))
 
     def test_resize_southeast(self):
         delta = Position(5, 10)
@@ -190,8 +196,7 @@ class TestMoveResize(WMTestCase):
         self.fake_input(EventType.MotionNotify, True, *delta)
         self.fake_input(EventType.ButtonRelease, self.buttons[3])
         self.fake_input(EventType.KeyRelease, self.mod1)
-        self.event_loop(lambda: self.window.geometry == \
-                            self.initial_geometry + Rectangle._make(delta))
+        self.loop(self.make_geometry_delta_test(Rectangle(*delta)))
 
     def test_resize_northwest(self):
         delta = Position(5, 10)
@@ -203,9 +208,8 @@ class TestMoveResize(WMTestCase):
         self.fake_input(EventType.MotionNotify, True, *delta)
         self.fake_input(EventType.ButtonRelease, self.buttons[3])
         self.fake_input(EventType.KeyRelease, self.mod1)
-        self.event_loop(lambda: self.window.geometry == \
-                            self.initial_geometry + delta - \
-                            Rectangle._make(delta))
+        self.loop(self.make_geometry_test(self.initial_geometry + delta -
+                                          Rectangle(*delta)))
 
         # Shrink the window all the way down.
         self.fake_input(EventType.KeyPress, self.mod1)
@@ -215,8 +219,7 @@ class TestMoveResize(WMTestCase):
                         self.initial_geometry.height)
         self.fake_input(EventType.ButtonRelease, self.buttons[3])
         self.fake_input(EventType.KeyRelease, self.mod1)
-        self.event_loop(lambda: (self.window.geometry.width == 1 and
-                                 self.window.geometry.height == 1))
+        self.loop(lambda: self.client.geometry.size() == Rectangle(1, 1))
 
     def test_resize_abort(self):
         delta = (20, 30)
@@ -225,15 +228,14 @@ class TestMoveResize(WMTestCase):
         self.fake_input(EventType.ButtonPress, self.buttons[3])
         self.fake_input(EventType.MotionNotify, True, *delta)
         self.fake_input(EventType.KeyRelease, self.mod1)
-        self.event_loop(lambda: self.window.geometry == \
-                            self.initial_geometry + Rectangle._make(delta))
+        self.loop(self.make_geometry_delta_test(Rectangle(*delta)))
 
         # Abort the resize by pressing "Escape".
         escape = self.keymap.keysym_to_keycode(XK_Escape)
         self.fake_input(EventType.KeyPress, escape)
         self.fake_input(EventType.KeyRelease, escape)
         self.fake_input(EventType.ButtonRelease, self.buttons[3])
-        self.event_loop(lambda: self.window.geometry == self.initial_geometry)
+        self.loop(self.make_geometry_test(self.initial_geometry))
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,8 @@ from keymap import *
 from manager import WindowManager, compress
 from xutil import *
 
+ms = 10**-3 # useful for sleep times
+
 class EventType(object):
     """X event type codes."""
     KeyPress = 2
@@ -31,7 +33,7 @@ class WindowManagerThread(Thread):
         assert issubclass(wm_class, WindowManager)
         assert isinstance(screen, int)
 
-        super(WindowManagerThread, self).__init__()
+        super(WindowManagerThread, self).__init__(name="WM")
         self.wm = wm_class(None, screen)
 
     def run(self):
@@ -40,17 +42,21 @@ class WindowManagerThread(Thread):
         finally:
             self.wm.shutdown()
 
-class TestWindow(EventHandler):
-    """A simple top-level window."""
+class ClientUnmanaged(Exception):
+    pass
 
-    def __init__(self, conn, screen, geometry, event_mask=0):
-        assert isinstance(conn, xcb.Connection)
-        assert isinstance(screen, SCREEN)
+class TestClient(EventHandler, Thread):
+    """A simple client with one top-level window."""
 
-        self.conn = conn
-        self.screen = screen
-        self.atoms = AtomCache(conn, ["WM_STATE"])
-        self.id = conn.generate_id()
+    def __init__(self, geometry, screen=None, event_mask=0):
+        super(TestClient, self).__init__(name="Client")
+
+        self.conn = xcb.connect()
+        if screen is None:
+            screen = self.conn.pref_screen
+        self.screen = self.conn.get_setup().roots[screen]
+        self.atoms = AtomCache(self.conn, ["WM_STATE"])
+        self.window = self.conn.generate_id()
         self.mapped = False
         self.managed = False
         self.geometry = None
@@ -59,23 +65,23 @@ class TestWindow(EventHandler):
         self.synthetic_configure_notify = False
 
         event_mask |= (EventMask.StructureNotify | EventMask.PropertyChange)
-        conn.core.CreateWindowChecked(self.screen.root_depth, self.id,
-                                      self.screen.root,
-                                      geometry.x, geometry.y,
-                                      geometry.width, geometry.height,
-                                      geometry.border_width,
-                                      WindowClass.InputOutput,
-                                      self.screen.root_visual,
-                                      CW.BackPixel | CW.EventMask,
-                                      [self.screen.white_pixel,
-                                       event_mask]).check()
+        self.conn.core.CreateWindowChecked(self.screen.root_depth, self.window,
+                                           self.screen.root,
+                                           geometry.x, geometry.y,
+                                           geometry.width, geometry.height,
+                                           geometry.border_width,
+                                           WindowClass.InputOutput,
+                                           self.screen.root_visual,
+                                           CW.BackPixel | CW.EventMask,
+                                           [self.screen.white_pixel,
+                                            event_mask]).check()
 
     def map(self):
-        self.conn.core.MapWindowChecked(self.id).check()
+        self.conn.core.MapWindowChecked(self.window).check()
 
     def resize(self, geometry):
         assert isinstance(geometry, Geometry)
-        self.conn.core.ConfigureWindowChecked(self.id,
+        self.conn.core.ConfigureWindowChecked(self.window,
                                               (ConfigWindow.X |
                                                ConfigWindow.Y |
                                                ConfigWindow.Width |
@@ -85,21 +91,56 @@ class TestWindow(EventHandler):
         return geometry
 
     def destroy(self):
-        self.conn.core.DestroyWindowChecked(self.id).check()
+        self.conn.core.DestroyWindowChecked(self.window).check()
+
+    def run(self, max_timeouts=100):
+        """A simple client event loop."""
+        timeouts = 0
+        rlist = [self.conn.get_file_descriptor()]
+        wlist = []
+        xlist = []
+        while timeouts < max_timeouts:
+            # Process pending events from XCB.
+            while True:
+                event = self.conn.poll_for_event()
+                if event:
+                    try:
+                        self.handle_event(event)
+                    except ClientUnmanaged:
+                        self.shutdown()
+                        return
+                else:
+                    break
+
+            self.conn.flush()
+
+            # Wait for more events, but only for a few milliseconds.
+            r, w, x = select(rlist, wlist, xlist, 10 * ms)
+            if not r and not w and not x:
+                timeouts += 1
+        assert False, "client timed out"
+
+    def shutdown(self):
+        self.destroy()
+        self.conn.flush()
+        self.conn.disconnect()
+
+    def unhandled_event(self, event):
+        pass
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
-        assert event.window == self.id
+        assert event.window == self.window
         self.mapped = True
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        assert event.window == self.id
+        assert event.window == self.window
         self.mapped = False
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
-        assert event.window == self.id
+        assert event.window == self.window
         self.geometry = Geometry(event.x, event.y,
                                  event.width, event.height,
                                  event.border_width)
@@ -109,10 +150,13 @@ class TestWindow(EventHandler):
 
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
-        assert event.window == self.id
-        if (event.state == Property.NewValue and
-            event.atom == self.atoms["WM_STATE"]):
-            self.managed = True
+        assert event.window == self.window
+        if event.atom == self.atoms["WM_STATE"]:
+            if event.state == Property.NewValue:
+                self.managed = True
+            elif event.state == Property.Delete:
+                self.managed = False
+                raise ClientUnmanaged
 
 class WMTestCase(unittest.TestCase):
     """A test fixture that establishes an X connection and starts the WM in
@@ -132,18 +176,21 @@ class WMTestCase(unittest.TestCase):
         self.modmap = ModifierMap(self.conn)
         self.keymap = KeyboardMap(self.conn, None, self.modmap)
         self.buttons = PointerMap(self.conn)
-        self.windows = {} # test windows, indexed by id
+        self.clients = []
         self.wm_thread = WindowManagerThread(self.wm_class, screen)
         if start_wm:
             self.wm_thread.start()
 
     def tearDown(self):
-        for window in self.windows.values():
-            window.destroy()
-        self.conn.flush()
         if self.wm_thread.is_alive():
             self.kill_wm()
-            self.wm_thread.join()
+            self.wm_thread.join(100 * ms)
+            assert not self.wm_thread.is_alive(), "WM thread is still alive"
+        for client in self.clients:
+            client.join(100 * ms)
+            assert not client.is_alive(), "client thread is still alive"
+        self.conn.flush()
+        self.conn.disconnect()
 
     def kill_wm(self):
         """Ask the window manager to exit."""
@@ -152,21 +199,19 @@ class WMTestCase(unittest.TestCase):
                             8, self.atoms["WM_EXIT"], [0] * 20)
         self.conn.flush()
 
-    def add_window(self, window):
-        """Track a new top-level window."""
-        assert isinstance(window, TestWindow)
-        self.windows[window.id] = window
-        return window
-
-    def create_window(self, geometry):
-        """Create a new top-level window with the given geometry."""
-        return TestWindow(self.conn, self.screen, geometry)
+    def add_client(self, client, start_client=True):
+        """Manage and start a client thread."""
+        assert isinstance(client, TestClient)
+        self.clients.append(client)
+        if start_client:
+            client.start()
+        return client
 
     def fake_input(self, type, detail, root_x=0, root_y=0):
         """Simulate user input."""
         self.xtest.FakeInputChecked(type, detail, Time.CurrentTime,
                                     self.screen.root, root_x, root_y, 0).check()
-        sleep(0.0001) # block & yield control
+        sleep(1 * ms) # block & yield control
 
     def warp_pointer(self, x, y):
         """Warp the pointer to the given coordinates relative to the origin
@@ -174,33 +219,15 @@ class WMTestCase(unittest.TestCase):
         self.conn.core.WarpPointerChecked(0, self.screen.root, 0, 0, 0, 0,
                                           int16(x), int16(y)).check()
 
-    def event_loop(self, test=lambda: False, max_timeouts=50):
-        """A simple client event loop."""
+    def loop(self, test=lambda: False, max_timeouts=100):
+        """Loop until the given test is true or we time out too many times."""
         timeouts = 0
-        rlist = [self.conn.get_file_descriptor()]
-        wlist = []
-        xlist = []
         while timeouts < max_timeouts:
-            # Process pending events from XCB.
-            while True:
-                event = self.conn.poll_for_event()
-                if not event:
-                    break
-                if hasattr(event, "window"):
-                    try:
-                        self.windows[event.window].handle_event(event)
-                    except KeyError:
-                        self.fail("Event received for unknown window")
             if test():
                 return True
-
-            self.conn.flush()
-
-            # Wait for more events, but only for a few milliseconds.
-            r, w, x = select(rlist, wlist, xlist, 0.001)
-            if not r and not w and not x:
-                timeouts += 1
-        self.fail("timed out")
+            sleep(10 * ms)
+            timeouts += 1
+        self.fail("test loop timed out")
 
 class TestWMStartup(WMTestCase):
     def setUp(self):
@@ -210,45 +237,50 @@ class TestWMStartup(WMTestCase):
         """Ensure that the window manager adopts extant top-level windows"""
         # Create a few top-level windows. Just for fun, we'll map two and
         # leave one more withdrawn; that last will not be managed.
-        w1 = self.add_window(self.create_window(Geometry(0, 0, 100, 100, 1)))
-        w2 = self.add_window(self.create_window(Geometry(10, 10, 10, 10, 1)))
-        w3 = self.add_window(self.create_window(Geometry(20, 20, 20, 20, 1)))
+        w1 = self.add_client(TestClient(Geometry(0, 0, 100, 100, 1)))
+        w2 = self.add_client(TestClient(Geometry(10, 10, 10, 10, 1)))
+        w3 = self.add_client(TestClient(Geometry(20, 20, 20, 20, 1)))
         w1.map()
         w2.map()
 
         # Now fire up the window manager.
         self.wm_thread.start()
 
-        self.event_loop(lambda: w1.managed and w2.managed and not w3.managed)
+        self.loop(lambda: w1.managed and w2.managed and not w3.managed)
+
+        # Let's bring up that last window.
+        w3.map()
+        self.loop(lambda: w3.managed)
 
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):
         super(TestWMClientMoveResize, self).setUp()
         self.initial_geometry = Geometry(0, 0, 100, 100, 5)
-        self.w = self.add_window(self.create_window(self.initial_geometry))
-        self.w.map()
+        self.client = self.add_client(TestClient(self.initial_geometry))
+        self.client.map()
+        self.loop(lambda: self.client.managed)
         
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
-        self.w.resize(self.initial_geometry)
+        self.client.resize(self.initial_geometry)
         geometry = self.initial_geometry + (5, 5) # adjust for border
-        self.event_loop(lambda: (self.w.geometry == geometry and
-                                 self.w.synthetic_configure_notify))
+        self.loop(lambda: (self.client.geometry == geometry and
+                           self.client.synthetic_configure_notify))
 
     def test_move(self):
         """Move a top-level window without changing its size"""
-        self.w.resize(self.initial_geometry + (5, 5))
+        self.client.resize(self.initial_geometry + (5, 5))
         geometry = self.initial_geometry + (10, 10) # adjust for border
-        self.event_loop(lambda: (self.w.geometry == geometry and
-                                 self.w.synthetic_configure_notify))
+        self.loop(lambda: (self.client.geometry == geometry and
+                           self.client.synthetic_configure_notify))
 
     def test_resize(self):
         """Resize and move a top-level window"""
         geometry = Geometry(5, 5, 50, 50, 5)
-        self.w.resize(geometry)
+        self.client.resize(geometry)
         # The real ConfigureNotify event reflects the actual border width.
-        self.event_loop(lambda: (self.w.geometry == geometry and
-                                 not self.w.synthetic_configure_notify))
+        self.loop(lambda: (self.client.geometry == geometry and
+                           not self.client.synthetic_configure_notify))
 
 class EventLoopTester(WindowManager):
     """A window manager that records the number of ConfigureNotify events
@@ -267,19 +299,19 @@ class TestWMEventLoop(WMTestCase):
 
     def jiggle_window(self, n=100):
         # Realize a client window.
-        g = Geometry(0, 0, 100, 100, 5)
-        w = self.add_window(self.create_window(g))
-        w.map()
+        geometry = Geometry(0, 0, 100, 100, 5)
+        client = self.add_client(TestClient(geometry))
+        client.map()
 
         # Move the window around a bunch of times.
         for i in range(n):
-            w.resize(g + (randint(1, 100), randint(1, 100)))
+            client.resize(geometry + (randint(1, 100), randint(1, 100)))
 
     def test_event_loop(self):
         """Test the window manager's event loop"""
         n = 100
         self.jiggle_window(n)
-        self.event_loop(lambda: self.wm_thread.wm.events_received >= n)
+        self.loop(lambda: self.wm_thread.wm.events_received >= n)
 
 class EventCompressionTester(EventLoopTester):
     @handler(ConfigureNotifyEvent)
@@ -294,7 +326,7 @@ class TestWMEventLoopWithCompression(TestWMEventLoop):
         """Test event compression"""
         n = 100
         self.jiggle_window(n)
-        self.event_loop(lambda: 0 < self.wm_thread.wm.events_received < n)
+        self.loop(lambda: 0 < self.wm_thread.wm.events_received < n)
 
 if __name__ == "__main__":
     import logging
