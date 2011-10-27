@@ -363,8 +363,7 @@ class WMSizeHints(PropertyValue):
                 return size
             base = self.base_size
             inc = self.resize_inc
-            i = (size.width - base.width) // inc.width
-            j = (size.height - base.height) // inc.height
+            i, j = self.size_increments(size)
             return Rectangle(base.width + (i * inc.width),
                              base.height + (j * inc.height))
         def constrain_min_max(size):
@@ -372,6 +371,17 @@ class WMSizeHints(PropertyValue):
                 return min(max(size[i], self.min_size[i]), self.max_size[i])
             return Rectangle(min_max(0), min_max(1))
         return constrain_min_max(constrain_inc(constrain_aspect(size)))
+
+    def size_increments(self, size):
+        """Given a rectangle of size width × height, return a pair of
+        non-negative integers i and j such that:
+            width = base_width + (i × width_inc) and
+            height = base_height + (j × height_inc).
+        See ICCCM §4.1.2.3 for details."""
+        base = self.base_size
+        inc = self.resize_inc
+        return Rectangle((size.width - base.width) // inc.width,
+                         (size.height - base.height) // inc.height)
 
 class WMHints(PropertyValue):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""

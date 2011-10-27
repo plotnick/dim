@@ -10,6 +10,7 @@ from event import UnhandledEvent, handler
 from geometry import *
 from keysym import *
 from manager import WindowManager, compress
+from properties import WMSizeHints
 from xutil import *
 
 __all__ = ["MoveResize"]
@@ -88,20 +89,24 @@ class ClientResize(ClientUpdate):
 
     def update(self, pointer):
         delta = self.delta(pointer)
+
+        # Treat center gravity as just a move.
         if self.gravity == (0, 0):
-            # Center gravity is just a move.
-            self.client.move(self.geometry.position() + delta)
+            position = self.geometry.position() + delta
+            self.client.move(position)
+            self.client.decorator.message(position)
             return
 
         # Depending on the gravity, resizing may involve a move, too.
-        size = self.geometry.size()
         dsize = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
+        size = self.geometry.size()
         new_size = self.size_hints.constrain_window_size(size + dsize)
         offset = (new_size.width - size.width if self.gravity.x < 0 else 0,
                   new_size.height - size.height if self.gravity.y < 0 else 0)
-        geometry = self.geometry.resize(new_size) - offset
-        self.client.update_geometry(geometry)
-        self.client.decorator.message(geometry)
+        self.client.update_geometry(self.geometry.resize(new_size) - offset)
+        self.client.decorator.message(new_size \
+            if self.size_hints.flags & WMSizeHints.PResizeInc == 0 \
+            else self.size_hints.size_increments(new_size))
 
     def rollback(self, time=Time.CurrentTime):
         self.client.update_geometry(self.initial_geometry)
