@@ -50,6 +50,7 @@ class FocusPolicyTestCase(WMTestCase):
         # has the input focus.
         window = client.window
         return (self.conn.core.GetInputFocus().reply().focus == window and
+                self.wm_thread.wm.current_focus and
                 self.wm_thread.wm.current_focus.window == window and
                 client.focused)
 
