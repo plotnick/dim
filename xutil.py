@@ -28,6 +28,15 @@ def card16(x):
     assert x >= 0, "invalid cardinal %d" % x
     return int(x) & 0xffff
 
+def sequence_number(event, struct=Struct("H")):
+    """Return the sequence number of the given event."""
+    # Every event type except KeymapNotify contains the low-order 16 bits
+    # of the sequence number of the last request issued by the client at
+    # an offset of 2 bytes.
+    return (struct.unpack_from(event, 2)[0]
+            if not isinstance(event, KeymapNotifyEvent)
+            else None)
+
 def is_synthetic_event(event):
     """Returns True if the given event was produced via a SendEvent request."""
     # Events begin with an 8-bit type code; synthetic events have the
