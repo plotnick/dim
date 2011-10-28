@@ -59,21 +59,23 @@ class TestClient(EventHandler, Thread):
         self.window = self.conn.generate_id()
         self.mapped = False
         self.managed = False
-        self.geometry = None
-        self.above_sibling = None
-        self.override_redirect = False
-        self.synthetic_configure_notify = False
+        self.geometry = geometry
+        self.synthetic_geometry = None
 
         event_mask |= (EventMask.StructureNotify | EventMask.PropertyChange)
-        self.conn.core.CreateWindowChecked(self.screen.root_depth, self.window,
+        self.conn.core.CreateWindowChecked(self.screen.root_depth,
+                                           self.window,
                                            self.screen.root,
                                            geometry.x, geometry.y,
                                            geometry.width, geometry.height,
                                            geometry.border_width,
                                            WindowClass.InputOutput,
                                            self.screen.root_visual,
-                                           CW.BackPixel | CW.EventMask,
+                                           (CW.BackPixel |
+                                            CW.BorderPixel |
+                                            CW.EventMask),
                                            [self.screen.white_pixel,
+                                            self.screen.black_pixel,
                                             event_mask]).check()
 
     def map(self):
@@ -141,12 +143,14 @@ class TestClient(EventHandler, Thread):
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
         assert event.window == self.window
-        self.geometry = Geometry(event.x, event.y,
-                                 event.width, event.height,
-                                 event.border_width)
-        self.above_sibling = event.above_sibling
-        self.override_redirect = event.override_redirect
-        self.synthetic_configure_notify = is_synthetic_event(event)
+        assert not event.override_redirect
+        geometry = Geometry(event.x, event.y,
+                            event.width, event.height,
+                            event.border_width)
+        if is_synthetic_event(event):
+            self.synthetic_geometry = geometry
+        else:
+            self.geometry = geometry
 
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
@@ -255,32 +259,29 @@ class TestWMStartup(WMTestCase):
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):
         super(TestWMClientMoveResize, self).setUp()
-        self.initial_geometry = Geometry(0, 0, 100, 100, 5)
+        self.initial_geometry = Geometry(0, 0, 100, 100, 1)
         self.client = self.add_client(TestClient(self.initial_geometry))
         self.client.map()
-        self.loop(lambda: self.client.managed)
-        
+        self.loop(lambda: (self.client.managed and
+                           self.client.geometry == self.initial_geometry))
+
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
-        self.client.resize(self.initial_geometry)
-        geometry = self.initial_geometry + (5, 5) # adjust for border
-        self.loop(lambda: (self.client.geometry == geometry and
-                           self.client.synthetic_configure_notify))
+        geometry = self.initial_geometry
+        self.client.resize(geometry)
+        self.loop(lambda: (self.client.synthetic_geometry == geometry))
 
     def test_move(self):
         """Move a top-level window without changing its size"""
-        self.client.resize(self.initial_geometry + (5, 5))
-        geometry = self.initial_geometry + (10, 10) # adjust for border
-        self.loop(lambda: (self.client.geometry == geometry and
-                           self.client.synthetic_configure_notify))
+        geometry = self.initial_geometry + Position(5, 5)
+        self.client.resize(geometry)
+        self.loop(lambda: self.client.synthetic_geometry == geometry)
 
     def test_resize(self):
         """Resize and move a top-level window"""
         geometry = Geometry(5, 5, 50, 50, 5)
         self.client.resize(geometry)
-        # The real ConfigureNotify event reflects the actual border width.
-        self.loop(lambda: (self.client.geometry == geometry and
-                           not self.client.synthetic_configure_notify))
+        self.loop(lambda: self.client.geometry == geometry)
 
 class EventLoopTester(WindowManager):
     """A window manager that records the number of ConfigureNotify events

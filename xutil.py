@@ -45,10 +45,7 @@ def configure_notify(connection, window, x, y, width, height, border_width,
                                                     window, # event
                                                     window, # window
                                                     0, # above-sibling: None
-                                                    x + border_width,
-                                                    y + border_width,
-                                                    width,
-                                                    height,
+                                                    x, y, width, height,
                                                     border_width,
                                                     override_redirect))
 
