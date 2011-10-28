@@ -57,7 +57,8 @@ class Decorator(object):
 
     def message(self, message):
         """Display a message on behalf of the client."""
-        pass
+        if message:
+            info(message)
 
     def name_changed(self):
         """Update display of the client name."""

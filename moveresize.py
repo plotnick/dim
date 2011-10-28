@@ -39,6 +39,9 @@ class ClientUpdate(object):
         self.cleanup(time)
         self.client.decorator.message(None)
 
+    def display_geometry(self, geometry):
+        self.client.decorator.message(geometry)
+
 class ClientMove(ClientUpdate):
     cursor = XC_fleur
 
@@ -46,11 +49,12 @@ class ClientMove(ClientUpdate):
         super(ClientMove, self).__init__(*args)
         self.position = self.geometry.position()
         self.change_cursor(self.cursor)
+        self.display_geometry(self.position)
 
     def update(self, pointer):
         position = self.position + self.delta(pointer)
         self.client.move(position)
-        self.client.decorator.message(position)
+        self.display_geometry(position)
 
     def rollback(self, time=Time.CurrentTime):
         self.client.move(self.position)
@@ -86,6 +90,7 @@ class ClientResize(ClientUpdate):
                   third(self.pointer.y, self.geometry.y, self.geometry.height))
         self.gravity = Position(*offset)
         self.change_cursor(self.cursors[self.gravity])
+        self.display_geometry(self.initial_geometry)
 
     def update(self, pointer):
         delta = self.delta(pointer)
@@ -94,7 +99,7 @@ class ClientResize(ClientUpdate):
         if self.gravity == (0, 0):
             position = self.geometry.position() + delta
             self.client.move(position)
-            self.client.decorator.message(position)
+            self.display_geometry(position)
             return
 
         # Depending on the gravity, resizing may involve a move, too.
@@ -104,13 +109,27 @@ class ClientResize(ClientUpdate):
         offset = (new_size.width - size.width if self.gravity.x < 0 else 0,
                   new_size.height - size.height if self.gravity.y < 0 else 0)
         self.client.update_geometry(self.geometry.resize(new_size) - offset)
-        self.client.decorator.message(new_size \
-            if self.size_hints.flags & WMSizeHints.PResizeInc == 0 \
-            else self.size_hints.size_increments(new_size))
+        self.display_geometry(new_size)
 
     def rollback(self, time=Time.CurrentTime):
         self.client.update_geometry(self.initial_geometry)
         super(ClientResize, self).rollback(time)
+
+    def display_geometry(self, geometry):
+        display = super(ClientResize, self).display_geometry
+        def display_size(size):
+            display(self.size_hints.size_increments(size)
+                    if self.size_hints.flags & WMSizeHints.PResizeInc
+                    else size)
+        if isinstance(geometry, Geometry):
+            if self.gravity == (0, 0):
+                display(geometry.position())
+            else:
+                display_size(geometry.size())
+        elif isinstance(geometry, Position):
+            display(geometry)
+        elif isinstance(geometry, Rectangle):
+            display_size(geometry)
 
     def cycle_gravity(self, pointer, time,
                       gravities=sorted(offset_gravity,
@@ -119,6 +138,7 @@ class ClientResize(ClientUpdate):
         self.gravity = gravities[(i + 1) % len(gravities)]
         self.change_cursor(self.cursors[self.gravity], time)
         self.geometry = self.client.geometry
+        self.display_geometry(self.geometry)
         self.pointer = pointer
 
 class MoveResize(WindowManager):
