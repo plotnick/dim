@@ -42,6 +42,9 @@ class ClientUpdate(object):
     def display_geometry(self, geometry):
         self.client.decorator.message(geometry)
 
+    def cycle_gravity(self, pointer, time):
+        pass
+
 class ClientMove(ClientUpdate):
     cursor = XC_fleur
 
