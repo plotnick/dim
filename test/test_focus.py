@@ -1,15 +1,12 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from time import sleep
 import unittest
 
 from event import *
 from geometry import *
 from focus import *
 
-import xcb
 from xcb.xproto import *
-import xcb.xtest
 
 from test_manager import EventType, TestClient, WMTestCase
 
