@@ -6,6 +6,7 @@ from logging import debug, info, warning, error
 
 from xcb.xproto import *
 
+from client import *
 from color import *
 from geometry import *
 from xutil import textitem16
@@ -30,7 +31,8 @@ class Decorator(object):
 
     def decorate(self):
         """Decorate the client window."""
-        self.original_border_width = self.client.geometry.border_width
+        self.original_geometry = self.client.geometry
+        self.client.offset = self.compute_client_offset()
         self.conn.core.ConfigureWindow(self.border_window,
                                        ConfigWindow.BorderWidth,
                                        [self.border_width])
@@ -39,7 +41,7 @@ class Decorator(object):
         """Remove all decorations from the client window."""
         self.conn.core.ConfigureWindow(self.border_window,
                                        ConfigWindow.BorderWidth,
-                                       [self.original_border_width])
+                                       [self.original_geometry.border_width])
 
         # X11 offers no way of retrieving the border color or pixmap of
         # a window, so we'll simply assume a black border.
@@ -64,6 +66,13 @@ class Decorator(object):
         """Update display of the client name."""
         pass
 
+    def compute_client_offset(self):
+        """Compute and return a geometry whose position represents the
+        offset of the client window with respect to the inside corner of
+        the containing frame (which may be the client window itself), and
+        whose size is the total additional size required for the desired
+        decorations. The border_width attribute is unused."""
+        return Geometry(0, 0, 0, 0, None)
 
 class BorderHighlightFocus(Decorator):
     """Indicate the current focus via changes to the border color."""
@@ -108,23 +117,31 @@ class FrameDecorator(Decorator):
         # We'll set a flag on the client so that the event handlers can
         # distinguish events generated as a result of the ReparentWindow
         # request.
-        self.client.reparenting = True
+        self.client.reparenting = FramedClientWindow
 
-        window = self.client.window
+        # Determine the frame geometry based on the original client window
+        # geometry and gravity together with the offsets needed for the
+        # actual decoration.
+        offset = self.client.offset
+        gravity = self.client.wm_normal_hints.win_gravity
+        geometry = self.original_geometry
+        frame_geometry = geometry.resize(geometry.size() + offset.size(),
+                                         self.frame_border_width,
+                                         gravity)
+
         frame = self.conn.generate_id()
-        self.geometry, self.offset = self.frame_geometry()
+        window = self.client.window
         debug("Creating frame 0x%x for client window 0x%x." % (frame, window))
         self.conn.core.CreateWindow(self.screen.root_depth, frame,
                                     self.screen.root,
-                                    self.geometry.x, self.geometry.y,
-                                    self.geometry.width, self.geometry.height,
-                                    self.geometry.border_width,
+                                    frame_geometry.x, frame_geometry.y,
+                                    frame_geometry.width, frame_geometry.height,
+                                    frame_geometry.border_width,
                                     WindowClass.InputOutput,
                                     self.screen.root_visual,
                                     (CW.OverrideRedirect | CW.EventMask),
                                     [True, self.frame_event_mask])
-        self.conn.core.ReparentWindow(window, frame,
-                                      self.offset.x, self.offset.y)
+        self.conn.core.ReparentWindow(window, frame, offset.x, offset.y)
         self.conn.core.ChangeSaveSet(SetMode.Insert, window)
 
         # It's important not to assign this attribute any earlier, since
@@ -136,23 +153,24 @@ class FrameDecorator(Decorator):
         self.border_window = frame
 
     def undecorate(self):
-        if self.client.frame:
+        if isinstance(self.client, FramedClientWindow):
             self.conn.core.UnmapWindow(self.client.frame)
             self.border_window = self.client.window
+
             super(FrameDecorator, self).undecorate()
-            self.conn.core.ReparentWindow(self.client.window,
-                                          self.screen.root,
-                                          self.client.geometry.x,
-                                          self.client.geometry.y)
+
+            # Determine the new window geometry based on the current frame
+            # geometry and the window gravity.
+            size = self.client.geometry.size()
+            bw = self.original_geometry.border_width
+            gravity = self.client.wm_normal_hints.win_gravity
+            geometry = self.client.frame_geometry.resize(size, bw, gravity)
+
+            self.client.reparenting = ClientWindow
+            self.conn.core.ReparentWindow(self.client.window, self.screen.root,
+                                          geometry.x, geometry.y)
             self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
             self.conn.core.DestroyWindow(self.client.frame)
-            self.client.frame = None
-
-    def frame_geometry(self):
-        """Compute and return a geometry for the frame."""
-        geometry = self.client.geometry
-        return (geometry._replace(border_width=self.frame_border_width),
-                Position(0, 0))
 
 class TitlebarConfig(object):
     def __init__(self, manager, fg_color, bg_color, font):
@@ -209,13 +227,13 @@ class TitleDecorator(FrameDecorator):
     def __init__(self, conn, client, border_width=1,
                  focused_title_config=None, unfocused_title_config=None,
                  **kwargs):
-        super(TitleDecorator, self).__init__(conn, client, border_width,
-                                             **kwargs)
         assert (isinstance(focused_title_config, TitlebarConfig) and
                 isinstance(unfocused_title_config, TitlebarConfig))
         self.title_configs = (unfocused_title_config, focused_title_config)
         self.config = self.title_configs[0] # reassigned by focus, unfocus
         self.title = None
+        super(TitleDecorator, self).__init__(conn, client, border_width,
+                                             **kwargs)
 
     def decorate(self):
         super(TitleDecorator, self).decorate()
@@ -224,7 +242,10 @@ class TitleDecorator(FrameDecorator):
         self.conn.core.CreateWindow(self.screen.root_depth,
                                     self.titlebar,
                                     self.client.frame,
-                                    0, 0, self.geometry.width, self.offset.y, 0,
+                                    0, 0, # x, y
+                                    self.client.geometry.width, # width
+                                    self.client.offset.y, # height
+                                    0, # border_width
                                     WindowClass.InputOutput,
                                     self.screen.root_visual,
                                     CW.EventMask, [EventMask.Exposure])
@@ -266,7 +287,7 @@ class TitleDecorator(FrameDecorator):
         assert title is not None
         title = unicode(title)
 
-        w = self.geometry.width - 1
+        w = self.client.geometry.width - 1
         h = self.config.height - 2
         self.conn.core.PolyFillRectangle(self.titlebar, self.config.bg_gc,
                                          1, [0, 0, w, h])
@@ -291,7 +312,5 @@ class TitleDecorator(FrameDecorator):
                                       x, self.config.baseline,
                                       len(text_items), "".join(text_items))
 
-    def frame_geometry(self):
-        geometry, offset = super(TitleDecorator, self).frame_geometry()
-        return (geometry + Rectangle(0, self.config.height),
-                offset + Position(0, self.config.height))
+    def compute_client_offset(self):
+        return Geometry(0, self.config.height, 0, self.config.height, None)

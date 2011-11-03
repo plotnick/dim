@@ -81,6 +81,9 @@ class TestClient(EventHandler, Thread):
     def map(self):
         self.conn.core.MapWindowChecked(self.window).check()
 
+    def unmap(self):
+        self.conn.core.UnmapWindowChecked(self.window).check()
+
     def resize(self, geometry):
         assert isinstance(geometry, Geometry)
         self.conn.core.ConfigureWindowChecked(self.window,

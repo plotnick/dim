@@ -59,6 +59,7 @@ Position.__add__ = Position.__radd__ = make_tuple_adder(add)
 Position.__sub__ = make_tuple_adder(sub)
 Position.__mul__ = Position.__rmul__ = multiply_tuple
 Position.__floordiv__ = floor_divide_tuple
+Position.__neg__ = lambda self: Position(-self.x, -self.y)
 Position.__nonzero__ = lambda self: self.x != 0 or self.y != 0
 Position.__str__ = lambda self: "%+d%+d" % self
 Position.__abs__ = lambda self: abs(complex(*self))
@@ -85,9 +86,13 @@ Geometry.__str__ = lambda self: \
 Geometry.__unicode__ = lambda self: \
     unicode(self.size()) + unicode(self.position())
 Geometry.position = lambda self: Position(self.x, self.y)
+Geometry.move = lambda self, position: \
+    self._replace(x=position.x, y=position.y)
 Geometry.size = lambda self: Rectangle(self.width, self.height)
-Geometry.resize = lambda self, other: \
-    self._replace(width=other.width, height=other.height)
+Geometry.resize = lambda self, size, border_width=None, gravity=Gravity.NorthWest: \
+    resize_with_gravity(self, size, border_width, gravity)
+Geometry.reborder = lambda self, border_width: \
+    self._replace(border_width=border_width)
 
 AspectRatio = namedtuple("AspectRatio", "width, height")
 AspectRatio.__nonzero__ = lambda self: \
@@ -137,3 +142,22 @@ offset_gravity = {Position(-1, -1): Gravity.NorthWest,
                   Position(+0, +1): Gravity.South,
                   Position(+1, +1): Gravity.SouthEast}
 gravity_offset = dict((v, k) for k, v in offset_gravity.items())
+
+def resize_with_gravity(geometry, size, border_width, gravity):
+    """Given a geometry, a requested size and border width, and a window
+    gravity value, determine a new geometry that keeps the corresponding
+    reference point fixed. See ICCCM §4.1.2.3 for details."""
+    assert isinstance(size, Rectangle)
+    if border_width is None:
+        border_width = geometry.border_width
+    db = border_width - geometry.border_width
+    dw, dh = size - geometry.size()
+    if gravity == Gravity.Static:
+        dx = dy = db
+    else:
+        offset = gravity_offset[gravity]
+        dx = (dw + 2 * db) * (offset.x + 1) // 2
+        dy = (dh + 2 * db) * (offset.y + 1) // 2
+    return (geometry.reborder(border_width) -
+            Position(dx, dy) +
+            Rectangle(dw, dh))

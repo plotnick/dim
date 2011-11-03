@@ -174,27 +174,13 @@ class WindowManager(EventHandler):
         debug("Unmanaging client window 0x%x." % client.window)
         client.decorator.undecorate()
         del client.wm_state
-        return self.clients.pop(client.window)
+        return self.clients.pop(client.window, None)
 
-    def place(self, client, geometry):
-        """Place a client window and return the geometry actually configured,
-        which may or may not be influenced or determined by the requested
-        geometry. The geometry recorded in the client instance will be updated
-        only when we receive the corresponding ConfigureNotify event."""
-        if geometry != client.geometry:
-            debug("Placing client 0x%x at %s." % (client.window, geometry))
-            self.conn.core.ConfigureWindow(client.window,
-                                           (ConfigWindow.X |
-                                            ConfigWindow.Y |
-                                            ConfigWindow.Width |
-                                            ConfigWindow.Height |
-                                            ConfigWindow.BorderWidth),
-                                           (int16(geometry.x),
-                                            int16(geometry.y),
-                                            card16(geometry.width),
-                                            card16(geometry.height),
-                                            card16(geometry.border_width)))
-        return geometry
+    def place(self, client, requested_geometry):
+        """Determine a suitable geometry for the client frame (or top-level
+        window, if there is no frame). This may, but need not, use the
+        geometry the client requested."""
+        return requested_geometry
 
     def decorator(self, client):
         """Return a decorator for the given client."""
@@ -283,6 +269,14 @@ class WindowManager(EventHandler):
                   (client.window, requested_geometry))
             old_geometry = client.geometry
             new_geometry = self.place(client, requested_geometry)
+            if (event.value_mask & (ConfigWindow.X | ConfigWindow.Y) == 0 or
+                new_geometry.position() == old_geometry.position()):
+                # According to the EWMH reading of ICCCM §4.1.5, a client
+                # request for just a new size (or, presumably, a new border
+                # width) should take win_gravity into consideration.
+                client.resize(new_geometry.size(), new_geometry.border_width)
+            else:
+                client.configure(new_geometry)
             if is_move_only(old_geometry, new_geometry):
                 debug("Sending synthetic ConfigureNotify to client 0x%x." %
                       client.window)
@@ -292,14 +286,14 @@ class WindowManager(EventHandler):
             debug("Granting ConfigureWindow request for unmanaged window 0x%x." %
                   event.window)
             self.conn.core.ConfigureWindow(event.window, event.value_mask,
-                select_values(event.value_mask,
-                              [int16(event.x),
-                               int16(event.y),
-                               card16(event.width),
-                               card16(event.height),
-                               card16(event.border_width),
-                               event.sibling,
-                               event.stack_mode]))
+                                           select_values(event.value_mask,
+                                                         [event.x,
+                                                          event.y,
+                                                          event.width,
+                                                          event.height,
+                                                          event.border_width,
+                                                          event.sibling,
+                                                          event.stack_mode]))
         self.conn.flush()
 
     @handler(ConfigureNotifyEvent)
@@ -393,7 +387,7 @@ class ReparentingWindowManager(WindowManager):
 
     def unmanage(self, client):
         if client.frame:
-            self.frames.pop(client.frame)
+            self.frames.pop(client.frame, None)
         return super(ReparentingWindowManager, self).unmanage(client)
 
     def decorator(self, client):
@@ -411,7 +405,7 @@ class ReparentingWindowManager(WindowManager):
             try:
                 return super(ReparentingWindowManager, self).withdraw(client)
             finally:
-                self.frames.pop(frame)
+                self.frames.pop(frame, None)
 
     def get_client(self, window, client_only=False):
         if window in self.clients:
@@ -427,20 +421,26 @@ class ReparentingWindowManager(WindowManager):
             raise UnhandledEvent(event)
         client = self.get_client(event.window)
         if client.reparenting:
+            assert issubclass(client.reparenting, ClientWindow)
             debug("Done reparenting window 0x%x." % client.window)
-            client.reparenting = False
-            client._geometry = None
+            client.__class__ = client.reparenting
+            client.init(event.parent)
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
-        """Update our record of a client's frame's geometry. Once reparented,
-        the client window's geometry is essentially useless."""
-        try:
+        """Update our record of a frame's geometry."""
+        if event.window in self.clients:
+            client = self.clients[event.window]
+            if not client.reparenting:
+                client.geometry = Geometry(event.x, event.y,
+                                           event.width, event.height,
+                                           event.border_width)
+                debug(u"Noting geometry for client window 0x%x as %s." %
+                      (client.window, client.geometry))
+        elif event.window in self.frames:
             client = self.frames[event.window]
-        except KeyError:
-            return
-        client.geometry = Geometry(event.x, event.y,
-                                   event.width, event.height,
-                                   event.border_width)
-        debug("Noting frame geometry for client 0x%x as %s." %
-              (client.window, client.geometry))
+            client.frame_geometry = Geometry(event.x, event.y,
+                                             event.width, event.height,
+                                             event.border_width)
+            debug(u"Noting frame geometry for client 0x%x as %s." %
+                  (client.window, client.frame_geometry))

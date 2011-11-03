@@ -4,7 +4,6 @@ from logging import basicConfig as logconfig, debug, info, warning, error
 
 from xcb.xproto import *
 
-from client import ClientWindow
 from cursor import *
 from event import UnhandledEvent, handler
 from geometry import *
@@ -20,10 +19,11 @@ class ClientUpdate(object):
 
     def __init__(self, client, pointer, cleanup, change_cursor):
         self.client = client
-        self.geometry = client.geometry
         self.pointer = pointer
         self.cleanup = cleanup
         self.change_cursor = change_cursor
+        self.geometry = client.absolute_geometry
+        self.frame_geometry = client.frame_geometry
 
     def delta(self, pointer):
         return pointer - self.pointer
@@ -50,7 +50,7 @@ class ClientMove(ClientUpdate):
 
     def __init__(self, *args):
         super(ClientMove, self).__init__(*args)
-        self.position = self.geometry.position()
+        self.position = self.frame_geometry.position()
         self.change_cursor(self.cursor)
         self.display_geometry(self.position)
 
@@ -100,22 +100,18 @@ class ClientResize(ClientUpdate):
 
         # Treat center gravity as just a move.
         if self.gravity == (0, 0):
-            position = self.geometry.position() + delta
+            position = self.frame_geometry.position() + delta
             self.client.move(position)
             self.display_geometry(position)
             return
 
-        # Depending on the gravity, resizing may involve a move, too.
-        dsize = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
-        size = self.geometry.size()
-        new_size = self.size_hints.constrain_window_size(size + dsize)
-        offset = (new_size.width - size.width if self.gravity.x < 0 else 0,
-                  new_size.height - size.height if self.gravity.y < 0 else 0)
-        self.client.update_geometry(self.geometry.resize(new_size) - offset)
-        self.display_geometry(new_size)
+        ds = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
+        size = self.size_hints.constrain_window_size(self.geometry.size() + ds)
+        self.client.resize(size, gravity=offset_gravity[-self.gravity])
+        self.display_geometry(size)
 
     def rollback(self, time=Time.CurrentTime):
-        self.client.update_geometry(self.initial_geometry)
+        self.client.configure(self.initial_geometry)
         super(ClientResize, self).rollback(time)
 
     def display_geometry(self, geometry):

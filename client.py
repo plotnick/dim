@@ -11,7 +11,7 @@ from geometry import *
 from properties import *
 from xutil import *
 
-__all__ = ["ClientWindow"]
+__all__ = ["ClientWindow", "FramedClientWindow"]
 
 class ClientProperty(object):
     """A descriptor class for client properties."""
@@ -68,6 +68,9 @@ class ClientWindowClass(type):
         def is_client_property(x):
             return isinstance(x, ClientProperty)
         cls.properties = {}
+        for superclass in reversed(cls.__mro__):
+            if hasattr(superclass, "properties"):
+                cls.properties.update(superclass.properties)
         for p in filter(is_client_property, namespace.values()):
             cls.properties[p.name] = p.type
 
@@ -95,23 +98,24 @@ class ClientWindow(object):
         self.fonts = manager.fonts
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
-        self.frame = None
-        self.reparenting = False
-        self._geometry = None
         self.property_values = {}
         self.property_cookies = {}
         self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
                                               [self.client_event_mask])
+        self.init(self.screen.root)
+
+    def init(self, parent):
+        """Initialize a client window instance. Called during instance
+        initialization and whenever an instance's class is changed."""
+        self.parent = parent
+        self.reparenting = None
+        self._geometry = None
 
     @property
     def geometry(self):
+        """Return the client window geometry relative to its parent's origin."""
         if self._geometry is None:
-            cookie = self.conn.core.GetGeometry(self.frame or self.window)
-            reply = cookie.reply()
-            if reply:
-                self._geometry = Geometry(reply.x, reply.y,
-                                          reply.width, reply.height,
-                                          reply.border_width)
+            self._geometry = self.get_geometry(self.window)
         return self._geometry
 
     @geometry.setter
@@ -119,34 +123,57 @@ class ClientWindow(object):
         assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
         self._geometry = geometry
 
-    def move(self, position, mask=ConfigWindow.X | ConfigWindow.Y):
-        self.conn.core.ConfigureWindow(self.frame or self.window, mask,
+    @property
+    def frame_geometry(self):
+        """Return the client frame geometry. For non-reparented client windows,
+        this will just be the window geometry."""
+        return self.geometry
+
+    @property
+    def absolute_geometry(self):
+        """Return the client window geometry relative to the root's origin."""
+        return self.geometry
+
+    def get_geometry(self, window):
+        """Request a window's geometry from the server and return it as a
+        Geometry instance."""
+        cookie = self.conn.core.GetGeometry(window)
+        try:
+            reply = cookie.reply()
+        except BadWindow:
+            return None
+        return Geometry(reply.x, reply.y,
+                        reply.width, reply.height,
+                        reply.border_width)
+
+    def move(self, position):
+        """Move the client window."""
+        self.conn.core.ConfigureWindow(self.window,
+                                       ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
 
-    def resize(self, size, mask=ConfigWindow.Width | ConfigWindow.Height):
-        if self.frame:
-            self.conn.core.ConfigureWindow(self.frame, mask, map(int16, size))
-        self.conn.core.ConfigureWindow(self.window, mask, map(int16, size))
+    def resize(self, size, border_width=None, gravity=None):
+        """Resize the client window."""
+        if gravity is None:
+            gravity = self.wm_normal_hints.win_gravity
+        self.configure(self.absolute_geometry.resize(size, border_width, gravity))
 
-    def update_geometry(self, geometry,
-                        frame_mask=(ConfigWindow.X |
-                                    ConfigWindow.Y |
-                                    ConfigWindow.Width |
-                                    ConfigWindow.Height |
-                                    ConfigWindow.BorderWidth),
-                        window_mask=ConfigWindow.Width | ConfigWindow.Height):
-        if self.frame:
-            self.conn.core.ConfigureWindow(self.frame, frame_mask,
-                                           map(int16, geometry))
-            self.conn.core.ConfigureWindow(self.window, window_mask,
-                                           [int16(geometry.width),
-                                            int16(geometry.height)])
-        else:
-            self.conn.core.ConfigureWindow(self.window, frame_mask,
-                                           map(int16, geometry))
+    def configure(self, geometry):
+        """Change the client window geometry."""
+        self.conn.core.ConfigureWindow(self.window,
+                                       (ConfigWindow.X |
+                                        ConfigWindow.Y |
+                                        ConfigWindow.Width |
+                                        ConfigWindow.Height |
+                                        ConfigWindow.BorderWidth),
+                                       [int16(geometry.x),
+                                        int16(geometry.y),
+                                        card16(geometry.width),
+                                        card16(geometry.height),
+                                        card16(geometry.border_width)])
 
     def restack(self, stack_mode):
-        self.conn.core.ConfigureWindow(self.frame or self.window,
+        self.conn.core.ConfigureWindow(self.window,
                                        ConfigWindow.StackMode,
                                        [stack_mode])
 
@@ -261,3 +288,67 @@ class ClientWindow(object):
     # EWMH properties
     net_wm_name = ClientProperty("_NET_WM_NAME", UTF8String, "")
     net_wm_icon_name = ClientProperty("_NET_WM_ICON_NAME", UTF8String, "")
+
+class FramedClientWindow(ClientWindow):
+    """A framed client window represents a client window that has been
+    reparented to a new top-level window.
+
+    Instances of this class are never created directly; a reparenting
+    window manager will change the class of ClientWindow instances to
+    this class upon receipt of a ReparentNotify event."""
+
+    def init(self, parent):
+        assert self.frame and self.frame == parent
+        assert self.offset is not None
+        super(FramedClientWindow, self).init(parent)
+        self._frame_geometry = None
+
+    @property
+    def frame_geometry(self):
+        if self._frame_geometry is None:
+            self._frame_geometry = self.get_geometry(self.frame)
+        return self._frame_geometry
+
+    @frame_geometry.setter
+    def frame_geometry(self, geometry):
+        assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
+        self._frame_geometry = geometry
+
+    @property
+    def absolute_geometry(self):
+        return self.geometry.move(self.frame_geometry.position() +
+                                  self.offset.position())
+
+    def move(self, position):
+        self.conn.core.ConfigureWindow(self.frame,
+                                       ConfigWindow.X | ConfigWindow.Y,
+                                       map(int16, position))
+
+    def configure(self, geometry):
+        # Geometry is the requested client window geometry in the root
+        # coordinate system.
+        bw = self.frame_geometry.border_width # ignore geometry.border_width
+        frame_geometry = (geometry -
+                          self.offset.position() +
+                          self.offset.size()).reborder(bw)
+        self.conn.core.ConfigureWindow(self.frame,
+                                       (ConfigWindow.X |
+                                        ConfigWindow.Y |
+                                        ConfigWindow.Width |
+                                        ConfigWindow.Height |
+                                        ConfigWindow.BorderWidth),
+                                       [int16(frame_geometry.x),
+                                        int16(frame_geometry.y),
+                                        card16(frame_geometry.width),
+                                        card16(frame_geometry.height),
+                                        card16(frame_geometry.border_width)])
+        self.conn.core.ConfigureWindow(self.window,
+                                       (ConfigWindow.Width |
+                                        ConfigWindow.Height),
+                                       [card16(geometry.width),
+                                        card16(geometry.height)])
+
+    def restack(self, stack_mode):
+        self.conn.core.ConfigureWindow(self.frame,
+                                       ConfigWindow.StackMode,
+                                       [stack_mode])

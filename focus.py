@@ -23,7 +23,7 @@ class FocusPolicy(WindowManager):
         self.reparenting_initial_clients = set()
         for window in windows:
             client = self.manage(window)
-            if client and client.frame and client.reparenting:
+            if client and client.reparenting:
                 self.reparenting_initial_clients.add(client)
         self.initial_focus()
 

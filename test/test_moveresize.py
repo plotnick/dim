@@ -18,7 +18,7 @@ from test_manager import EventType, TestClient, WMTestCase
 class MockClient(object):
     def __init__(self, test, geometry, size_hints=WMSizeHints()):
         self.test = test
-        self.geometry = geometry
+        self.absolute_geometry = self.frame_geometry = self.geometry = geometry
         self.screen = None
         self.window = None
         self.decorator = Decorator(None, self)
@@ -28,12 +28,11 @@ class MockClient(object):
         self.test.assertTrue(isinstance(position, Position))
         self.geometry = self.geometry._replace(x=position.x, y=position.y)
 
-    def resize(self, size):
+    def resize(self, size, border_width=None, gravity=Gravity.NorthWest):
         self.test.assertTrue(isinstance(size, Rectangle))
-        self.geometry = self.geometry._replace(width=size.width,
-                                               heigh=size.height)
+        self.configure(self.geometry.resize(size, border_width, gravity))
 
-    def update_geometry(self, geometry):
+    def configure(self, geometry):
         self.test.assertTrue(isinstance(geometry, Geometry))
         self.geometry = geometry
 
