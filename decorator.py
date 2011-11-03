@@ -31,8 +31,8 @@ class Decorator(object):
 
     def decorate(self):
         """Decorate the client window."""
-        self.original_geometry = self.client.geometry
         self.client.offset = self.compute_client_offset()
+        self.original_border_width = self.client.geometry.border_width
         self.conn.core.ConfigureWindow(self.border_window,
                                        ConfigWindow.BorderWidth,
                                        [self.border_width])
@@ -41,13 +41,17 @@ class Decorator(object):
         """Remove all decorations from the client window."""
         self.conn.core.ConfigureWindow(self.border_window,
                                        ConfigWindow.BorderWidth,
-                                       [self.original_geometry.border_width])
+                                       [self.original_border_width])
 
         # X11 offers no way of retrieving the border color or pixmap of
         # a window, so we'll simply assume a black border.
         self.conn.core.ChangeWindowAttributes(self.border_window,
                                               CW.BorderPixel,
                                               [self.screen.black_pixel])
+
+    def configure(self, geometry):
+        """Update decorations for a new client/frame geometry."""
+        pass
 
     def focus(self):
         """Indicate that the client window has the input focus."""
@@ -119,12 +123,12 @@ class FrameDecorator(Decorator):
         # request.
         self.client.reparenting = FramedClientWindow
 
-        # Determine the frame geometry based on the original client window
+        # Determine the frame geometry based on the current client window
         # geometry and gravity together with the offsets needed for the
         # actual decoration.
         offset = self.client.offset
         gravity = self.client.wm_normal_hints.win_gravity
-        geometry = self.original_geometry
+        geometry = self.client.absolute_geometry
         frame_geometry = geometry.resize(geometry.size() + offset.size(),
                                          self.frame_border_width,
                                          gravity)
@@ -160,9 +164,9 @@ class FrameDecorator(Decorator):
             super(FrameDecorator, self).undecorate()
 
             # Determine the new window geometry based on the current frame
-            # geometry and the window gravity.
+            # geometry, the original border width, and the window gravity.
             size = self.client.geometry.size()
-            bw = self.original_geometry.border_width
+            bw = self.original_border_width
             gravity = self.client.wm_normal_hints.win_gravity
             geometry = self.client.frame_geometry.resize(size, bw, gravity)
 
@@ -259,6 +263,11 @@ class TitleDecorator(FrameDecorator):
             self.conn.core.DestroyWindow(self.titlebar)
             self.titlebar = None
             super(TitleDecorator, self).undecorate()
+
+    def configure(self, geometry):
+        self.conn.core.ConfigureWindow(self.titlebar,
+                                       ConfigWindow.Width,
+                                       [geometry.width])
 
     def focus(self):
         self.config = self.title_configs[1]

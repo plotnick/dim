@@ -171,6 +171,7 @@ class ClientWindow(object):
                                         card16(geometry.width),
                                         card16(geometry.height),
                                         card16(geometry.border_width)])
+        self.decorator.configure(geometry)
 
     def restack(self, stack_mode):
         self.conn.core.ConfigureWindow(self.window,
@@ -347,6 +348,7 @@ class FramedClientWindow(ClientWindow):
                                         ConfigWindow.Height),
                                        [card16(geometry.width),
                                         card16(geometry.height)])
+        self.decorator.configure(frame_geometry)
 
     def restack(self, stack_mode):
         self.conn.core.ConfigureWindow(self.frame,
