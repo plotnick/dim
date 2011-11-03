@@ -147,12 +147,11 @@ class WindowManager(EventHandler):
         debug("Managing window 0x%x." % window)
 
         client = self.clients[window] = ClientWindow(self.conn, window, self)
+        self.place(client, client.geometry)
         client.decorator.decorate()
         client.decorator.unfocus()
-
         if attrs.map_state != MapState.Unmapped:
             self.normalize(client)
-
         return client
 
     def normalize(self, client):
@@ -176,11 +175,36 @@ class WindowManager(EventHandler):
         del client.wm_state
         return self.clients.pop(client.window, None)
 
-    def place(self, client, requested_geometry):
-        """Determine a suitable geometry for the client frame (or top-level
-        window, if there is no frame). This may, but need not, use the
-        geometry the client requested."""
-        return requested_geometry
+    def place(self, client, requested_geometry, resize=False):
+        """Determine and configure a suitable geometry for the client frame
+        (or top-level window, if there is no frame). This may, but need not,
+        utilize the geometry the client requested."""
+        old_geometry = client.geometry
+        new_geometry = (client.resize(requested_geometry.size())
+                        if resize
+                        else client.moveresize(requested_geometry))
+        if is_move_only(old_geometry, new_geometry):
+            debug("Sending synthetic ConfigureNotify to client 0x%x." %
+                  client.window)
+            configure_notify(self.conn, client.window, *new_geometry)
+        return new_geometry
+
+    def constrain(self, client, geometry, size=None, border_width=None,
+                  gravity=None):
+        """Constrain the client geometry based on the current or requested
+        geometry, the requested size and border width, and the client's size
+        hints. If a gravity is supplied, it overrides the win_gravity field
+        of the size hints."""
+        size_hints = client.wm_normal_hints
+        if size is None:
+            size = geometry.size()
+        if border_width is None:
+            border_width = geometry.border_width
+        if gravity is None:
+            gravity = size_hints.win_gravity
+        return geometry.resize(size_hints.constrain_window_size(size),
+                               border_width,
+                               gravity)
 
     def decorator(self, client):
         """Return a decorator for the given client."""
@@ -267,20 +291,8 @@ class WindowManager(EventHandler):
                                           event.border_width)
             debug("Client 0x%x requested geometry %s." %
                   (client.window, requested_geometry))
-            old_geometry = client.geometry
-            new_geometry = self.place(client, requested_geometry)
-            if (event.value_mask & (ConfigWindow.X | ConfigWindow.Y) == 0 or
-                new_geometry.position() == old_geometry.position()):
-                # According to the EWMH reading of ICCCM §4.1.5, a client
-                # request for just a new size (or, presumably, a new border
-                # width) should take win_gravity into consideration.
-                client.resize(new_geometry.size(), new_geometry.border_width)
-            else:
-                client.configure(new_geometry)
-            if is_move_only(old_geometry, new_geometry):
-                debug("Sending synthetic ConfigureNotify to client 0x%x." %
-                      client.window)
-                configure_notify(self.conn, client.window, *new_geometry)
+            resize = (event.value_mask & (ConfigWindow.X | ConfigWindow.Y) == 0)
+            self.place(client, requested_geometry, resize)
         else:
             # Just grant the request.
             debug("Granting ConfigureWindow request for unmanaged window 0x%x." %

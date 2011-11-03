@@ -151,12 +151,22 @@ class ClientWindow(object):
         self.conn.core.ConfigureWindow(self.window,
                                        ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
+        self.geometry += position
 
     def resize(self, size, border_width=None, gravity=None):
-        """Resize the client window."""
-        if gravity is None:
-            gravity = self.wm_normal_hints.win_gravity
-        self.configure(self.absolute_geometry.resize(size, border_width, gravity))
+        """Resize the client window and return the new geometry, which may
+        differ in both size and position due to size constraints and gravity."""
+        return self.configure(self.manager.constrain(self,
+                                                     self.absolute_geometry,
+                                                     size, border_width,
+                                                     gravity))
+
+    def moveresize(self, geometry, gravity=None):
+        """Change the client window geometry, respecting size hints and using
+        the specified gravity. Returns the new geometry."""
+        return self.configure(self.manager.constrain(self,
+                                                     geometry,
+                                                     gravity=gravity))
 
     def configure(self, geometry):
         """Change the client window geometry."""
@@ -172,6 +182,8 @@ class ClientWindow(object):
                                         card16(geometry.height),
                                         card16(geometry.border_width)])
         self.decorator.configure(geometry)
+        self.geometry = geometry
+        return geometry
 
     def restack(self, stack_mode):
         self.conn.core.ConfigureWindow(self.window,
@@ -328,10 +340,9 @@ class FramedClientWindow(ClientWindow):
     def configure(self, geometry):
         # Geometry is the requested client window geometry in the root
         # coordinate system.
-        bw = self.frame_geometry.border_width # ignore geometry.border_width
-        frame_geometry = (geometry -
+        frame_geometry = (geometry.reborder(self.frame_geometry.border_width) -
                           self.offset.position() +
-                          self.offset.size()).reborder(bw)
+                          self.offset.size())
         self.conn.core.ConfigureWindow(self.frame,
                                        (ConfigWindow.X |
                                         ConfigWindow.Y |
@@ -349,6 +360,9 @@ class FramedClientWindow(ClientWindow):
                                        [card16(geometry.width),
                                         card16(geometry.height)])
         self.decorator.configure(frame_geometry)
+        self.frame_geometry = frame_geometry
+        self.geometry = self.geometry.resize(geometry.size())
+        return geometry
 
     def restack(self, stack_mode):
         self.conn.core.ConfigureWindow(self.frame,

@@ -106,8 +106,8 @@ class ClientResize(ClientUpdate):
             return
 
         ds = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
-        size = self.size_hints.constrain_window_size(self.geometry.size() + ds)
-        self.client.resize(size, gravity=offset_gravity[-self.gravity])
+        size = self.client.resize(self.geometry.size() + ds,
+                                  gravity=offset_gravity[-self.gravity]).size()
         self.display_geometry(size)
 
     def rollback(self, time=Time.CurrentTime):

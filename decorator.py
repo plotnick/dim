@@ -233,6 +233,7 @@ class TitleDecorator(FrameDecorator):
         self.title_configs = (unfocused_title_config, focused_title_config)
         self.config = self.title_configs[0] # reassigned by focus, unfocus
         self.title = None
+        self.titlebar = None
         super(TitleDecorator, self).__init__(conn, client, border_width,
                                              **kwargs)
 
@@ -262,9 +263,10 @@ class TitleDecorator(FrameDecorator):
             super(TitleDecorator, self).undecorate()
 
     def configure(self, geometry):
-        self.conn.core.ConfigureWindow(self.titlebar,
-                                       ConfigWindow.Width,
-                                       [geometry.width])
+        if self.titlebar:
+            self.conn.core.ConfigureWindow(self.titlebar,
+                                           ConfigWindow.Width,
+                                           [geometry.width])
 
     def focus(self):
         self.config = self.title_configs[1]
