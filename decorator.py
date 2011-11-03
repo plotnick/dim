@@ -118,11 +118,6 @@ class FrameDecorator(Decorator):
     def decorate(self):
         super(FrameDecorator, self).decorate()
 
-        # We'll set a flag on the client so that the event handlers can
-        # distinguish events generated as a result of the ReparentWindow
-        # request.
-        self.client.reparenting = FramedClientWindow
-
         # Determine the frame geometry based on the current client window
         # geometry and gravity together with the offsets needed for the
         # actual decoration.
@@ -148,9 +143,11 @@ class FrameDecorator(Decorator):
         self.conn.core.ReparentWindow(window, frame, offset.x, offset.y)
         self.conn.core.ChangeSaveSet(SetMode.Insert, window)
 
-        # It's important not to assign this attribute any earlier, since
-        # various client methods may try to access it. We don't want that
-        # to happen until all of the initialization above is finished.
+        # When the reparenting is complete, the manager will update the
+        # class of the client to reflect its new status. We'll set the
+        # frame attribute now, though, so that interested parties can
+        # use it immediately.
+        self.client.reparenting = FramedClientWindow
         self.client.frame = frame
 
         # Changes to the border should now be applied to the frame.
