@@ -84,6 +84,9 @@ class TestClient(EventHandler, Thread):
     def unmap(self):
         self.conn.core.UnmapWindowChecked(self.window).check()
 
+    def destroy(self):
+        self.conn.core.DestroyWindowChecked(self.window).check()
+
     def resize(self, geometry):
         assert isinstance(geometry, Geometry)
         self.conn.core.ConfigureWindowChecked(self.window,
@@ -95,8 +98,11 @@ class TestClient(EventHandler, Thread):
                                               geometry).check()
         return geometry
 
-    def destroy(self):
-        self.conn.core.DestroyWindowChecked(self.window).check()
+    def set_size_hints(self, size_hints):
+        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
+                                             self.atoms["WM_NORMAL_HINTS"],
+                                             self.atoms["WM_SIZE_HINTS"],
+                                             *size_hints.change_property_args()).check()
 
     def run(self, max_timeouts=100):
         """A simple client event loop."""
@@ -235,6 +241,24 @@ class WMTestCase(unittest.TestCase):
             sleep(10 * ms)
             timeouts += 1
         self.fail("test loop timed out")
+
+class WarpedPointer(object):
+    """A context manager that warps the pointer to the specified position on
+    enter, and warps it back to its original position on exit."""
+
+    def __init__(self, test, pointer):
+        assert isinstance(pointer, Position)
+        assert isinstance(test, WMTestCase)
+        self.test = test
+        self.pointer = pointer
+
+    def __enter__(self):
+        reply = self.test.conn.core.QueryPointer(self.test.screen.root).reply()
+        self.original_pointer = Position(reply.root_x, reply.root_y)
+        self.test.warp_pointer(*self.pointer)
+
+    def __exit__(self, *exc_info):
+        self.test.warp_pointer(*self.original_pointer)
 
 class TestWMStartup(WMTestCase):
     def setUp(self):

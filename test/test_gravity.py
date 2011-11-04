@@ -16,14 +16,8 @@ from test_manager import EventType, TestClient, WMTestCase
 class GravityTestClient(TestClient):
     def __init__(self, geometry, screen=None, win_gravity=Gravity.NorthWest):
         super(GravityTestClient, self).__init__(geometry, screen)
-
         self.frame = None
-
-        size_hints = WMSizeHints(win_gravity=win_gravity)
-        self.conn.core.ChangeProperty(PropMode.Replace, self.window,
-                                      self.atoms["WM_NORMAL_HINTS"],
-                                      self.atoms["WM_SIZE_HINTS"],
-                                      *size_hints.change_property_args())
+        self.set_size_hints(WMSizeHints(win_gravity=win_gravity))
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):

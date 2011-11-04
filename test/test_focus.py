@@ -8,7 +8,7 @@ from focus import *
 
 from xcb.xproto import *
 
-from test_manager import EventType, TestClient, WMTestCase
+from test_manager import EventType, TestClient, WMTestCase, WarpedPointer
 
 def center(geometry):
     bw = geometry.border_width
@@ -68,35 +68,37 @@ class TestInitialFocus(FocusPolicyTestCase):
 
     def test_initial_focus(self):
         geometry = Geometry(0, 0, 100, 100, 5)
-        self.warp_pointer(*center(geometry))
-        client = self.add_client(FocusTestClient(geometry))
-        client.map()
+        with WarpedPointer(self, center(geometry)):
+            client = self.add_client(FocusTestClient(geometry))
+            client.map()
+            self.loop(lambda: client.mapped)
 
-        self.assertNotFocus(client)
-        self.wm_thread.start()
-        self.loop(self.make_focus_test(client))
+            self.assertNotFocus(client)
+            self.wm_thread.start()
+            self.loop(self.make_focus_test(client))
 
 class TestSloppyFocus(FocusPolicyTestCase):
     wm_class = SloppyFocus
 
     def test_focus(self):
-        # We need to be able to reach the root window with the pointer.
-        # Let's ensure that the northwest corner is free of other windows.
-        self.warp_pointer(1, 1)
-        reply = self.conn.core.QueryPointer(self.screen.root).reply()
-        self.assertFalse(reply.child, "northwest corner must be clear")
+        with WarpedPointer(self, Position(1, 1)):
+            # We need to be able to reach the root window with the pointer.
+            # Let's ensure that the northwest corner is free of windows.
+            reply = self.conn.core.QueryPointer(self.screen.root).reply()
+            self.assertFalse(reply.child, "northwest corner must be clear")
 
-        geometry = Geometry(5, 5, 100, 100, 1)
-        client = self.add_client(FocusTestClient(geometry))
-        client.map()
+            geometry = Geometry(5, 5, 100, 100, 1)
+            client = self.add_client(FocusTestClient(geometry))
+            client.map()
+            self.loop(lambda: client.managed and client.mapped)
 
-        # Move the pointer into the window, and make sure it gets the focus.
-        self.fake_input(EventType.MotionNotify, False, *center(geometry))
-        self.loop(self.make_focus_test(client))
+            # Move the pointer into the window and make sure it gets the focus.
+            self.fake_input(EventType.MotionNotify, False, *center(geometry))
+            self.loop(self.make_focus_test(client))
 
-        # Now move it back to the root, and ensure that it still has the focus.
-        self.fake_input(EventType.MotionNotify, False, 1, 1)
-        self.loop(self.make_focus_test(client))
+            # Now move it back to the root and ensure that it's still focused.
+            self.fake_input(EventType.MotionNotify, False, 1, 1)
+            self.loop(self.make_focus_test(client))
 
 if __name__ == "__main__":
     import logging
