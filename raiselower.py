@@ -1,6 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from logging import basicConfig as logconfig, debug, info, warning, error
+import logging
 
 from xcb.xproto import *
 
@@ -10,6 +10,8 @@ from manager import WindowManager
 from xutil import GrabButtons
 
 __all__ = ["RaiseLower"]
+
+log = logging.getLogger("raiselower")
 
 class RaiseLower(WindowManager):
     __grab_event_mask = EventMask.ButtonPress

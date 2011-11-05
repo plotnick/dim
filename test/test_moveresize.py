@@ -20,7 +20,7 @@ class MockClient(object):
         self.test = test
         self.absolute_geometry = self.frame_geometry = self.geometry = geometry
         self.screen = None
-        self.window = None
+        self.window = 0
         self.decorator = Decorator(None, self)
         self.wm_normal_hints = size_hints
 

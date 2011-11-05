@@ -1,6 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from logging import basicConfig as logconfig, debug, info, warning, error
+import logging
 
 from xcb.xproto import *
 
@@ -13,6 +13,8 @@ __all__ = ["FocusPolicy", "SloppyFocus", "ClickToFocus"]
 class FocusPolicy(WindowManager):
     """A focus policy determines how and when to assign the input focus to the
     client windows."""
+
+    log = logging.getLogger("focus")
 
     def __init__(self, *args, **kwargs):
         self.current_focus = None
@@ -55,10 +57,10 @@ class FocusPolicy(WindowManager):
                 client = self.get_client(focus)
             except NoSuchClient:
                 return
-            debug("Setting initial focus to window 0x%x." % focus)
+            self.log.debug("Setting initial focus to window 0x%x.", focus)
             self.focus(client, Time.CurrentTime, True)
         else:
-            debug("No window currently has the focus.")
+            self.log.debug("No window currently has the focus.")
 
     def focus(self, client, time, have_focus):
         """Give the given client the input focus."""
@@ -67,12 +69,14 @@ class FocusPolicy(WindowManager):
         if client is self.current_focus:
             return True
         if self.pending_focus != client:
-            debug("Attempting to focus client window 0x%x." % client.window)
+            self.log.debug("Attempting to focus client window 0x%x.",
+                           client.window)
             self.pending_focus = client
             if not client.focus(time):
                 return False
         if have_focus:
-            debug("Client window 0x%x now has the focus." % client.window)
+            self.log.debug("Client window 0x%x now has the focus.",
+                           client.window)
             client.decorator.focus()
             self.current_focus = client
             self.pending_focus = None
@@ -82,20 +86,20 @@ class FocusPolicy(WindowManager):
         """Unfocus the currently focused client."""
         if client.wm_state != WMState.NormalState:
             return False
-        debug("Unfocusing client window 0x%x." % client.window)
+        self.log.debug("Unfocusing client window 0x%x.", client.window)
         client.unfocus()
         if client is self.current_focus:
             self.current_focus = None
         elif self.current_focus:
-            warning("Unfocused client was not the current focus; 0x%x was." %
-                    self.current_focus.window)
+            log.warning("Unfocused client was not the current focus; 0x%x was.",
+                        self.current_focus.window)
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             raise UnhandledEvent(event)
-        debug("Window 0x%x got the focus." % event.event)
+        self.log.debug("Window 0x%x got the focus.", event.event)
         self.focus(self.get_client(event.event), Time.CurrentTime, True)
 
     @handler(FocusOutEvent)
@@ -103,7 +107,7 @@ class FocusPolicy(WindowManager):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             raise UnhandledEvent(event)
-        debug("Window 0x%x lost the focus." % event.event)
+        self.log.debug("Window 0x%x lost the focus.", event.event)
         self.unfocus(self.get_client(event.event))
 
 class SloppyFocus(FocusPolicy):
@@ -111,12 +115,14 @@ class SloppyFocus(FocusPolicy):
     moves into the root window or a window that refuses to take focus, the
     most-recently focused window retains its focus."""
 
+    log = logging.getLogger("focus.sloppy")
+
     @handler(EnterNotifyEvent)
     def handle_enter_notify(self, event):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             return
-        debug("Window 0x%x entered (%d)." % (event.event, event.detail))
+        self.log.debug("Window 0x%x entered (%d).", event.event, event.detail)
         self.focus(self.get_client(event.event), event.time,
                    event.same_screen_focus & 1)
 
@@ -130,6 +136,8 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     they own." This policy therefore requires a reparenting window manager,
     and establishes grabs only on the frames that we create, and not on the
     client windows themselves."""
+
+    log = logging.getLogger("focus.sloppy")
 
     def __init__(self, display=None, screen=None,
                  ignore_focus_click=False, **kwargs):
@@ -169,7 +177,8 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
             client = self.frames[event.event]
         except KeyError:
             raise UnhandledEvent(event)
-        debug("Button %d press in window 0x%x." % (event.detail, event.event))
+        self.log.debug("Button %d press in window 0x%x.",
+                       event.detail, event.event)
         if self.ignore_focus_click:
             self.conn.core.UngrabPointer(event.time)
         else:

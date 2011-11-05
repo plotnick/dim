@@ -1,6 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from logging import basicConfig as logconfig, debug, info, warning, error
+import logging
 
 from xcb.xproto import *
 
@@ -13,6 +13,8 @@ from properties import WMSizeHints
 from xutil import *
 
 __all__ = ["MoveResize"]
+
+log = logging.getLogger("moveresize")
 
 class ClientUpdate(object):
     """A transactional client configuration change."""

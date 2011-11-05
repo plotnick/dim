@@ -3,7 +3,7 @@
 """The clients of a window manager are top-level windows. This module provides
 classes and routines for dealing with those as such."""
 
-from logging import debug, info, warning, error
+import logging
 
 from xcb.xproto import *
 
@@ -41,8 +41,7 @@ class ClientProperty(object):
         try:
             reply = cookie.reply()
         except BadWindow:
-            warning("Error fetching property %s for client window 0x%x." %
-                    (self.name, instance.window))
+            instance.log.warning("Error fetching property %s.", self.name)
             return self.default
         value = owner.properties[self.name].unpack(reply.value.buf()) \
             if reply.type else self.default
@@ -98,6 +97,7 @@ class ClientWindow(object):
         self.fonts = manager.fonts
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
+        self.log = logging.getLogger("client.0x%x" % self.window)
         self.property_values = {}
         self.property_cookies = {}
         self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
@@ -194,12 +194,12 @@ class ClientWindow(object):
         """Offer the input focus to the client. See ICCCM §4.1.7."""
         focused = False
         if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
-            debug("Setting input focus to window 0x%x (%d)." %
-                  (self.window, time))
+            self.log.debug("Setting input focus at time %d.", time)
             self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                          self.window, time)
             focused = True
         if self.atoms["WM_TAKE_FOCUS"] in self.wm_protocols:
+            self.log.debug("Taking input focus at time %d.", time)
             send_client_message(self.conn, self.window, 0, 32,
                                 self.atoms["WM_PROTOCOLS"],
                                 [self.atoms["WM_TAKE_FOCUS"], time, 0, 0, 0])
@@ -216,7 +216,7 @@ class ClientWindow(object):
             type = (self.properties[name].property_type
                     if name in self.properties
                     else GetPropertyType.Any)
-        debug("Requesting property %s for window 0x%x." % (name, self.window))
+        self.log.debug("Requesting property %s.", name)
         name = self.atoms[name] if isinstance(name, str) else name
         type = self.atoms[type] if isinstance(type, str) else type
         return self.conn.core.GetProperty(False, self.window, name, type,
@@ -258,15 +258,15 @@ class ClientWindow(object):
 
     def delete_property(self, name):
         """Remove the given property from the client window."""
-        debug("Deleting property %s on window 0x%x." % (name, self.window))
+        self.log.debug("Deleting property %s.", name)
         self.conn.core.DeleteProperty(self.window, self.atoms[name])
         self.invalidate_cached_property(name)
 
     def property_changed(self, atom, deleted):
         """Handle a change or deletion of a property."""
         name = self.atoms.name(atom)
-        debug("Property %s %s on window 0x%x." %
-              (name, ("deleted" if deleted else "changed"), self.window))
+        self.log.debug("Property %s %s.",
+                       name, ("deleted" if deleted else "changed"))
         if deleted:
             self.invalidate_cached_property(name)
         else:

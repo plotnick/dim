@@ -2,7 +2,7 @@
 
 """A window manager manages the children of the root window of a screen."""
 
-from logging import debug, info, warning, error
+import logging
 from functools import wraps
 from select import select
 
@@ -22,6 +22,8 @@ from xutil import *
 
 __all__ = ["ExitWindowManager", "NoSuchClient", "compress",
            "WindowManager", "ReparentingWindowManager"]
+
+log = logging.getLogger("manager")
 
 class ExitWindowManager(Exception):
     """An event handler may raise an exception of this type in order to break
@@ -126,6 +128,7 @@ class WindowManager(EventHandler):
     def adopt(self, windows):
         """Adopt existing top-level windows."""
         for window in windows:
+            log.debug("Adopting window 0x%x.", window)
             self.manage(window)
 
     def manage(self, window):
@@ -133,7 +136,7 @@ class WindowManager(EventHandler):
         try:
             attrs = self.conn.core.GetWindowAttributes(window).reply()
         except BadWindow:
-            warning("Error fetching attributes for window 0x%x." % window)
+            log.warning("Error fetching attributes for window 0x%x.", window)
             return None
 
         # Since we're not a compositing manager, we can simply ignore
@@ -144,7 +147,7 @@ class WindowManager(EventHandler):
         if window in self.clients:
             return self.clients[window]
 
-        debug("Managing window 0x%x." % window)
+        log.debug("Managing client window 0x%x.", window)
 
         client = self.clients[window] = ClientWindow(self.conn, window, self)
         self.place(client, client.geometry)
@@ -156,21 +159,21 @@ class WindowManager(EventHandler):
 
     def normalize(self, client):
         """Complete the transition of a client from Withdrawn → Normal state."""
-        debug("Client window 0x%x entering Normal state." % client.window)
+        log.debug("Client window 0x%x entering Normal state.", client.window)
         client.wm_state = WMState(WMState.NormalState)
         client.request_properties()
         return client
 
     def withdraw(self, client):
         """Complete the transition of a client to the Withdrawn state."""
-        debug("Client window 0x%x entering Withdrawn state." % client.window)
+        log.debug("Client window 0x%x entering Withdrawn state.", client.window)
         client.wm_state = WMState(WMState.WithdrawnState)
         client.decorator.undecorate()
         return client
             
     def unmanage(self, client):
         """Unmanage the given client."""
-        debug("Unmanaging client window 0x%x." % client.window)
+        log.debug("Unmanaging client window 0x%x.", client.window)
         client.decorator.undecorate()
         del client.wm_state
         return self.clients.pop(client.window, None)
@@ -184,8 +187,8 @@ class WindowManager(EventHandler):
                         if resize
                         else client.moveresize(requested_geometry))
         if is_move_only(old_geometry, new_geometry):
-            debug("Sending synthetic ConfigureNotify to client 0x%x." %
-                  client.window)
+            log.debug("Sending synthetic ConfigureNotify to client 0x%x.",
+                      client.window)
             configure_notify(self.conn, client.window, *new_geometry)
         return new_geometry
 
@@ -261,8 +264,8 @@ class WindowManager(EventHandler):
             raise NoSuchClient
 
     def register_subwindow_handler(self, event_class, window, handler):
-        debug("Registering %s handler for subwindow 0x%x." %
-              (event_class.__name__, window))
+        log.debug("Registering %s handler for subwindow 0x%x.",
+                  event_class.__name__, window)
         if event_class not in self.subwindow_handlers:
             self.subwindow_handlers[event_class] = {}
         self.subwindow_handlers[event_class][window] = handler
@@ -277,8 +280,8 @@ class WindowManager(EventHandler):
             if window in self.subwindow_handlers[event_class]:
                 self.subwindow_handlers[event_class][window](event)
         else:
-            debug("Ignoring unhandled %s on window 0x%x." %
-                  (event.__class__.__name__, window))
+            log.debug("Ignoring unhandled %s on window 0x%x.",
+                      event.__class__.__name__, window)
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
@@ -289,14 +292,14 @@ class WindowManager(EventHandler):
             requested_geometry = Geometry(event.x, event.y,
                                           event.width, event.height,
                                           event.border_width)
-            debug("Client 0x%x requested geometry %s." %
-                  (client.window, requested_geometry))
+            log.debug("Client 0x%x requested geometry %s.",
+                      client.window, requested_geometry)
             resize = (event.value_mask & (ConfigWindow.X | ConfigWindow.Y) == 0)
             self.place(client, requested_geometry, resize)
         else:
             # Just grant the request.
-            debug("Granting ConfigureWindow request for unmanaged window 0x%x." %
-                  event.window)
+            log.debug("Granting configure request for unmanaged window 0x%x.",
+                      event.window)
             self.conn.core.ConfigureWindow(event.window, event.value_mask,
                                            select_values(event.value_mask,
                                                          [event.x,
@@ -317,13 +320,12 @@ class WindowManager(EventHandler):
         client.geometry = Geometry(event.x, event.y,
                                    event.width, event.height,
                                    event.border_width)
-        debug("Noting geometry for client 0x%x as %s." %
-              (client.window, client.geometry))
+        log.debug("Noting geometry for client 0x%x as %s.",
+                  client.window, client.geometry)
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
         """Map a top-level window on behalf of a client."""
-        debug("Granting MapRequest for client 0x%x." % event.window)
         client = self.manage(event.window)
         self.conn.core.MapWindow(event.window)
 
@@ -332,7 +334,7 @@ class WindowManager(EventHandler):
         """Note the mapping of a top-level window."""
         if event.override_redirect:
             raise UnhandledEvent(event)
-        debug("Window 0x%x mapped." % event.window)
+        log.debug("Window 0x%x mapped.", event.window)
         try:
             self.normalize(self.get_client(event.window, True))
         except BadWindow:
@@ -343,7 +345,7 @@ class WindowManager(EventHandler):
         """Note the unmapping of a top-level window."""
         if event.from_configure:
             raise UnhandledEvent(event)
-        debug("Window 0x%x unmapped." % event.window)
+        log.debug("Window 0x%x unmapped.", event.window)
         try:
             self.withdraw(self.get_client(event.window, True))
         except BadWindow:
@@ -354,8 +356,8 @@ class WindowManager(EventHandler):
         """Note the destruction of a managed window."""
         for event_class, handlers in self.subwindow_handlers.items():
             if handlers.pop(event.window, None):
-                debug("Removed %s handler for subwindow 0x%x." %
-                      (event_class.__name__, event.window))
+                log.debug("Removed %s handler for subwindow 0x%x.",
+                          event_class.__name__, event.window)
         self.unmanage(self.get_client(event.window))
 
     @handler(MappingNotifyEvent)
@@ -364,11 +366,11 @@ class WindowManager(EventHandler):
         an update from the server."""
         if event.request == Mapping.Keyboard:
             try:
-                debug("Refreshing keymap: %d codes starting at %d." %
-                      (event.count, event.first_keycode))
+                log.debug("Refreshing keymap: %d codes starting at %d.",
+                          event.count, event.first_keycode)
                 self.keymap.refresh(event.first_keycode, event.count)
             except KeymapError as e:
-                warning("Unable to refresh partial keymap: %s." % e)
+                log.warning("Unable to refresh partial keymap: %s.", e)
                 # Do a full refresh. If that fails, just bail out.
                 self.keymap.refresh()
 
@@ -380,10 +382,10 @@ class WindowManager(EventHandler):
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):
         if event.window != self.screen.root:
-            debug("Ignoring client message to non-root window 0x%x." %
-                  event.window)
+            log.debug("Ignoring client message to non-root window 0x%x.",
+                      event.window)
         if event.type == self.atoms["WM_EXIT"]:
-            info("Received exit message; shutting down.")
+            log.info("Received exit message; shutting down.")
             raise ExitWindowManager
 
 class ReparentingWindowManager(WindowManager):
@@ -434,7 +436,7 @@ class ReparentingWindowManager(WindowManager):
         client = self.get_client(event.window)
         if client.reparenting:
             assert issubclass(client.reparenting, ClientWindow)
-            debug("Done reparenting window 0x%x." % client.window)
+            log.debug("Done reparenting window 0x%x.", client.window)
             client.__class__ = client.reparenting
             client.init(event.parent)
 
@@ -447,12 +449,12 @@ class ReparentingWindowManager(WindowManager):
                 client.geometry = Geometry(event.x, event.y,
                                            event.width, event.height,
                                            event.border_width)
-                debug(u"Noting geometry for client window 0x%x as %s." %
-                      (client.window, client.geometry))
+                log.debug(u"Noting geometry for client window 0x%x as %s.",
+                          client.window, client.geometry)
         elif event.window in self.frames:
             client = self.frames[event.window]
             client.frame_geometry = Geometry(event.x, event.y,
                                              event.width, event.height,
                                              event.border_width)
-            debug(u"Noting frame geometry for client 0x%x as %s." %
-                  (client.window, client.frame_geometry))
+            log.debug(u"Noting frame geometry for client 0x%x as %s.",
+                      client.window, client.frame_geometry)

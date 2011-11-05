@@ -2,7 +2,7 @@
 
 """Client windows may be decorated with a frame, border, title bar, &c."""
 
-from logging import debug, info, warning, error
+import logging
 
 from xcb.xproto import *
 
@@ -28,6 +28,7 @@ class Decorator(object):
         self.screen = client.screen
         self.border_window = client.window
         self.border_width = border_width
+        self.log = logging.getLogger("decorator.0x%x" % self.client.window)
 
     def decorate(self):
         """Decorate the client window."""
@@ -64,7 +65,7 @@ class Decorator(object):
     def message(self, message):
         """Display a message on behalf of the client."""
         if message:
-            info(message)
+            self.log.info(message)
 
     def name_changed(self):
         """Update display of the client name."""
@@ -130,7 +131,7 @@ class FrameDecorator(Decorator):
 
         frame = self.conn.generate_id()
         window = self.client.window
-        debug("Creating frame 0x%x for client window 0x%x." % (frame, window))
+        self.log.debug("Creating frame 0x%x.", frame)
         self.conn.core.CreateWindow(self.screen.root_depth, frame,
                                     self.screen.root,
                                     frame_geometry.x, frame_geometry.y,

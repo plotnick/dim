@@ -1,11 +1,13 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from logging import debug, info, warning, error
+import logging
 
 import xcb
 from xcb.xproto import BadName
 
 __all__ = ["FontCache"]
+
+log = logging.getLogger("font")
 
 class FontCache(object):
     """A simple cache for core X fonts and their properties."""
@@ -26,8 +28,8 @@ class FontCache(object):
             try:
                 self.conn.core.OpenFontChecked(font, len(name), name).check()
             except BadName:
-                warning('Invalid font name "%s"; falling back to "fixed".' %
-                        name)
+                log.warning('Invalid font name "%s"; falling back to "fixed".',
+                            name)
                 font = self["fixed"]
             self.fonts[name] = font
         return self.fonts[name]

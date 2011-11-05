@@ -43,6 +43,8 @@ if __name__ == "__main__":
                          help="show debugging messages")
     optparser.add_option("-V", "--verbose", action="store_true", dest="verbose",
                          help="be prolix, loquacious, and multiloquent")
+    optparser.add_option("-L", "--log", action="append", dest="log",
+                         help="enable logging for the specified module")
     optparser.add_option("-v", "--version", action="store_true", dest="version",
                          help="output version information and exit")
     optparser.add_option("-d", "--display", dest="display",
@@ -50,23 +52,33 @@ if __name__ == "__main__":
     optparser.add_option("-f", "--focus-mode", dest="focus_mode",
                          type="choice", choices=focus_modes.keys(),
                          default="sloppy",
-                         help='focus mode: sloppy or click')
+                         help="focus mode: sloppy or click")
     optparser.add_option("-t", "--title-font", dest="title_font",
                          default="fixed",
                          help="client window title font")
     (options, args) = optparser.parse_args()
+
     if options.version:
         print "Python Window Manager version 0.0"
         sys.exit(0)
-    logging.basicConfig(level=logging.DEBUG if options.debug else \
-                              logging.INFO if options.verbose else \
-                              logging.WARNING,
-                        format="%(levelname)s: %(message)s")
 
+    tty = logging.StreamHandler()
+    tty.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
+    logging.getLogger("").addHandler(tty)
+    log_level = (logging.DEBUG if options.debug else
+                 logging.INFO if options.verbose else
+                 logging.WARNING)
+    for name in ([""] if options.log is None or "*" in options.log
+                 else options.log):
+        logging.getLogger(name).setLevel(log_level)
+
+    log = logging.getLogger("wm")
+    log.debug("Using %s focus policy.", options.focus_mode)
     wm = type("WM",
               (focus_modes[options.focus_mode], BaseWM),
               dict(title_font=options.title_font))(options.display)
     try:
         wm.start()
     except KeyboardInterrupt:
+        log.info("Interrupt caught; shutting down.")
         wm.shutdown()
