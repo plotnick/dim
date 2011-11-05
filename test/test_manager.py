@@ -16,6 +16,7 @@ from event import *
 from geometry import *
 from keymap import *
 from manager import WindowManager, compress
+from properties import WMSizeHints
 from xutil import *
 
 ms = 10**-3 # useful for sleep times
@@ -87,7 +88,18 @@ class TestClient(EventHandler, Thread):
     def destroy(self):
         self.conn.core.DestroyWindowChecked(self.window).check()
 
-    def resize(self, geometry):
+    def resize(self, size, border_width):
+        assert isinstance(size, Rectangle)
+        self.conn.core.ConfigureWindowChecked(self.window,
+                                              (ConfigWindow.Width |
+                                               ConfigWindow.Height |
+                                               ConfigWindow.BorderWidth),
+                                              [size.width,
+                                               size.height,
+                                               border_width]).check()
+        return (size, border_width)
+
+    def configure(self, geometry):
         assert isinstance(geometry, Geometry)
         self.conn.core.ConfigureWindowChecked(self.window,
                                               (ConfigWindow.X |
@@ -295,20 +307,30 @@ class TestWMClientMoveResize(WMTestCase):
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
         geometry = self.initial_geometry
-        self.client.resize(geometry)
+        self.client.configure(geometry)
         self.loop(lambda: (self.client.synthetic_geometry == geometry))
 
     def test_move(self):
         """Move a top-level window without changing its size"""
         geometry = self.initial_geometry + Position(5, 5)
-        self.client.resize(geometry)
+        self.client.configure(geometry)
         self.loop(lambda: self.client.synthetic_geometry == geometry)
 
     def test_resize(self):
         """Resize and move a top-level window"""
         geometry = Geometry(5, 5, 50, 50, 5)
-        self.client.resize(geometry)
+        self.client.configure(geometry)
         self.loop(lambda: self.client.geometry == geometry)
+
+    def test_resize_gravity(self):
+        """Resize a client window with gravity"""
+        geometry = self.initial_geometry + Rectangle(50, 50)
+        gravity = Gravity.SouthEast
+        self.client.set_size_hints(WMSizeHints(win_gravity=gravity))
+        self.client.resize(geometry.size(), geometry.border_width)
+        self.loop(lambda: (self.client.geometry ==
+                           self.initial_geometry.resize(geometry.size(),
+                                                        gravity=gravity)))
 
 class EventLoopTester(WindowManager):
     """A window manager that records the number of ConfigureNotify events
@@ -333,7 +355,7 @@ class TestWMEventLoop(WMTestCase):
 
         # Move the window around a bunch of times.
         for i in range(n):
-            client.resize(geometry + (randint(1, 100), randint(1, 100)))
+            client.configure(geometry + (randint(1, 100), randint(1, 100)))
 
     def test_event_loop(self):
         """Test the window manager's event loop"""
