@@ -7,7 +7,6 @@ from event import handler
 from geometry import *
 from manager import ReparentingWindowManager
 from properties import WMSizeHints
-from wm import BaseWM
 
 from xcb.xproto import *
 
