@@ -19,7 +19,7 @@ from manager import WindowManager, compress
 from properties import WMSizeHints
 from xutil import *
 
-ms = 10**-3 # useful for sleep times
+ms = 1e-3 # one millisecond; useful for sleep times
 
 class EventType(object):
     """X event type codes."""
