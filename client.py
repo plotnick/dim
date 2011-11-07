@@ -97,6 +97,7 @@ class ClientWindow(object):
         self.fonts = manager.fonts
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
+        self.offset = None # determined and set by our decorator
         self.log = logging.getLogger("client.0x%x" % self.window)
         self.property_values = {}
         self.property_cookies = {}
