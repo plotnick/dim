@@ -62,9 +62,10 @@ class WindowManager(EventHandler):
 
     def __init__(self, display=None, screen=None, grab_buttons=GrabButtons()):
         self.conn = xcb.connect(display)
-        if screen is None:
-            screen = self.conn.pref_screen
-        self.screen = self.conn.get_setup().roots[screen]
+        self.screen_number = (screen
+                              if screen is not None
+                              else self.conn.pref_screen)
+        self.screen = self.conn.get_setup().roots[self.screen_number]
         self.grab_buttons = grab_buttons
 
         self.clients = {} # managed clients, indexed by window ID
@@ -98,8 +99,14 @@ class WindowManager(EventHandler):
         # running on this screen), the check will raise an exception.
         assert self.root_event_mask & EventMask.SubstructureRedirect, \
             "A window manager must select for SubstructureRedirect."
-        self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
-            CW.EventMask, [self.root_event_mask]).check()
+        try:
+            self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
+                CW.EventMask, [self.root_event_mask]).check()
+        except BadAccess:
+            log.error("Can't select for SubstructureRedirect on screen %d; "
+                      "is another window manager already running?",
+                      self.screen_number)
+            raise
 
         # Establish passive grabs for buttons on the root window. Subclasses
         # will add their own entries to the grab_buttons argument.
