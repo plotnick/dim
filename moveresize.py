@@ -138,7 +138,8 @@ class ClientResize(ClientUpdate):
         i = gravities.index(self.gravity)
         self.gravity = gravities[(i + 1) % len(gravities)]
         self.change_cursor(self.cursors[self.gravity], time)
-        self.geometry = self.client.geometry
+        self.geometry = self.client.absolute_geometry
+        self.frame_geometry = self.client.frame_geometry
         self.display_geometry(self.geometry)
         self.pointer = pointer
 
