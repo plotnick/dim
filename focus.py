@@ -71,8 +71,11 @@ class FocusPolicy(WindowManager):
         if self.pending_focus != client:
             self.log.debug("Attempting to focus client window 0x%x.",
                            client.window)
-            self.pending_focus = client
-            if not client.focus(time):
+            if client.focus(time):
+                self.pending_focus = client
+            else:
+                self.log.debug("Client window 0x%x declined the focus offer.",
+                               client.window)
                 return False
         if have_focus:
             self.log.debug("Client window 0x%x now has the focus.",
