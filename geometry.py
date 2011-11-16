@@ -4,10 +4,11 @@ from cmath import phase
 from collections import namedtuple
 from operator import add, sub, lt, le, eq, ne, gt, ge
 
-from xcb.xproto import Gravity
+from xcb.xproto import BadWindow, Gravity
 
-__all__ = ["Position", "Rectangle", "Geometry", "AspectRatio", "is_move_only",
-           "offset_gravity", "gravity_offset"]
+__all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
+           "is_move_only", "window_geometry",
+           "offset_gravity", "gravity_offset", "gravity_names"]
 
 def make_tuple_adder(op):
     def add_sub_tuple(self, other):
@@ -93,6 +94,15 @@ Geometry.resize = lambda self, size, border_width=None, gravity=Gravity.NorthWes
     resize_with_gravity(self, size, border_width, gravity)
 Geometry.reborder = lambda self, border_width: \
     self._replace(border_width=border_width)
+Geometry.right_edge = lambda self: \
+    self.x + self.width + 2 * self.border_width
+Geometry.bottom_edge = lambda self: \
+    self.y + self.height + 2 * self.border_width
+Geometry.edge = lambda self, direction: \
+    (self.x if direction[0] < 0 and direction[1] == 0 else
+     self.y if direction[0] == 0 and direction[1] < 0 else
+     self.right_edge() if direction[0] > 0 and direction[1] == 0 else
+     self.bottom_edge() if direction[0] == 0 and direction[1] > 0 else None)
 
 AspectRatio = namedtuple("AspectRatio", "width, height")
 AspectRatio.__nonzero__ = lambda self: \
@@ -120,6 +130,18 @@ def is_move_only(old, new):
             new.height == old.height and
             new.border_width == old.border_width)
 
+def window_geometry(conn, window):
+    """Request a window's geometry from the X server and return it as a
+    Geometry instance."""
+    cookie = conn.core.GetGeometry(window)
+    try:
+        reply = cookie.reply()
+    except BadWindow:
+        return None
+    return Geometry(reply.x, reply.y,
+                    reply.width, reply.height,
+                    reply.border_width)
+
 # When dealing with window gravity, it's sometimes more convenient to use
 # a slightly richer representation than the simple enumeration specified
 # by the X11 protocol. Gravity values are just labels for the 8-cell Moore
@@ -132,16 +154,26 @@ def is_move_only(old, new):
 #     ├──────┼──────┼──────┤
 #     │ -1+1 │ +0+1 │ +1+1 │
 #     └──────┴──────┴──────┘
-offset_gravity = {Position(-1, -1): Gravity.NorthWest,
-                  Position(+0, -1): Gravity.North,
-                  Position(+1, -1): Gravity.NorthEast,
-                  Position(-1, +0): Gravity.West,
-                  Position(+0, +0): Gravity.Center,
-                  Position(+1, +0): Gravity.East,
-                  Position(-1, +1): Gravity.SouthWest,
-                  Position(+0, +1): Gravity.South,
-                  Position(+1, +1): Gravity.SouthEast}
-gravity_offset = dict((v, k) for k, v in offset_gravity.items())
+offset_gravities = {Position(-1, -1): Gravity.NorthWest,
+                    Position(+0, -1): Gravity.North,
+                    Position(+1, -1): Gravity.NorthEast,
+                    Position(-1, +0): Gravity.West,
+                    Position(+0, +0): Gravity.Center,
+                    Position(+1, +0): Gravity.East,
+                    Position(-1, +1): Gravity.SouthWest,
+                    Position(+0, +1): Gravity.South,
+                    Position(+1, +1): Gravity.SouthEast}
+gravity_offsets = dict((v, k) for k, v in offset_gravities.items())
+
+def offset_gravity(offset):
+    return (offset_gravities[offset]
+            if offset is not None
+            else offset_gravities.keys())
+
+def gravity_offset(gravity):
+    return (gravity_offsets[gravity]
+            if gravity is not None
+            else gravity_offsets.keys())
 
 def resize_with_gravity(geometry, size, border_width, gravity):
     """Given a geometry, a requested size and border width, and a window
@@ -155,9 +187,15 @@ def resize_with_gravity(geometry, size, border_width, gravity):
     if gravity == Gravity.Static:
         dx = dy = db
     else:
-        offset = gravity_offset[gravity]
+        offset = gravity_offset(gravity)
         dx = (dw + 2 * db) * (offset.x + 1) // 2
         dy = (dh + 2 * db) * (offset.y + 1) // 2
     return (geometry.reborder(border_width) -
             Position(dx, dy) +
             Rectangle(dw, dh))
+
+gravity_names = dict((getattr(Gravity, name), name)
+                     for name in dir(Gravity)
+                     if not name.startswith("_"))
+gravity_names.update(dict((offset, gravity_names[offset_gravity(offset)])
+                          for offset in offset_gravities))

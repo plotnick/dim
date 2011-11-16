@@ -116,7 +116,7 @@ class ClientWindow(object):
     def geometry(self):
         """Return the client window geometry relative to its parent's origin."""
         if self._geometry is None:
-            self._geometry = self.get_geometry(self.window)
+            self._geometry = window_geometry(self.conn, self.window)
         return self._geometry
 
     @geometry.setter
@@ -135,39 +135,36 @@ class ClientWindow(object):
         """Return the client window geometry relative to the root's origin."""
         return self.geometry
 
-    def get_geometry(self, window):
-        """Request a window's geometry from the server and return it as a
-        Geometry instance."""
-        cookie = self.conn.core.GetGeometry(window)
-        try:
-            reply = cookie.reply()
-        except BadWindow:
-            return None
-        return Geometry(reply.x, reply.y,
-                        reply.width, reply.height,
-                        reply.border_width)
+    def absolute_to_frame_geometry(self, geometry):
+        """Convert an absolute client window geometry to a frame geometry."""
+        return geometry
+
+    def frame_to_absolute_geometry(self, geometry):
+        """Convert a frame geometry to an absolute client geometry."""
+        return geometry
 
     def move(self, position):
-        """Move the client window."""
+        """Move the client window and return its new position."""
+        position = self.manager.constrain_position(self, position)
         self.conn.core.ConfigureWindow(self.window,
                                        ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
-        self.geometry += position
+        self.geometry = self.geometry.move(position) # provisional
+        return position
 
     def resize(self, size, border_width=None, gravity=None):
         """Resize the client window and return the new geometry, which may
         differ in both size and position due to size constraints and gravity."""
-        return self.configure(self.manager.constrain(self,
-                                                     self.absolute_geometry,
-                                                     size, border_width,
-                                                     gravity))
+        geometry = self.manager.constrain_size(self, self.absolute_geometry,
+                                               size, border_width, gravity)
+        return self.configure(geometry)
 
     def moveresize(self, geometry, gravity=None):
         """Change the client window geometry, respecting size hints and using
         the specified gravity. Returns the new geometry."""
-        return self.configure(self.manager.constrain(self,
-                                                     geometry,
-                                                     gravity=gravity))
+        return self.configure(self.manager.constrain_size(self,
+                                                          geometry,
+                                                          gravity=gravity))
 
     def configure(self, geometry):
         """Change the client window geometry."""
@@ -183,7 +180,7 @@ class ClientWindow(object):
                                         card16(geometry.height),
                                         card16(geometry.border_width)])
         self.decorator.configure(geometry)
-        self.geometry = geometry
+        self.geometry = geometry # provisional update
         return geometry
 
     def restack(self, stack_mode):
@@ -320,7 +317,7 @@ class FramedClientWindow(ClientWindow):
     @property
     def frame_geometry(self):
         if self._frame_geometry is None:
-            self._frame_geometry = self.get_geometry(self.frame)
+            self._frame_geometry = window_geometry(self.conn, self.frame)
         return self._frame_geometry
 
     @frame_geometry.setter
@@ -333,17 +330,28 @@ class FramedClientWindow(ClientWindow):
         return self.geometry.move(self.frame_geometry.position() +
                                   self.offset.position())
 
+    def absolute_to_frame_geometry(self, geometry):
+        return (geometry.reborder(self.frame_geometry.border_width) -
+                self.offset.position() +
+                self.offset.size())
+
+    def frame_to_absolute_geometry(self, geometry):
+        return (geometry.reborder(0) +
+                self.offset.position() -
+                self.offset.size())
+
     def move(self, position):
+        position = self.manager.constrain_position(self, position)
         self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
+        self.frame_geometry = self.frame_geometry.move(position) # provisional
+        return position
 
     def configure(self, geometry):
         # Geometry is the requested client window geometry in the root
         # coordinate system.
-        frame_geometry = (geometry.reborder(self.frame_geometry.border_width) -
-                          self.offset.position() +
-                          self.offset.size())
+        frame_geometry = self.absolute_to_frame_geometry(geometry)
         self.conn.core.ConfigureWindow(self.frame,
                                        (ConfigWindow.X |
                                         ConfigWindow.Y |
@@ -361,6 +369,7 @@ class FramedClientWindow(ClientWindow):
                                        [card16(geometry.width),
                                         card16(geometry.height)])
         self.decorator.configure(frame_geometry)
+        # Provisionally set new geometry.
         self.frame_geometry = frame_geometry
         self.geometry = self.geometry.resize(geometry.size())
         return geometry

@@ -66,6 +66,7 @@ class WindowManager(EventHandler):
                               if screen is not None
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
+        self.screen_geometry = window_geometry(self.conn, self.screen.root)
         self.grab_buttons = grab_buttons
 
         self.clients = {} # managed clients, indexed by window ID
@@ -199,12 +200,19 @@ class WindowManager(EventHandler):
             configure_notify(self.conn, client.window, *new_geometry)
         return new_geometry
 
-    def constrain(self, client, geometry, size=None, border_width=None,
-                  gravity=None):
-        """Constrain the client geometry based on the current or requested
-        geometry, the requested size and border width, and the client's size
-        hints. If a gravity is supplied, it overrides the win_gravity field
-        of the size hints."""
+    def constrain_position(self, client, position):
+        """Compute and return a new position for the given client's frame
+        based on the requested position."""
+        return position
+
+    def constrain_size(self, client, geometry, size=None, border_width=None,
+                       gravity=None):
+        """Constrain the client geometry using size hints and gravity.
+        If a resize is requested, the caller should pass the client's current
+        geometry and the requested size and border width; if a move with
+        resize is requested, only the requested geometry is required.
+        If the gravity argument is supplied, it overrides the win_gravity
+        field of the size hints."""
         size_hints = client.wm_normal_hints
         if size is None:
             size = geometry.size()
