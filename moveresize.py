@@ -96,7 +96,7 @@ class ScreenEdgeResistance(Resistance):
     def __init__(self, client, screen_edge_resistance=40, **kwargs):
         super(ScreenEdgeResistance, self).__init__(client, **kwargs)
 
-        self.__threshold = screen_edge_resistance
+        self.screen_edge_resistance = screen_edge_resistance
         screen_geometry = client.manager.screen_geometry
         self.screen_edges = {}
         for direction in self.cardinal_directions:
@@ -106,12 +106,13 @@ class ScreenEdgeResistance(Resistance):
         requested_edge = geometry.edge(direction)
         current_edge = self.client.frame_geometry.edge(direction)
         screen_edge = self.screen_edges[direction]
+        threshold = self.screen_edge_resistance
         if ((direction[axis] > 0 and
              current_edge <= screen_edge and
-             screen_edge < requested_edge < screen_edge + self.__threshold) or
+             screen_edge < requested_edge < screen_edge + threshold) or
             (direction[axis] < 0 and
              current_edge >= screen_edge and
-             screen_edge - self.__threshold < requested_edge < screen_edge)):
+             screen_edge - threshold < requested_edge < screen_edge)):
             return self.apply_resistance(geometry, gravity, axis, direction,
                                          requested_edge - screen_edge)
         return super(ScreenEdgeResistance, self).maybe_resist(geometry, gravity,
@@ -124,7 +125,7 @@ class WindowEdgeResistance(Resistance):
     def __init__(self, client, window_edge_resistance=20, **kwargs):
         super(WindowEdgeResistance, self).__init__(client, **kwargs)
 
-        self.__threshold = window_edge_resistance
+        self.window_edge_resistance = window_edge_resistance
         clients = [client
                    for client in client.manager.clients.values()
                    if client is not self.client]
@@ -150,7 +151,7 @@ class WindowEdgeResistance(Resistance):
                     min(b) <= max(a) <= max(b))
         requested_edge = geometry.edge(direction)
         current_edge = self.client.frame_geometry.edge(direction)
-        threshold = self.__threshold
+        threshold = self.window_edge_resistance
         while True: # for lack of goto
             if direction[axis] > 0:
                 other = bsearch_floor(self.client_list[opposite],
@@ -182,7 +183,41 @@ class WindowEdgeResistance(Resistance):
         return super(WindowEdgeResistance, self).maybe_resist(geometry, gravity,
                                                               axis, direction)
 
-class EdgeResistance(WindowEdgeResistance, ScreenEdgeResistance):
+class AlignWindowEdges(WindowEdgeResistance):
+    def maybe_resist(self, geometry, gravity, axis, direction):
+        def edge(client):
+            return client.frame_geometry.edge(direction)
+        requested_edge = geometry.edge(direction)
+        current_edge = edge(self.client)
+        threshold = self.window_edge_resistance
+        while True: # for lack of goto
+            if direction[axis] > 0:
+                other = bsearch_floor(self.client_list[direction],
+                                      requested_edge, key=edge)
+                if not other:
+                    break
+                other_edge = edge(other)
+                if (current_edge <= other_edge and
+                    other_edge < requested_edge < other_edge + threshold):
+                    return self.apply_resistance(geometry, gravity,
+                                                 axis, direction,
+                                                 requested_edge - other_edge)
+            elif direction[axis] < 0:
+                other = bsearch_ceil(self.client_list[direction],
+                                     requested_edge, key=edge)
+                if not other:
+                    break
+                other_edge = edge(other)
+                if (current_edge >= other_edge and
+                    other_edge - threshold < requested_edge < other_edge):
+                    return self.apply_resistance(geometry, gravity,
+                                                 axis, direction,
+                                                 requested_edge - other_edge)
+            break
+        return super(AlignWindowEdges, self).maybe_resist(geometry, gravity,
+                                                          axis, direction)
+
+class EdgeResistance(AlignWindowEdges, ScreenEdgeResistance):
     pass
 
 class ClientUpdate(object):
