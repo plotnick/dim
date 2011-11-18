@@ -92,6 +92,19 @@ class WindowManager(EventHandler):
                                 [self.screen.white_pixel,
                                  self.screen.black_pixel])
 
+        self.xor_gc = self.conn.generate_id()
+        self.conn.core.CreateGC(self.xor_gc, self.screen.root,
+                                (GC.Function |
+                                 GC.Foreground |
+                                 GC.LineStyle |
+                                 GC.SubwindowMode |
+                                 GC.GraphicsExposures),
+                                [GX.xor,
+                                 self.colors["#E0E0E0"],
+                                 LineStyle.OnOffDash,
+                                 SubwindowMode.ClipByChildren,
+                                 False])
+
     def start(self):
         """Start the window manager. This method must only be called once."""
         # Make this client a window manager by selecting (at least)

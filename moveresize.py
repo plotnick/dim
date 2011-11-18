@@ -90,6 +90,9 @@ class Resistance(object):
         else:
             assert False, "invalid direction for resistance application"
 
+    def cleanup(self, time):
+        pass
+
 class ScreenEdgeResistance(Resistance):
     """Resist moving a client's external edges past the screen edges."""
 
@@ -184,6 +187,14 @@ class WindowEdgeResistance(Resistance):
                                                               axis, direction)
 
 class AlignWindowEdges(WindowEdgeResistance):
+    def __init__(self, *args, **kwargs):
+        super(AlignWindowEdges, self).__init__(*args, **kwargs)
+        self.guides = [None, None]
+
+    def resist(self, *args):
+        self.draw_guide(None, None)
+        return super(AlignWindowEdges, self).resist(*args)
+
     def maybe_resist(self, geometry, gravity, axis, direction):
         def edge(client):
             return client.frame_geometry.edge(direction)
@@ -199,6 +210,7 @@ class AlignWindowEdges(WindowEdgeResistance):
                 other_edge = edge(other)
                 if (current_edge <= other_edge and
                     other_edge < requested_edge < other_edge + threshold):
+                    self.draw_guide(axis, other_edge)
                     return self.apply_resistance(geometry, gravity,
                                                  axis, direction,
                                                  requested_edge - other_edge)
@@ -210,12 +222,34 @@ class AlignWindowEdges(WindowEdgeResistance):
                 other_edge = edge(other)
                 if (current_edge >= other_edge and
                     other_edge - threshold < requested_edge < other_edge):
+                    self.draw_guide(axis, other_edge - 1)
                     return self.apply_resistance(geometry, gravity,
                                                  axis, direction,
                                                  requested_edge - other_edge)
             break
         return super(AlignWindowEdges, self).maybe_resist(geometry, gravity,
                                                           axis, direction)
+
+    def draw_guide(self, axis, coord):
+        def draw(axis, coord):
+            if coord is not None:
+                w, h = self.client.manager.screen_geometry.size()
+                line = [[coord, 0, coord, h], [0, coord, w, coord]][axis]
+                self.client.conn.core.PolyLine(CoordMode.Origin,
+                                               self.client.screen.root,
+                                               self.client.manager.xor_gc,
+                                               1, line)
+        if axis is None and coord is None:
+            for axis in (0, 1):
+                draw(axis, self.guides[axis])
+                self.guides[axis] = None
+        elif self.guides[axis] != coord:
+            draw(axis, self.guides[axis])
+            draw(axis, coord)
+            self.guides[axis] = coord
+
+    def cleanup(self, time):
+        self.draw_guide(None, None)
 
 class EdgeResistance(AlignWindowEdges, ScreenEdgeResistance):
     pass
@@ -240,6 +274,7 @@ class ClientUpdate(object):
     def commit(self, time):
         self.cleanup(time)
         self.client.decorator.message(None)
+        self.client.conn.flush()
 
     def rollback(self, time):
         self.cleanup(time)
@@ -413,7 +448,8 @@ class MoveResize(WindowManager):
         self.conn.core.GrabKeyboard(False, self.screen.root, event.time,
                                     GrabMode.Async, GrabMode.Async)
 
-        def ungrab(time=Time.CurrentTime):
+        def cleanup(time=Time.CurrentTime):
+            self.client_update.resistance.cleanup(time)
             self.conn.core.UngrabPointer(time)
             self.conn.core.UngrabKeyboard(time)
         def change_cursor(cursor, time=Time.CurrentTime):
@@ -423,7 +459,7 @@ class MoveResize(WindowManager):
         client = self.get_client(window)
         self.client_update = action(client,
                                     Position(event.root_x, event.root_y),
-                                    ungrab, change_cursor)
+                                    cleanup, change_cursor)
         self.client_update.resistance = EdgeResistance(client)
 
     @handler(ButtonReleaseEvent)
