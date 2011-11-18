@@ -1,5 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from operator import itemgetter
 import unittest
 
 import xcb
@@ -9,7 +10,8 @@ from cursor import *
 from decorator import Decorator
 from geometry import *
 from keysym import *
-from moveresize import ClientMove, ClientResize, MoveResize
+from moveresize import bsearch_floor, bsearch_ceil, \
+    ClientMove, ClientResize, MoveResize
 from properties import WMSizeHints
 from xutil import int16
 
@@ -231,6 +233,29 @@ class TestMoveResize(WMTestCase):
                 self.fake_input(EventType.MotionNotify, False, 0, 0)
                 min_geometry = self.initial_geometry.resize(min_size)
                 self.loop(self.make_geometry_test(min_geometry))
+
+class TestBinarySearch(unittest.TestCase):
+    def test_bsearch_floor(self):
+        sequence = [(1, 1), (2, 1), (2, 2), (3, 1)]
+        self.assertEqual(bsearch_floor(0, sequence, key=itemgetter(0)),
+                         set([]))
+        self.assertEqual(bsearch_floor(1, sequence, key=itemgetter(0)),
+                         set([(1, 1)]))
+        self.assertEqual(bsearch_floor(2.5, sequence, key=itemgetter(0)),
+                         set([(2, 1), (2, 2)]))
+        self.assertEqual(bsearch_floor(4, sequence, key=itemgetter(0)),
+                         set([(3, 1)]))
+
+    def test_bsearch_ceil(self):
+        sequence = [(1, 1), (2, 1), (2, 2), (3, 1)]
+        self.assertEqual(bsearch_ceil(0, sequence, key=itemgetter(0)),
+                         set([(1, 1)]))
+        self.assertEqual(bsearch_ceil(1, sequence, key=itemgetter(0)),
+                         set([(1, 1)]))
+        self.assertEqual(bsearch_ceil(1.5, sequence, key=itemgetter(0)),
+                         set([(2, 1), (2, 2)]))
+        self.assertEqual(bsearch_ceil(4, sequence, key=itemgetter(0)),
+                         set([]))
 
 if __name__ == "__main__":
     unittest.main()

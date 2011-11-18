@@ -21,8 +21,8 @@ def identity(x):
 
 # Thanks to Tim Bray for the binary search implementation:
 # <http://www.tbray.org/ongoing/When/200x/2003/03/22/Binary>
-def bsearch_floor(sequence, item, key=identity):
-    """Return the largest element of sequence ≤ item."""
+def bsearch_floor(item, sequence, key=identity):
+    """Return a set containing the largest elements of sequence ≤ item."""
     high = len(sequence); low = -1
     while high - low > 1:
         probe = (low + high) // 2
@@ -30,18 +30,35 @@ def bsearch_floor(sequence, item, key=identity):
             high = probe
         else:
             low = probe
-    return sequence[low] if low != -1 else None
+    matches = set()
+    if low >= 0:
+        floor = key(sequence[low])
+        matches.add(sequence[low])
+        low -= 1
+        while low >= 0 and key(sequence[low]) == floor:
+            matches.add(sequence[low])
+            low -= 1
+    return matches
 
-def bsearch_ceil(sequence, item, key=identity):
-    """Return the smallest element of sequence ≥ item."""
-    high = len(sequence); low = -1
+def bsearch_ceil(item, sequence, key=identity):
+    """Return a set containing the smallest elements of sequence ≥ item."""
+    n = len(sequence)
+    high = n; low = -1
     while high - low > 1:
         probe = (low + high) // 2
         if key(sequence[probe]) < item:
             low = probe
         else:
             high = probe
-    return sequence[high] if high != len(sequence) else None
+    matches = set()
+    if high < n:
+        ceil = key(sequence[high])
+        matches.add(sequence[high])
+        high += 1
+        while high < n and key(sequence[high]) == ceil:
+            matches.add(sequence[high])
+            high += 1
+    return matches
 
 class Resistance(object):
     cardinal_directions = map(gravity_offset,
@@ -155,13 +172,10 @@ class WindowEdgeResistance(Resistance):
         requested_edge = geometry.edge(direction)
         current_edge = self.client.frame_geometry.edge(direction)
         threshold = self.window_edge_resistance
-        while True: # for lack of goto
-            if direction[axis] > 0:
-                other = bsearch_floor(self.client_list[opposite],
-                                      requested_edge,
-                                      key=opposite_edge)
-                if not other:
-                    break
+        if direction[axis] > 0:
+            for other in bsearch_floor(requested_edge,
+                                       self.client_list[opposite],
+                                       key=opposite_edge):
                 other_edge = opposite_edge(other)
                 if (current_edge <= other_edge and
                     other_edge < requested_edge < other_edge + threshold and
@@ -169,12 +183,10 @@ class WindowEdgeResistance(Resistance):
                     return self.apply_resistance(geometry, gravity,
                                                  axis, direction,
                                                  requested_edge - other_edge)
-            elif direction[axis] < 0:
-                other = bsearch_ceil(self.client_list[opposite],
-                                     requested_edge,
-                                     key=opposite_edge)
-                if not other:
-                    break
+        elif direction[axis] < 0:
+            for other in bsearch_ceil(requested_edge,
+                                      self.client_list[opposite],
+                                      key=opposite_edge):
                 other_edge = opposite_edge(other)
                 if (current_edge >= other_edge and
                     other_edge - threshold < requested_edge < other_edge and
@@ -182,7 +194,6 @@ class WindowEdgeResistance(Resistance):
                     return self.apply_resistance(geometry, gravity,
                                                  axis, direction,
                                                  requested_edge - other_edge)
-            break
         return super(WindowEdgeResistance, self).maybe_resist(geometry, gravity,
                                                               axis, direction)
 
@@ -201,12 +212,10 @@ class AlignWindowEdges(WindowEdgeResistance):
         requested_edge = geometry.edge(direction)
         current_edge = edge(self.client)
         threshold = self.window_edge_resistance
-        while True: # for lack of goto
-            if direction[axis] > 0:
-                other = bsearch_floor(self.client_list[direction],
-                                      requested_edge, key=edge)
-                if not other:
-                    break
+        if direction[axis] > 0:
+            for other in bsearch_floor(requested_edge,
+                                       self.client_list[direction],
+                                       key=edge):
                 other_edge = edge(other)
                 if (current_edge <= other_edge and
                     other_edge < requested_edge < other_edge + threshold):
@@ -214,11 +223,10 @@ class AlignWindowEdges(WindowEdgeResistance):
                     return self.apply_resistance(geometry, gravity,
                                                  axis, direction,
                                                  requested_edge - other_edge)
-            elif direction[axis] < 0:
-                other = bsearch_ceil(self.client_list[direction],
-                                     requested_edge, key=edge)
-                if not other:
-                    break
+        elif direction[axis] < 0:
+            for other in bsearch_ceil(requested_edge,
+                                      self.client_list[direction],
+                                      key=edge):
                 other_edge = edge(other)
                 if (current_edge >= other_edge and
                     other_edge - threshold < requested_edge < other_edge):
@@ -226,7 +234,6 @@ class AlignWindowEdges(WindowEdgeResistance):
                     return self.apply_resistance(geometry, gravity,
                                                  axis, direction,
                                                  requested_edge - other_edge)
-            break
         return super(AlignWindowEdges, self).maybe_resist(geometry, gravity,
                                                           axis, direction)
 
