@@ -11,7 +11,8 @@ from xcb.xproto import Gravity
 
 from geometry import *
 
-__all__ = ["PropertyValue", "PropertyValueList", "String", "UTF8String",
+__all__ = ["PropertyValue", "PropertyValueList",
+           "String", "UTF8String", "AtomList",
            "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
            "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
 
@@ -28,10 +29,12 @@ class PropertyValueClass(type):
         # Use the declared property format in conjunction with the names of
         # the fields to produce a Struct object which can pack and unpack
         # the property data.
-        try:
-            fields = namespace["__slots__"]
-            format = namespace["property_format"]
-        except KeyError:
+        for c in cls.__mro__:
+            if hasattr(c, "__slots__") and hasattr(c, "property_format"):
+                fields = c.__slots__
+                format = c.property_format
+                break
+        else:
             raise TypeError("property values must specify format and fields")
         assert format in type_codes, "invalid property format %r" % format
         cls.formatter = Struct(type_codes[format] * len(fields))
@@ -42,9 +45,11 @@ class PropertyValueListClass(PropertyValueClass):
 
     def __new__(metaclass, name, bases, namespace):
         cls = type.__new__(metaclass, name, bases, namespace)
-        try:
-            format = namespace["property_format"]
-        except KeyError:
+        for c in cls.__mro__:
+            if hasattr(c, "property_format"):
+                format = c.property_format
+                break
+        else:
             raise TypeError("property value lists must specify format")
         assert (isinstance(format, (list, tuple)) and
                 len(format) == 1 and format[0] in type_codes), \
@@ -172,6 +177,11 @@ class UTF8String(String):
     property_type = "UTF8_STRING"
     encoding = "UTF-8"
 
+class AtomList(PropertyValueList):
+    __slots__ = ()
+    property_format = [32]
+    property_type = "ATOM"
+
 class WMClass(String):
     """A representation of the WM_STATE property (ICCCM §4.1.2.5)"""
 
@@ -195,12 +205,9 @@ class WMTransientFor(PropertyValue):
     property_format = 32
     property_type = "WINDOW"
 
-class WMProtocols(PropertyValueList):
+class WMProtocols(AtomList):
     """A representation of the WM_PROTOCOLS property (ICCCM §4.1.2.7)"""
-
     __slots__ = ()
-    property_format = [32]
-    property_type = "ATOM"
 
 class WMColormapWindows(PropertyValueList):
     """A representation of the WM_COLORMAP_WINDOWS property (ICCCM §4.1.2.8)"""
