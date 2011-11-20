@@ -160,7 +160,7 @@ class TestMoveResize(WMTestCase):
                                          border_width=1)
         self.client = self.add_client(TestClient(self.initial_geometry))
         self.client.map()
-        self.loop(lambda: self.client.managed)
+        self.loop(lambda: self.client.mapped and self.client.managed)
 
     def relative_position(self, ratio):
         return (self.initial_geometry.position() + 
@@ -233,6 +233,33 @@ class TestMoveResize(WMTestCase):
                 self.fake_input(EventType.MotionNotify, False, 0, 0)
                 min_geometry = self.initial_geometry.resize(min_size)
                 self.loop(self.make_geometry_test(min_geometry))
+
+    def test_screen_edge_resistance(self):
+        with WarpedPointer(self, self.relative_position(0.5)): # center
+            with ModButtonDown(self, self.mod1, self.buttons[1]):
+                r = -Position(40, 40); half_r = r // 2
+                self.fake_input(EventType.MotionNotify, True, *half_r)
+                self.loop(self.make_geometry_delta_test((0, 0))) # resist
+                self.fake_input(EventType.MotionNotify, True, *half_r)
+                self.loop(self.make_geometry_delta_test(r))
+
+    def test_window_edge_resistance(self):
+        right = TestClient(self.initial_geometry +
+                           Position(self.initial_geometry.right_edge(), 0))
+        below = TestClient(self.initial_geometry +
+                           Position(0, self.initial_geometry.bottom_edge()))
+        self.add_client(right); right.map()
+        self.add_client(below); below.map()
+        self.loop(lambda: (right.mapped and below.mapped and
+                           right.managed and below.managed))
+
+        with WarpedPointer(self, self.relative_position(0.5)): # center
+            with ModButtonDown(self, self.mod1, self.buttons[1]):
+                r = Position(20, 20); half_r = r // 2
+                self.fake_input(EventType.MotionNotify, True, *half_r)
+                self.loop(self.make_geometry_delta_test((0, 0))) # resist
+                self.fake_input(EventType.MotionNotify, True, *half_r)
+                self.loop(self.make_geometry_delta_test(r))
 
 class TestBinarySearch(unittest.TestCase):
     def test_bsearch_floor(self):
