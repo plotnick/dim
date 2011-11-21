@@ -198,8 +198,8 @@ class ClientWindow(object):
             focused = True
         if self.atoms["WM_TAKE_FOCUS"] in self.wm_protocols:
             self.__log.debug("Taking input focus at time %d.", time)
-            send_client_message(self.conn, self.window, 0, 32,
-                                self.atoms["WM_PROTOCOLS"],
+            send_client_message(self.conn, self.window, self.window, 0,
+                                32, self.atoms["WM_PROTOCOLS"],
                                 [self.atoms["WM_TAKE_FOCUS"], time, 0, 0, 0])
             focused = True
         return focused

@@ -21,6 +21,7 @@ from properties import *
 from xutil import *
 
 __all__ = ["ExitWindowManager", "NoSuchClient", "compress",
+           "client_message_type", "ClientMessage",
            "WindowManager", "ReparentingWindowManager"]
 
 log = logging.getLogger("manager")
@@ -33,6 +34,36 @@ class ExitWindowManager(Exception):
 class NoSuchClient(UnhandledEvent):
     """Raised to indicate that there is no client currentlly being managed
     with the given top-level window."""
+    pass
+
+# Client messages come in via ClientMessageEvent instances. Our handler
+# for that event type will generate instances of more specific classes
+# based on the "type" field of the events and dispatch those via the
+# usual event dispatch mechanism. The following bit of machinery allows
+# easy registration of those classes.
+client_message_types = {}
+
+def client_message_type(event_type):
+    """A class decorator factory that registers a client message type."""
+    def register_client_message_type(cls):
+        client_message_types[event_type] = cls
+        return cls
+    return register_client_message_type
+
+class ClientMessage(object):
+    def __init__(self, window, format, data):
+        self.window = window
+        self.format = format
+        self.data = data
+
+@client_message_type("WM_CHANGE_STATE")
+class WMChangeState(ClientMessage):
+    """Sent by a client that would like its state changed (ICCCM §4.1.4)."""
+    pass
+
+@client_message_type("WM_EXIT")
+class WMExit(ClientMessage):
+    """Sent by a client that would like the window manager to shut down."""
     pass
 
 def compress(handler):
@@ -426,12 +457,34 @@ class WindowManager(EventHandler):
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):
-        if event.window != self.screen.root:
-            log.debug("Ignoring client message to non-root window 0x%x.",
-                      event.window)
-        if event.type == self.atoms["WM_EXIT"]:
-            log.info("Received exit message; shutting down.")
-            raise ExitWindowManager
+        """Handle a client message event by dispatching a new ClientMessage
+        instance."""
+        try:
+            event_type = self.atoms.name(event.type)
+        except BadAtom:
+            raise UnhandledEvent
+        try:
+            client_message = client_message_types[event_type](event.window,
+                                                              event.format,
+                                                              event.data)
+        except KeyError:
+            raise UnhandledEvent
+        self.handle_event(client_message)
+
+    @handler(WMChangeState)
+    def handle_wm_change_state(self, client_message):
+        log.debug("Received change-state message for client window 0x%x (%d).",
+                  client_message.window,
+                  client_message.data.data32[0])
+        if client_message.data.data32[0] == WMState.IconicState:
+            self.iconify(self.get_client(client_message.window, True))
+        else:
+            raise UnhandledEvent
+
+    @handler(WMExit)
+    def handle_wm_exit(self, client_message):
+        log.debug("Received exit message; shutting down.")
+        raise ExitWindowManager
 
 class ReparentingWindowManager(WindowManager):
     def __init__(self, *args, **kwargs):

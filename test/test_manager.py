@@ -1,7 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from random import randint
-from struct import unpack
+from struct import pack, unpack
 from select import select
 from time import sleep
 from threading import Thread
@@ -16,7 +16,7 @@ from event import *
 from geometry import *
 from keymap import *
 from manager import WindowManager, compress
-from properties import WMSizeHints
+from properties import WMState, WMSizeHints, WMHints
 from xutil import *
 
 ms = 1e-3 # one millisecond; useful for sleep times
@@ -116,6 +116,29 @@ class TestClient(EventHandler, Thread):
                                              self.atoms["WM_SIZE_HINTS"],
                                              *size_hints.change_property_args()).check()
 
+    @property
+    def wm_state(self):
+        reply = self.conn.core.GetProperty(False, self.window,
+                                           self.atoms["WM_STATE"],
+                                           self.atoms["WM_STATE"],
+                                           0, 0xffffffff).reply()
+        return WMState.unpack(reply.value.buf())
+
+    @property
+    def wm_hints(self):
+        reply = self.conn.core.GetProperty(False, self.window,
+                                           self.atoms["WM_HINTS"],
+                                           self.atoms["WM_HINTS"],
+                                           0, 0xffffffff).reply()
+        return WMHints.unpack(reply.value.buf())
+
+    @wm_hints.setter
+    def wm_hints(self, wm_hints):
+        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
+                                             self.atoms["WM_HINTS"],
+                                             self.atoms["WM_HINTS"],
+                                             *wm_hints.change_property_args()).check()
+
     def run(self, max_timeouts=100):
         """A simple client event loop."""
         timeouts = 0
@@ -142,6 +165,26 @@ class TestClient(EventHandler, Thread):
             if not r and not w and not x:
                 timeouts += 1
         assert False, "client timed out"
+
+    def withdraw(self):
+        # See ICCCM §4.1.4.
+        self.unmap()
+        self.conn.core.SendEvent(False, self.screen.root,
+                                 (EventMask.SubstructureRedirect |
+                                  EventMask.StructureNotify),
+                                 pack("bx2xIIB19x",
+                                      18, # code (UnmapNotify)
+                                      self.screen.root, # event
+                                      self.window, # window
+                                      False)) # from-configure
+
+    def iconify(self):
+        # See ICCCM §4.1.4.
+        send_client_message(self.conn, self.screen.root, self.window,
+                            (EventMask.SubstructureRedirect |
+                             EventMask.StructureNotify),
+                            32, self.atoms["WM_CHANGE_STATE"],
+                            [WMState.IconicState, 0, 0, 0, 0])
 
     def shutdown(self):
         self.destroy()
@@ -219,7 +262,7 @@ class WMTestCase(unittest.TestCase):
 
     def kill_wm(self):
         """Ask the window manager to exit."""
-        send_client_message(self.conn, self.screen.root,
+        send_client_message(self.conn, self.screen.root, self.screen.root,
                             EventMask.StructureNotify,
                             8, self.atoms["WM_EXIT"], [0] * 20)
         self.conn.flush()
@@ -294,6 +337,56 @@ class TestWMStartup(WMTestCase):
         # Let's bring up that last window.
         w3.map()
         self.loop(lambda: w3.managed)
+
+class TestWMStates(WMTestCase):
+    geometry = Geometry(0, 0, 100, 100, 1)
+
+    def test_withdrawn_normal(self):
+        client = self.add_client(TestClient(self.geometry))
+        client.wm_hints = WMHints(initial_state=WMState.NormalState)
+        client.map()
+        self.loop(lambda: (client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.NormalState))
+
+    def test_withdrawn_iconic(self):
+        client = self.add_client(TestClient(self.geometry))
+        client.wm_hints = WMHints(initial_state=WMState.IconicState)
+        client.map()
+        self.loop(lambda: (not client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.IconicState))
+
+    def test_normal_withdrawn(self):
+        client = self.add_client(TestClient(self.geometry))
+        client.wm_hints = WMHints(initial_state=WMState.NormalState)
+        client.map()
+        self.loop(lambda: (client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.NormalState))
+
+        client.withdraw()
+        self.loop(lambda: (not client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.WithdrawnState))
+
+    def test_normal_iconic(self):
+        client = self.add_client(TestClient(self.geometry))
+        client.wm_hints = WMHints(initial_state=WMState.NormalState)
+        client.map()
+        self.loop(lambda: (client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.NormalState))
+
+        client.iconify()
+        self.loop(lambda: (not client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.IconicState))
+
+        client.map()
+        self.loop(lambda: (client.mapped and
+                           client.managed and
+                           client.wm_state == WMState.NormalState))
 
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):

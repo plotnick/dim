@@ -58,7 +58,8 @@ def configure_notify(connection, window, x, y, width, height, border_width,
                                                     border_width,
                                                     override_redirect))
 
-def send_client_message(connection, window, event_mask, format, type, data,
+def send_client_message(connection, destination, window, event_mask,
+                        format, type, data,
                         formatters={8: Struct("bB2xII20B"),
                                     16: Struct("bB2xII10H"),
                                     32: Struct("bB2xII5I")}):
@@ -67,7 +68,7 @@ def send_client_message(connection, window, event_mask, format, type, data,
     The format must be one of 8, 16, or 32, and the data must be a list of
     exactly 20, 10, or 5 values, respectively."""
     formatter = formatters[format]
-    return connection.core.SendEvent(False, window, event_mask,
+    return connection.core.SendEvent(False, destination, event_mask,
                                      formatter.pack(33, # code (ClientMessage)
                                                     format,
                                                     window,
