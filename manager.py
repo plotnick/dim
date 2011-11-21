@@ -179,7 +179,7 @@ class WindowManager(EventHandler):
         return client
 
     def normalize(self, client):
-        """Complete the transition of a client from Withdrawn → Normal state."""
+        """Complete the transition of a client to the Normal state."""
         log.debug("Client window 0x%x entering Normal state.", client.window)
         client.wm_state = WMState(WMState.NormalState)
         client.request_properties()
@@ -190,6 +190,13 @@ class WindowManager(EventHandler):
         log.debug("Client window 0x%x entering Withdrawn state.", client.window)
         client.wm_state = WMState(WMState.WithdrawnState)
         client.decorator.undecorate()
+        return client
+
+    def iconify(self, client):
+        """Complete the transition of a client to the Iconic state."""
+        log.debug("Client window 0x%x entering Iconic state.", client.window)
+        self.conn.core.UnmapWindow(client.window)
+        client.wm_state = WMState(WMState.IconicState)
         return client
             
     def unmanage(self, client):
@@ -355,7 +362,12 @@ class WindowManager(EventHandler):
     def handle_map_request(self, event):
         """Map a top-level window on behalf of a client."""
         client = self.manage(event.window)
-        self.conn.core.MapWindow(event.window)
+        if (client.wm_state == WMState.WithdrawnState and
+            client.wm_hints.initial_state == WMState.IconicState):
+            # Withdrawn → Iconic state transition (ICCCM §4.1.4).
+            self.iconify(client)
+        else:
+            self.conn.core.MapWindow(event.window)
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
@@ -374,8 +386,13 @@ class WindowManager(EventHandler):
         if event.from_configure:
             raise UnhandledEvent(event)
         log.debug("Window 0x%x unmapped.", event.window)
+        client = self.get_client(event.window, True)
         try:
-            self.withdraw(self.get_client(event.window, True))
+            # See ICCCM §4.1.4.
+            if is_synthetic_event(event):
+                self.withdraw(client)
+            else:
+                self.iconify(client)
         except BadWindow:
             pass
 
@@ -448,6 +465,11 @@ class ReparentingWindowManager(WindowManager):
                 return super(ReparentingWindowManager, self).withdraw(client)
             finally:
                 self.frames.pop(frame, None)
+
+    def iconify(self, client):
+        if not client.reparenting:
+            self.conn.core.UnmapWindow(client.frame)
+            return super(ReparentingWindowManager, self).iconify(client)
 
     def get_client(self, window, client_only=False):
         if window in self.clients:
