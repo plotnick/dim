@@ -28,7 +28,7 @@ class Decorator(object):
         self.screen = client.screen
         self.border_window = client.window
         self.border_width = border_width
-        self.log = logging.getLogger("decorator.0x%x" % self.client.window)
+        self.__log = logging.getLogger("decorator.0x%x" % self.client.window)
 
     def decorate(self):
         """Decorate the client window."""
@@ -65,7 +65,7 @@ class Decorator(object):
     def message(self, message):
         """Display a message on behalf of the client."""
         if message:
-            self.log.info(message)
+            self.__log.info(message)
 
     def name_changed(self):
         """Update display of the client name."""
@@ -115,6 +115,7 @@ class FrameDecorator(Decorator):
         super(FrameDecorator, self).__init__(*args, **kwargs)
         self.frame_border_width = self.border_width
         self.border_width = 0
+        self.__log = logging.getLogger("decorator.0x%x" % self.client.window)
 
     def decorate(self):
         super(FrameDecorator, self).decorate()
@@ -131,7 +132,7 @@ class FrameDecorator(Decorator):
 
         frame = self.conn.generate_id()
         window = self.client.window
-        self.log.debug("Creating frame 0x%x.", frame)
+        self.__log.debug("Creating frame 0x%x.", frame)
         self.conn.core.CreateWindow(self.screen.root_depth, frame,
                                     self.screen.root,
                                     frame_geometry.x, frame_geometry.y,

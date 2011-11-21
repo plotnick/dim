@@ -98,11 +98,11 @@ class ClientWindow(object):
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
         self.offset = None # determined and set by our decorator
-        self.log = logging.getLogger("client.0x%x" % self.window)
         self.property_values = {}
         self.property_cookies = {}
         self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
                                               [self.client_event_mask])
+        self.__log = logging.getLogger("client.0x%x" % self.window)
         self.init(self.screen.root)
 
     def init(self, parent):
@@ -192,12 +192,12 @@ class ClientWindow(object):
         """Offer the input focus to the client. See ICCCM §4.1.7."""
         focused = False
         if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
-            self.log.debug("Setting input focus at time %d.", time)
+            self.__log.debug("Setting input focus at time %d.", time)
             self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                          self.window, time)
             focused = True
         if self.atoms["WM_TAKE_FOCUS"] in self.wm_protocols:
-            self.log.debug("Taking input focus at time %d.", time)
+            self.__log.debug("Taking input focus at time %d.", time)
             send_client_message(self.conn, self.window, 0, 32,
                                 self.atoms["WM_PROTOCOLS"],
                                 [self.atoms["WM_TAKE_FOCUS"], time, 0, 0, 0])
@@ -214,7 +214,7 @@ class ClientWindow(object):
             type = (self.properties[name].property_type
                     if name in self.properties
                     else GetPropertyType.Any)
-        self.log.debug("Requesting property %s.", name)
+        self.__log.debug("Requesting property %s.", name)
         name = self.atoms[name] if isinstance(name, str) else name
         type = self.atoms[type] if isinstance(type, str) else type
         return self.conn.core.GetProperty(False, self.window, name, type,
@@ -256,15 +256,15 @@ class ClientWindow(object):
 
     def delete_property(self, name):
         """Remove the given property from the client window."""
-        self.log.debug("Deleting property %s.", name)
+        self.__log.debug("Deleting property %s.", name)
         self.conn.core.DeleteProperty(self.window, self.atoms[name])
         self.invalidate_cached_property(name)
 
     def property_changed(self, atom, deleted):
         """Handle a change or deletion of a property."""
         name = self.atoms.name(atom)
-        self.log.debug("Property %s %s.",
-                       name, ("deleted" if deleted else "changed"))
+        self.__log.debug("Property %s %s.",
+                         name, ("deleted" if deleted else "changed"))
         if deleted:
             self.invalidate_cached_property(name)
         else:
