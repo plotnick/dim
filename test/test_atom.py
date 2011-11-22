@@ -26,6 +26,10 @@ class TestAtomCache(unittest.TestCase):
         self.assertEqual(set(self.atoms.atoms.keys()), names)
         self.assertEqual(set(self.atoms.names.values()), names)
 
+    def test_null_atom(self):
+        self.assertEqual(self.atoms[None], 0)
+        self.assertEqual(self.atoms.name(0), None)
+
     def test_predefined_atoms(self):
         for name in dir(Atom):
             if not name.startswith("_"):
@@ -44,8 +48,7 @@ class TestAtomCache(unittest.TestCase):
         self.assertEqual(set(self.atoms.atoms.keys()), names)
 
     def test_names(self):
-        # Pre-defined or not, names are always requested from the server
-        # and cached.
+        # Names are always requested from the server and cached.
         names = set(["ATOM", "BITMAP", "CARDINAL", "UTF8_STRING"])
         for name in names:
             atom = self.atoms[name]

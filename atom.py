@@ -11,8 +11,8 @@ class AtomCache(object):
     def __init__(self, conn, names=[]):
         assert isinstance(conn, xcb.Connection)
         self.conn = conn
-        self.atoms = {}
-        self.names = {}
+        self.atoms = {} # atom cache
+        self.names = {} # name cache
         if names:
             self.prime_cache(names)
 
@@ -26,23 +26,28 @@ class AtomCache(object):
 
     def __getitem__(self, name):
         """Return the atom with the given name."""
+        if name is None:
+            return 0
         try:
-            # Is it in the cache?
+            # Check the cache.
             return self.atoms[name]
         except KeyError:
             pass
         try:
-            # Is it one of the pre-defined atoms?
+            # Maybe it's one of the pre-defined atoms.
             return getattr(Atom, name)
         except AttributeError:
             pass
-        # Request the atom from the server and cache it.
+
+        # Intern the atom and cache it.
         atom = self.conn.core.InternAtom(False, len(name), name).reply().atom
         self.atoms[name] = atom
         return atom
 
     def name(self, atom):
         """Return the name of the given atom."""
+        if atom == 0:
+            return None
         try:
             return self.names[atom]
         except KeyError:
