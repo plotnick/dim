@@ -453,7 +453,9 @@ class WindowManager(EventHandler):
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
         """Note the change of a window property."""
-        self.get_client(event.window).property_changed(event.atom, event.state)
+        client = self.get_client(event.window)
+        client.property_changed(self.atoms.name(event.atom),
+                                event.state == Property.Delete)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):

@@ -67,10 +67,6 @@ class Decorator(object):
         if message:
             self.__log.info(message)
 
-    def name_changed(self):
-        """Update display of the client name."""
-        pass
-
     def compute_client_offset(self):
         """Compute and return a geometry whose position represents the
         offset of the client window with respect to the inside corner of
@@ -258,7 +254,14 @@ class TitleDecorator(FrameDecorator):
                                                        self.titlebar,
                                                        self.refresh)
 
+        for property_name in ("WM_NAME", "_NET_WM_NAME"):
+            self.client.register_property_change_handler(property_name,
+                                                         self.name_changed)
+
     def undecorate(self):
+        for property_name in ("WM_NAME", "_NET_WM_NAME"):
+            self.client.unregister_property_change_handler(property_name,
+                                                           self.name_changed)
         if self.titlebar:
             self.conn.core.DestroyWindow(self.titlebar)
             self.titlebar = None
@@ -283,7 +286,8 @@ class TitleDecorator(FrameDecorator):
     def message(self, message):
         self.draw_title(message)
 
-    def name_changed(self):
+    def name_changed(self, client, *args):
+        assert client is self.client
         self.draw_title(None)
 
     def refresh(self, event=None):

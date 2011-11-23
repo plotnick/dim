@@ -3,6 +3,7 @@
 """The clients of a window manager are top-level windows. This module provides
 classes and routines for dealing with those as such."""
 
+from collections import defaultdict
 import logging
 
 from xcb.xproto import *
@@ -100,6 +101,7 @@ class ClientWindow(object):
         self.offset = None # determined and set by our decorator
         self.property_values = {}
         self.property_cookies = {}
+        self.property_change_handlers = defaultdict(set)
         self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
                                               [self.client_event_mask])
         self.__log = logging.getLogger("client.0x%x" % self.window)
@@ -266,9 +268,8 @@ class ClientWindow(object):
         self.conn.core.DeleteProperty(self.window, self.atoms[name])
         self.invalidate_cached_property(name)
 
-    def property_changed(self, atom, deleted):
+    def property_changed(self, name, deleted):
         """Handle a change or deletion of a property."""
-        name = self.atoms.name(atom)
         self.__log.debug("Property %s %s.",
                          name, ("deleted" if deleted else "changed"))
         if deleted:
@@ -280,8 +281,9 @@ class ClientWindow(object):
             if name in self.properties:
                 self.property_cookies[name] = self.request_property(name)
 
-        if name == "WM_NAME" or name == "_NET_WM_NAME":
-            self.decorator.name_changed()
+        # Invoke any handlers registered for this property change.
+        for handler in self.property_change_handlers.get(name, []):
+            handler(self, name, deleted)
 
     def invalidate_cached_property(self, name):
         """Invalidate any cached request or value for the given property."""
@@ -289,6 +291,12 @@ class ClientWindow(object):
             del self.property_values[name]
         if name in self.property_cookies:
             del self.property_cookies[name]
+
+    def register_property_change_handler(self, name, handler):
+        self.property_change_handlers[name].add(handler)
+
+    def unregister_property_change_handler(self, name, handler):
+        self.property_change_handlers[name].discard(handler)
 
     # ICCCM properties
     wm_name = ClientProperty("WM_NAME", String, "")

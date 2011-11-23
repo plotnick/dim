@@ -54,19 +54,24 @@ class TagManager(WindowManager):
         self.tagsets = defaultdict(set) # sets of clients, indexed by tag
         super(TagManager, self).__init__(*args, **kwargs)
 
-    def note_tags(self, client):
+    def manage(self, window):
+        client = super(TagManager, self).manage(window)
+        if client:
+            self.note_tags(client)
+            client.register_property_change_handler("_DIM_TAGS", self.note_tags)
+        return client
+
+    def unmanage(self, client):
+        client.unregister_property_change_handler("_DIM_TAGS", self.note_tags)
+        super(TagManager, self).unmanage(client)
+
+    def note_tags(self, client, *args):
         for tagset in self.tagsets.values():
             tagset.discard(client)
         for tag in client.dim_tags:
             log.debug("Adding client window 0x%x to tagset %s.",
                       client.window, self.atoms.name(tag))
             self.tagsets[tag].add(client)
-
-    def manage(self, window):
-        client = super(TagManager, self).manage(window)
-        if client:
-            self.note_tags(client)
-        return client
 
     def update_tagset(self, function, tags):
         def tagset(tag):
