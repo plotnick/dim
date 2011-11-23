@@ -207,6 +207,12 @@ class ClientWindow(object):
     def unfocus(self):
         self.decorator.unfocus()
 
+    def map(self):
+        self.conn.core.MapWindow(self.window)
+
+    def unmap(self):
+        self.conn.core.UnmapWindow(self.window)
+
     def request_property(self, name, type=None):
         """Request the value of a property of the client window, and return
         a cookie for the request. Does not wait for a reply."""
@@ -300,6 +306,9 @@ class ClientWindow(object):
     net_wm_name = ClientProperty("_NET_WM_NAME", UTF8String, "")
     net_wm_icon_name = ClientProperty("_NET_WM_ICON_NAME", UTF8String, "")
 
+    # Dim-specific properties
+    dim_tags = ClientProperty("_DIM_TAGS", AtomList, [])
+
 class FramedClientWindow(ClientWindow):
     """A framed client window represents a client window that has been
     reparented to a new top-level window.
@@ -378,3 +387,11 @@ class FramedClientWindow(ClientWindow):
         self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.StackMode,
                                        [stack_mode])
+
+    def map(self):
+        super(FramedClientWindow, self).map()
+        self.conn.core.MapWindow(self.frame)
+
+    def unmap(self):
+        self.conn.core.UnmapWindow(self.frame)
+        super(FramedClientWindow, self).unmap()

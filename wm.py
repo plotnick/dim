@@ -10,8 +10,9 @@ from focus import SloppyFocus, ClickToFocus
 from manager import ReparentingWindowManager, compress
 from moveresize import MoveResize
 from raiselower import RaiseLower
+from tags import TagManager
 
-class BaseWM(ReparentingWindowManager, MoveResize, RaiseLower):
+class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
     title_font = "fixed"
 
     def init_graphics(self):
