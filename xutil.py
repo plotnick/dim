@@ -8,7 +8,7 @@ from xcb.xproto import *
 
 __all__ = ["power_of_2", "popcount", "int16", "card16",
            "is_synthetic_event", "configure_notify", "send_client_message",
-           "select_values", "value_list",
+           "select_values", "value_list", "textitem16",
            "GrabButtons", "GrabServer"]
 
 def power_of_2(x):
@@ -102,8 +102,8 @@ def value_list(flag_class, **kwargs):
                 sorted(values, key=operator.itemgetter(1))))
 
 def textitem16(string):
-    """Given a Unicode string, yield a sequence of TEXTITEM16 byte strings
-    suitable for embeddingin a PolyText16 request."""
+    """Given a string, yield a sequence of TEXTITEM16 byte strings suitable
+    for embedding in a PolyText16 request."""
     string = unicode(string)
     segments = [string[i:i + 254] for i in range(0, len(string), 254)]
     for segment in segments:
