@@ -434,7 +434,7 @@ class WindowManager(EventHandler):
             if handlers.pop(event.window, None):
                 log.debug("Removed %s handler for subwindow 0x%x.",
                           event_class.__name__, event.window)
-        self.unmanage(self.get_client(event.window))
+        self.unmanage(self.get_client(event.window, True))
 
     @handler(MappingNotifyEvent)
     def handle_mapping_notify(self, event):
