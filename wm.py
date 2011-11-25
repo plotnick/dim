@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 # -*- mode: Python; coding: utf-8 -*-
 
+import re
+
 from xcb.xproto import *
 
 from color import RGBi
-from decorator import TitlebarConfig, TitleDecorator
+from decorator import TitlebarConfig, TitlebarDecorator
 from event import handler
 from focus import SloppyFocus, ClickToFocus
 from manager import ReparentingWindowManager, compress
 from moveresize import MoveResize
+from properties import AtomList
 from raiselower import RaiseLower
 from tags import TagManager
 
@@ -17,19 +20,28 @@ class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
 
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
-        self.focused_title_config = TitlebarConfig(self,
-                                                   RGBi(1.0, 1.0, 1.0),
-                                                   RGBi(0.0, 0.0, 0.0),
-                                                   self.title_font)
-        self.unfocused_title_config = TitlebarConfig(self,
-                                                     RGBi(0.0, 0.0, 0.0),
-                                                     RGBi(0.75, 0.75, 0.75),
-                                                     self.title_font)
+        self.focused_config = TitlebarConfig(self,
+                                             RGBi(1.0, 1.0, 1.0),
+                                             RGBi(0.0, 0.0, 0.0),
+                                             self.title_font)
+        self.unfocused_config = TitlebarConfig(self,
+                                               RGBi(0.0, 0.0, 0.0),
+                                               RGBi(0.75, 0.75, 0.75),
+                                               self.title_font)
 
     def decorator(self, client):
-        return TitleDecorator(self.conn, client, 1,
-                              self.focused_title_config,
-                              self.unfocused_title_config)
+        def tags_changed(value, sep=re.compile(r",\s*")):
+            def atom(name):
+                return self.atoms[name.encode("UTF-8", "replace")]
+            client.dim_tags = AtomList(map(atom, sep.split(value)))
+        def change_tags(event):
+            tags = map(self.atoms.name, client.dim_tags)
+            decorator.read_from_user("Tags: ", ", ".join(tags), tags_changed)
+        decorator = TitlebarDecorator(self.conn, client,
+                                      focused_config=self.focused_config,
+                                      unfocused_config=self.unfocused_config,
+                                      button_press_handlers={2: change_tags})
+        return decorator
 
 if __name__ == "__main__":
     from optparse import OptionParser

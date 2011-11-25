@@ -99,6 +99,7 @@ class ClientWindow(object):
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
         self.offset = None # determined and set by our decorator
+        self.focus_override = None
         self.property_values = {}
         self.property_cookies = {}
         self.property_change_handlers = defaultdict(set)
@@ -192,8 +193,16 @@ class ClientWindow(object):
 
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. See ICCCM §4.1.7."""
+        # We'll occasionally want to preempt focus of a client window
+        # (e.g., for user input in a titlebar).
+        if self.focus_override:
+            self.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                         self.focus_override, time)
+            return True
+
         focused = False
-        if self.wm_hints.flags & WMHints.InputHint == 0 or self.wm_hints.input:
+        if (self.wm_hints.flags & WMHints.InputHint == 0 or
+            self.wm_hints.input):
             self.__log.debug("Setting input focus at time %d.", time)
             self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                          self.window, time)

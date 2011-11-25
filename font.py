@@ -5,7 +5,7 @@ import logging
 import xcb
 from xcb.xproto import BadName
 
-__all__ = ["FontCache"]
+__all__ = ["FontCache", "text_width"]
 
 log = logging.getLogger("font")
 
@@ -38,3 +38,7 @@ class FontCache(object):
         if font not in self.font_info:
             self.font_info[font] = self.conn.core.QueryFont(font).reply()
         return self.font_info[font]
+
+def text_width(font_info, string):
+    # This implementation is only temporary.
+    return font_info.max_bounds.character_width * len(string)
