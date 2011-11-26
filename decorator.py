@@ -8,6 +8,7 @@ from xcb.xproto import *
 
 from client import *
 from color import *
+from event import *
 from font import text_width
 from geometry import *
 from keysym import *
@@ -234,7 +235,7 @@ class TitlebarConfig(object):
         rev.highlight_gc, rev.lowlight_gc = rev.lowlight_gc, rev.highlight_gc
         return rev
 
-class Titlebar(object):
+class Titlebar(EventHandler):
     """A widget which displays a line of text. A titlebar need not display
     a window title; it can be used for other purposes."""
 
@@ -261,12 +262,7 @@ class Titlebar(object):
                                     manager.screen.root_visual,
                                     CW.OverrideRedirect | CW.EventMask,
                                     [True, self.event_mask])
-        manager.register_subwindow_handler(ExposeEvent,
-                                           self.window,
-                                           self.handle_expose)
-        manager.register_subwindow_handler(ButtonPressEvent,
-                                           self.window,
-                                           self.handle_button_press)
+        manager.register_window_handler(self.window, self)
         self.conn.core.MapWindow(self.window)
 
     def configure(self, geometry):
@@ -295,13 +291,13 @@ class Titlebar(object):
                                 self.config.black_gc,
                                 2, [0, h + 1, w, h + 1])
 
+    @handler(ExposeEvent)
     def handle_expose(self, event):
-        assert isinstance(event, ExposeEvent)
         if event.count == 0:
             self.draw()
 
+    @handler(ButtonPressEvent)
     def handle_button_press(self, event):
-        assert isinstance(event, ButtonPressEvent)
         self.button_press_handlers.get(event.detail, lambda event: None)(event)
 
     def register_button_press_handler(self, button, handler):
@@ -317,12 +313,6 @@ class SimpleTitlebar(Titlebar):
     def __init__(self, title="", **kwargs):
         self.title = title
         super(SimpleTitlebar, self).__init__(**kwargs)
-        self.manager.register_subwindow_handler(MapNotifyEvent,
-                                                self.window,
-                                                self.handle_map_notify)
-        self.manager.register_subwindow_handler(UnmapNotifyEvent,
-                                                self.window,
-                                                self.handle_unmap_notify)
 
     def draw(self, x=5):
         super(SimpleTitlebar, self).draw()
@@ -341,14 +331,14 @@ class SimpleTitlebar(Titlebar):
     def client_name(self):
         return self.client.net_wm_name or self.client.wm_name
 
+    @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
-        assert isinstance(event, MapNotifyEvent)
         for property_name in ("WM_NAME", "_NET_WM_NAME"):
             self.client.register_property_change_handler(property_name,
                                                          self.name_changed)
 
+    @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        assert isinstance(event, UnmapNotifyEvent)
         for property_name in ("WM_NAME", "_NET_WM_NAME"):
             self.client.unregister_property_change_handler(property_name,
                                                            self.name_changed)
@@ -368,18 +358,7 @@ class InputFieldTitlebar(Titlebar):
         self.value = unicode(initial_value)
         self.commit = commit
         self.rollback = rollback
-
         super(InputFieldTitlebar, self).__init__(**kwargs)
-
-        self.manager.register_subwindow_handler(MapNotifyEvent,
-                                                self.window,
-                                                self.handle_map_notify)
-        self.manager.register_subwindow_handler(UnmapNotifyEvent,
-                                                self.window,
-                                                self.handle_unmap_notify)
-        self.manager.register_subwindow_handler(KeyPressEvent,
-                                                self.window,
-                                                self.handle_keypress)
 
     def draw(self, x=5):
         super(InputFieldTitlebar, self).draw()
@@ -395,19 +374,19 @@ class InputFieldTitlebar(Titlebar):
         if self.value:
             draw_string(x, self.value)
 
+    @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
-        assert isinstance(event, MapNotifyEvent)
         self.client.focus_override = self.window
         self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                      self.window,
                                      Time.CurrentTime)
 
+    @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        assert isinstance(event, UnmapNotifyEvent)
         self.client.focus_override = None
 
+    @handler(KeyPressEvent)
     def handle_keypress(self, event):
-        assert isinstance(event, KeyPressEvent)
         keysym = self.manager.keymap.lookup_key(event.detail, event.state)
         if keysym == XK_Escape:
             self.rollback()

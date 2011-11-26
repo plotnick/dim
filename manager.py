@@ -107,7 +107,7 @@ class WindowManager(EventHandler):
         self.fonts = FontCache(self.conn)
         self.keymap = KeyboardMap(self.conn)
         self.next_event = None
-        self.subwindow_handlers = {}
+        self.window_handlers = {}
         self.init_graphics()
 
     def init_graphics(self):
@@ -315,6 +315,23 @@ class WindowManager(EventHandler):
         else:
             return self.conn.poll_for_event()
 
+    def handle_event(self, event):
+        handler = self.window_handlers.get(event_window(event), None)
+        if handler:
+            try:
+                return handler.handle_event(event)
+            except UnhandledEvent:
+                pass
+        return super(WindowManager, self).handle_event(event)
+
+    def register_window_handler(self, window, handler):
+        log.debug("Registering event handler for window 0x%x.", window)
+        self.window_handlers[window] = handler
+
+    def unhandled_event(self, event):
+        log.debug("Ignoring unhandled %s on window 0x%x.",
+                      event.__class__.__name__, event_window(event))
+
     def get_client(self, window, client_only=False):
         """Retrieve the client with the given top-level window, or raise an
         UnhandledEvent exception if there is no such client. Intended for
@@ -328,26 +345,6 @@ class WindowManager(EventHandler):
             return self.clients[window]
         except KeyError:
             raise NoSuchClient
-
-    def register_subwindow_handler(self, event_class, window, handler):
-        log.debug("Registering %s handler for subwindow 0x%x.",
-                  event_class.__name__, window)
-        if event_class not in self.subwindow_handlers:
-            self.subwindow_handlers[event_class] = {}
-        self.subwindow_handlers[event_class][window] = handler
-
-    def unhandled_event(self, event):
-        def event_window(event):
-            # This is totally wrong.
-            return event.event if hasattr(event, "event") else event.window
-        window = event_window(event)
-        event_class = type(event)
-        if event_class in self.subwindow_handlers:
-            if window in self.subwindow_handlers[event_class]:
-                self.subwindow_handlers[event_class][window](event)
-        else:
-            log.debug("Ignoring unhandled %s on window 0x%x.",
-                      event.__class__.__name__, window)
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
@@ -429,11 +426,15 @@ class WindowManager(EventHandler):
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
-        """Note the destruction of a managed window."""
-        for event_class, handlers in self.subwindow_handlers.items():
-            if handlers.pop(event.window, None):
-                log.debug("Removed %s handler for subwindow 0x%x.",
-                          event_class.__name__, event.window)
+        """Note the destruction of a window."""
+        log.debug("Window 0x%x destroyed.", event.window)
+        # DestroyNotify is generated on all inferiors before being
+        # generated on the window being destroyed. We'll wait until
+        # the latter happens to remove any registered handlers.
+        if event.window == event.event:
+            if self.window_handlers.pop(event.window, None):
+                log.debug("Removed event handler for window 0x%x.",
+                          event.window)
         self.unmanage(self.get_client(event.window, True))
 
     @handler(MappingNotifyEvent)

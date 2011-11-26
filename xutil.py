@@ -7,7 +7,8 @@ from struct import Struct
 from xcb.xproto import *
 
 __all__ = ["power_of_2", "popcount", "int16", "card16",
-           "is_synthetic_event", "configure_notify", "send_client_message",
+           "is_synthetic_event", "event_window",
+           "configure_notify", "send_client_message",
            "select_values", "value_list", "textitem16",
            "GrabButtons", "GrabServer"]
 
@@ -42,6 +43,43 @@ def is_synthetic_event(event):
     # Events begin with an 8-bit type code; synthetic events have the
     # most-significant bit of this code set.
     return (ord(event[0]) & 0x80) != 0
+
+def event_window(event,
+                 event_types={ButtonPressEvent: lambda e: e.event,
+                              ButtonReleaseEvent: lambda e: e.event,
+                              CirculateNotifyEvent: lambda e: e.event,
+                              CirculateRequestEvent: lambda e: e.event,
+                              ClientMessageEvent: lambda e: e.window,
+                              ColormapNotifyEvent: lambda e: e.window,
+                              ConfigureNotifyEvent: lambda e: e.event,
+                              ConfigureRequestEvent: lambda e: e.parent,
+                              CreateNotifyEvent: lambda e: e.parent,
+                              DestroyNotifyEvent: lambda e: e.event,
+                              EnterNotifyEvent: lambda e: e.event,
+                              ExposeEvent: lambda e: e.window,
+                              FocusInEvent: lambda e: e.event,
+                              FocusOutEvent: lambda e: e.event,
+                              GraphicsExposureEvent: lambda e: e.drawable,
+                              GravityNotifyEvent: lambda e: e.event,
+                              KeymapNotifyEvent: lambda e: None,
+                              KeyPressEvent: lambda e: e.event,
+                              KeyReleaseEvent: lambda e: e.event,
+                              LeaveNotifyEvent: lambda e: e.event,
+                              MapNotifyEvent: lambda e: e.event,
+                              MappingNotifyEvent: lambda e: None,
+                              MapRequestEvent: lambda e: e.parent,
+                              MotionNotifyEvent: lambda e: e.event,
+                              NoExposureEvent: lambda e: None,
+                              PropertyNotifyEvent: lambda e: e.window,
+                              ReparentNotifyEvent: lambda e: e.event,
+                              ResizeRequestEvent: lambda e: e.window,
+                              SelectionClearEvent: lambda e: e.owner,
+                              SelectionNotifyEvent: lambda e: None,
+                              SelectionRequestEvent: lambda e: e.owner,
+                              UnmapNotifyEvent: lambda e: e.event,
+                              VisibilityNotifyEvent: lambda e: e.window}):
+    """Return the window on which the given event was generated."""
+    return event_types.get(type(event), lambda e: None)(event)
 
 def configure_notify(connection, window, x, y, width, height, border_width,
                      override_redirect=False,
