@@ -491,8 +491,9 @@ class WindowManager(EventHandler):
 
 class ReparentingWindowManager(WindowManager):
     def __init__(self, *args, **kwargs):
-        self.frames = {} # client frames, indexed by window ID
         super(ReparentingWindowManager, self).__init__(*args, **kwargs)
+        self.frames = {} # client frames, indexed by window ID
+        self.parents = {self.screen.root: None}
 
     def manage(self, window):
         client = super(ReparentingWindowManager, self).manage(window)
@@ -529,24 +530,29 @@ class ReparentingWindowManager(WindowManager):
 
     def get_client(self, window, client_only=False):
         if not client_only:
-            try:
-                return self.frames[window]
-            except KeyError:
-                pass
-
-            # FIXME: The right thing to do here is to carefully track
-            # families of windows, and to climb up the tree until we
-            # get to a frame or a client window. But in the mean time,
-            # this kludge does what we need it to.
-            try:
-                return self.window_handlers[window].client
-            except KeyError, AttributeError:
-                pass
+            # Walk up the window hierarchy until we come to a frame or a root.
+            w = window
+            while w:
+                try:
+                    return self.frames[w]
+                except KeyError:
+                    w = self.parents.get(w, None)
         return super(ReparentingWindowManager, self).get_client(window,
                                                                 client_only)
 
+    @handler(CreateNotifyEvent)
+    def handle_create_notify(self, event):
+        self.parents[event.window] = event.parent
+        raise UnhandledEvent(event)
+
+    @handler(DestroyNotifyEvent)
+    def handle_destroy_notify(self, event):
+        self.parents.pop(event.window, None)
+        raise UnhandledEvent(event)
+
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
+        self.parents[event.window] = event.parent
         if event.override_redirect:
             raise UnhandledEvent(event)
         client = self.get_client(event.window)
