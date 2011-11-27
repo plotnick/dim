@@ -7,7 +7,7 @@ from struct import Struct
 from xcb.xproto import *
 
 __all__ = ["power_of_2", "popcount", "int16", "card16",
-           "is_synthetic_event", "event_window",
+           "is_synthetic_event", "event_window", "notify_detail_name",
            "configure_notify", "send_client_message",
            "select_values", "value_list", "textitem16",
            "GrabButtons", "GrabServer"]
@@ -80,6 +80,17 @@ def event_window(event,
                               VisibilityNotifyEvent: lambda e: e.window}):
     """Return the window on which the given event was generated."""
     return event_types.get(type(event), lambda e: None)(event)
+
+def notify_detail_name(event, detail={0: "Ancestor",
+                                      1: "Virtual",
+                                      2: "Inferior",
+                                      3: "Nonlinear",
+                                      4: "NonlinearVirtual",
+                                      5: "Pointer",
+                                      6: "PointerRoot",
+                                      7: "None"}):
+    """Return a string naming the detail code of the given event."""
+    return detail[event.detail]
 
 def configure_notify(connection, window, x, y, width, height, border_width,
                      override_redirect=False,

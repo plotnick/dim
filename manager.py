@@ -108,6 +108,7 @@ class WindowManager(EventHandler):
         self.keymap = KeyboardMap(self.conn)
         self.next_event = None
         self.window_handlers = {}
+        self.current_focus = None # unused here; see FocusPolicy
         self.init_graphics()
 
     def init_graphics(self):
@@ -339,8 +340,7 @@ class WindowManager(EventHandler):
 
         The second (optional) argument controls whether the window must
         be a client window, or if it is permissible to return a client
-        instance from its frame. This is used only in subclasses that
-        support reparenting."""
+        instance from its frame or a subwindow thereof."""
         try:
             return self.clients[window]
         except KeyError:
@@ -528,12 +528,22 @@ class ReparentingWindowManager(WindowManager):
             return super(ReparentingWindowManager, self).iconify(client)
 
     def get_client(self, window, client_only=False):
-        if window in self.clients:
-            return self.clients[window]
-        elif not client_only and window in self.frames:
-            return self.frames[window]
-        else:
-            raise UnhandledEvent
+        if not client_only:
+            try:
+                return self.frames[window]
+            except KeyError:
+                pass
+
+            # FIXME: The right thing to do here is to carefully track
+            # families of windows, and to climb up the tree until we
+            # get to a frame or a client window. But in the mean time,
+            # this kludge does what we need it to.
+            try:
+                return self.window_handlers[window].client
+            except KeyError, AttributeError:
+                pass
+        return super(ReparentingWindowManager, self).get_client(window,
+                                                                client_only)
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):

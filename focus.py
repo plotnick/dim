@@ -7,6 +7,7 @@ from xcb.xproto import *
 from event import UnhandledEvent, handler
 from manager import NoSuchClient, WindowManager, ReparentingWindowManager
 from properties import WMState
+from xutil import notify_detail_name
 
 __all__ = ["FocusPolicy", "SloppyFocus", "ClickToFocus"]
 
@@ -58,32 +59,35 @@ class FocusPolicy(WindowManager):
             except NoSuchClient:
                 return
             self.__log.debug("Setting initial focus to window 0x%x.", focus)
-            self.focus(client, Time.CurrentTime, True)
+            self.focus(client, Time.CurrentTime)
         else:
             self.__log.debug("No window currently has the focus.")
 
-    def focus(self, client, time, have_focus):
-        """Give the given client the input focus."""
+    def focus(self, client, time):
+        """Offer the given client the input focus."""
         if client.wm_state != WMState.NormalState:
             return False
-        if client is self.current_focus:
+        if client == self.current_focus or client == self.pending_focus:
             return True
-        if self.pending_focus != client:
-            self.__log.debug("Attempting to focus client window 0x%x.",
+        self.__log.debug("Attempting to focus client window 0x%x.",
+                       client.window)
+        if client.focus(time):
+            self.pending_focus = client
+            return True
+        else:
+            self.__log.debug("Client window 0x%x declined the focus offer.",
                            client.window)
-            if client.focus(time):
-                self.pending_focus = client
-            else:
-                self.__log.debug("Client window 0x%x declined the focus offer.",
-                               client.window)
-                return False
-        if have_focus:
-            self.__log.debug("Client window 0x%x now has the focus.",
-                           client.window)
-            client.decorator.focus()
-            self.current_focus = client
             self.pending_focus = None
-            return True
+            return False
+
+    def client_focused(self, client):
+        self.__log.debug("Client window 0x%x now has the focus.", client.window)
+        self.current_focus = client
+        if self.pending_focus:
+            if client != self.pending_focus:
+                self.__log.warning("Unexpected client got the focus.")
+            self.pending_focus = None
+        client.decorator.focus()
 
     def unfocus(self, client):
         """Unfocus the currently focused client."""
@@ -91,26 +95,28 @@ class FocusPolicy(WindowManager):
             return False
         self.__log.debug("Unfocusing client window 0x%x.", client.window)
         client.unfocus()
-        if client is self.current_focus:
+        if client == self.current_focus:
             self.current_focus = None
         elif self.current_focus:
-            log.warning("Unfocused client was not the current focus; 0x%x was.",
-                        self.current_focus.window)
+            self.__log.warning("Unfocused client was not the current focus; "
+                               "0x%x was.", self.current_focus.window)
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             raise UnhandledEvent(event)
-        self.__log.debug("Window 0x%x got the focus.", event.event)
-        self.focus(self.get_client(event.event), Time.CurrentTime, True)
+        self.__log.debug("Window 0x%x got the focus (%s).",
+                         event.event, notify_detail_name(event))
+        self.client_focused(self.get_client(event.event))
 
     @handler(FocusOutEvent)
     def handle_focus_out(self, event):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             raise UnhandledEvent(event)
-        self.__log.debug("Window 0x%x lost the focus.", event.event)
+        self.__log.debug("Window 0x%x lost the focus (%s).",
+                         event.event, notify_detail_name(event))
         self.unfocus(self.get_client(event.event))
 
 class SloppyFocus(FocusPolicy):
@@ -125,9 +131,12 @@ class SloppyFocus(FocusPolicy):
         if event.mode != NotifyMode.Normal or \
                 event.detail == NotifyDetail.Inferior:
             return
-        self.__log.debug("Window 0x%x entered (%d).", event.event, event.detail)
-        self.focus(self.get_client(event.event), event.time,
-                   event.same_screen_focus & 1)
+        self.__log.debug("Window 0x%x entered (%s).",
+                         event.event, notify_detail_name(event))
+        client = self.get_client(event.event)
+        self.focus(client, event.time)
+        if event.same_screen_focus & 1:
+            self.client_focused(client)
 
 class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     """Focus ignores the movement of the pointer, and changes only when
@@ -160,8 +169,8 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
                                   Window._None, Cursor._None,
                                   1, ModMask.Any)
 
-    def focus(self, client, time, have_focus):
-        super(ClickToFocus, self).focus(client, time, have_focus)
+    def focus(self, client, time):
+        super(ClickToFocus, self).focus(client, time)
 
         # Once a client is focused, we can release our grab. This is purely
         # an optimization: we don't want to be responsible for proxying all
@@ -170,7 +179,7 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         self.conn.core.UngrabButton(1, client.frame, ModMask.Any)
 
     def unfocus(self, client):
-        if client is self.current_focus:
+        if client == self.current_focus:
             self.grab_focus_click(client)
         super(ClickToFocus, self).unfocus(client)
 
@@ -186,4 +195,4 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
             self.conn.core.UngrabPointer(event.time)
         else:
             self.conn.core.AllowEvents(Allow.ReplayPointer, event.time)
-        self.focus(client, event.time, False)
+        self.focus(client, event.time)

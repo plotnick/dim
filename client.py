@@ -192,14 +192,17 @@ class ClientWindow(object):
                                        [stack_mode])
 
     def focus(self, time=Time.CurrentTime):
-        """Offer the input focus to the client. See ICCCM §4.1.7."""
+        """Offer the input focus to the client."""
         # We'll occasionally want to preempt focus of a client window
         # (e.g., for user input in a titlebar).
         if self.focus_override:
+            self.__log.debug("Redirecting focus to window 0x%x.",
+                             self.focus_override)
             self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                          self.focus_override, time)
             return True
 
+        # See ICCCM §4.1.7.
         focused = False
         if (self.wm_hints.flags & WMHints.InputHint == 0 or
             self.wm_hints.input):

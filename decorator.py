@@ -349,7 +349,8 @@ class InputFieldTitlebar(Titlebar):
     event_mask = (EventMask.StructureNotify |
                   EventMask.Exposure |
                   EventMask.ButtonPress |
-                  EventMask.KeyPress)
+                  EventMask.KeyPress |
+                  EventMask.FocusChange)
 
     def __init__(self, prompt="", initial_value="",
                  commit=lambda value: None, rollback=lambda: None,
@@ -377,13 +378,16 @@ class InputFieldTitlebar(Titlebar):
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         self.client.focus_override = self.window
-        self.conn.core.SetInputFocus(InputFocus.PointerRoot,
-                                     self.window,
-                                     Time.CurrentTime)
+        if self.manager.current_focus == self.client:
+            # Override client focus.
+            self.client.focus()
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         self.client.focus_override = None
+        if self.manager.current_focus == self.client:
+            # Revert focus to the client window.
+            self.client.focus()
 
     @handler(KeyPressEvent)
     def handle_keypress(self, event):
