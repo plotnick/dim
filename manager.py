@@ -32,8 +32,8 @@ class ExitWindowManager(Exception):
     pass
 
 class NoSuchClient(UnhandledEvent):
-    """Raised to indicate that there is no client currentlly being managed
-    with the given top-level window."""
+    """Raised to indicate that there is no currently-managed client with
+    the given top-level window."""
     pass
 
 # Client messages come in via ClientMessageEvent instances. Our handler
