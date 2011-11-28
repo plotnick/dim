@@ -465,14 +465,14 @@ class WindowManager(EventHandler):
         try:
             event_type = self.atoms.name(event.type)
         except BadAtom:
-            raise UnhandledEvent
+            raise UnhandledEvent(event)
+        log.debug("Received ClientMessage of type %s on window 0x%x.",
+                  event_type, event.window)
         try:
-            client_message = client_message_types[event_type](event.window,
-                                                              event.format,
-                                                              event.data)
+            message_type = client_message_types[event_type]
         except KeyError:
-            raise UnhandledEvent
-        self.handle_event(client_message)
+            raise UnhandledEvent(event)
+        self.handle_event(message_type(event.window, event.format, event.data))
 
     @handler(WMChangeState)
     def handle_wm_change_state(self, client_message):
