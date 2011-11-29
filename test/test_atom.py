@@ -16,7 +16,7 @@ class TestAtomCache(unittest.TestCase):
         self.conn.disconnect()
 
     def assertAtom(self, x):
-        self.assertTrue(isinstance(x, int) and 0 < x < 0x1fffffff)
+        self.assertTrue(isinstance(x, int) and 0 <= x < 0x1fffffff)
 
     def test_prime_cache(self):
         names = set(["ATOM", "BITMAP", "CARDINAL", "UTF8_STRING"])
@@ -27,6 +27,7 @@ class TestAtomCache(unittest.TestCase):
         self.assertEqual(set(self.atoms.names.values()), names)
 
     def test_null_atom(self):
+        self.atoms.prime_cache([None]) # should not raise an exception
         self.assertEqual(self.atoms[None], 0)
         self.assertEqual(self.atoms.name(0), None)
 

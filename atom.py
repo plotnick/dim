@@ -17,6 +17,7 @@ class AtomCache(object):
             self.prime_cache(names)
 
     def prime_cache(self, names):
+        names = filter(lambda x: x is not None, names)
         cookies = [self.conn.core.InternAtom(False, len(name), name)
                    for name in names]
         for name, cookie in zip(names, cookies):
