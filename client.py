@@ -235,9 +235,10 @@ class ClientWindow(object):
                     if name in self.properties
                     else GetPropertyType.Any)
         self.__log.debug("Requesting property %s.", name)
-        name = self.atoms[name] if isinstance(name, str) else name
-        type = self.atoms[type] if isinstance(type, str) else type
-        return self.conn.core.GetProperty(False, self.window, name, type,
+        def atom(x):
+            return self.atoms[x] if isinstance(x, basestring) else x
+        return self.conn.core.GetProperty(False, self.window,
+                                          atom(name), atom(type),
                                           0, 0xffffffff)
 
     def set_property(self, name, type, value, mode=PropMode.Replace):
@@ -248,10 +249,10 @@ class ClientWindow(object):
             data_len = len(data)
         if isinstance(value, str):
             format = 8
-            data = value.encode("Latin-1")
+            data = value
             data_len = len(data)
         elif isinstance(value, PropertyValue):
-            (format, data_len, data) = value.change_property_args()
+            format, data_len, data = value.change_property_args()
         else:
             raise __builtins__.ValueError("unknown property value type")
         self.conn.core.ChangeProperty(mode, self.window,

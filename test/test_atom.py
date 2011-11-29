@@ -56,5 +56,12 @@ class TestAtomCache(unittest.TestCase):
             self.assertEqual(self.atoms.name(atom), name)
         self.assertEqual(set(self.atoms.names.values()), names)
 
+    def test_encoding(self):
+        foo = self.atoms[u"foö"]
+        self.assertAtom(foo)
+        self.assertEqual(foo, self.atoms[u"foö".encode("Latin-1")])
+        self.assertEqual(foo, self.atoms.intern(u"foö", encoding="UTF-8"))
+        self.assertEqual(self.atoms.name(foo), u"foö")
+
 if __name__ == "__main__":
     unittest.main()
