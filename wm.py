@@ -32,10 +32,17 @@ class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
     def decorator(self, client):
         def tags_changed(value, sep=re.compile(r",\s*")):
             def atom(name):
+                # ICCCM note 1: "The comment in the protocol specification
+                # for InternAtom that ISO Latin-1 encoding should be used
+                # is in the nature of a convention; the server treats the
+                # string as a byte sequence." We'll ignore that convention
+                # here and always use UTF-8 for tag names.
                 return self.atoms[name.encode("UTF-8", "replace")]
             client.dim_tags = AtomList(map(atom, sep.split(value)))
         def change_tags(event):
-            tags = map(self.atoms.name, client.dim_tags)
+            def name(atom):
+                return self.atoms.name(atom, "UTF-8", "replace")
+            tags = map(name, client.dim_tags)
             decorator.read_from_user("Tags: ", ", ".join(tags), tags_changed)
         decorator = TitlebarDecorator(self.conn, client,
                                       focused_config=self.focused_config,

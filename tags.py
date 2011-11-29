@@ -11,48 +11,122 @@ __all__ = ["TagManager"]
 
 log = logging.getLogger("tags")
 
+class StackUnderflow(Exception):
+    pass
+
+class TagMachine(object):
+    """A small virtual stack machine for updating the set of visible clients
+    via operations on tagsets."""
+
+    def __init__(self, clients, tagsets, opcodes={}, stack=[]):
+        self.clients = clients
+        self.tagsets = tagsets
+        self.opcodes = dict((code, getattr(self, name))
+                            for code, name in opcodes.items())
+        self.stack = stack
+
+    def run(self, instructions):
+        for x in instructions:
+            op = self.opcodes.get(x, None)
+            if op:
+                op()
+            else:
+                self.tag(x)
+        if self.stack:
+            log.debug("Tagset stack: %r.", self.stack)
+
+    def nop(self):
+        pass
+
+    def push(self, x):
+        self.stack.append(x)
+        return x
+
+    def pop(self):
+        if not self.stack:
+            raise StackUnderflow
+        top = self.stack[-1]
+        del self.stack[-1]
+        return top
+
+    def dup(self):
+        if not self.stack:
+            raise StackUnderflow
+        return self.push(self.stack[-1])
+
+    def swap(self):
+        x, y = self.pop(), self.pop()
+        self.push(x)
+        self.push(y)
+
+    def clear(self):
+        if self.stack:
+            log.debug("Discarding %d elements from stack.", len(self.stack))
+            del self.stack[:]
+
+    def union(self):
+        return self.push(self.pop() | self.pop())
+
+    def intersection(self):
+        return self.push(self.pop() & self.pop())
+
+    def difference(self):
+        x, y = self.pop(), self.pop()
+        return self.push(y - x)
+
+    def complement(self):
+        self.all_clients()
+        self.swap()
+        return self.difference()
+
+    def show(self):
+        self.dup()
+        self.complement()
+        for x in self.pop():
+            x.unmap()
+        for x in self.pop():
+            x.map()
+        self.clear()
+
+    def tag(self, tag):
+        return self.push(self.tagsets.get(tag, set()))
+
+    def all_tags(self):
+        return self.push(reduce(set.union, self.tagsets.values(), set()))
+
+    def all_clients(self):
+        return self.push(set(self.clients.values()))
+
+    def current_set(self):
+        return self.push(set(client
+                             for client in self.clients.values()
+                             if client.wm_state == WMState.NormalState))
+
+    def empty_set(self):
+        return self.push(set())
+
+@client_message_type("_DIM_TAGSET_UPDATE")
 class TagsetUpdateMessage(ClientMessage):
-    @property
-    def tags(self):
-        # Most update messages may include up to five tags (the maximum
-        # number of atoms that fit in a ClientMessage event). Null atoms
-        # are ignored.
-        return [tag for tag in self.data.data32 if tag]
-
-@client_message_type("_DIM_TAGSET_SHOW")
-class TagsetShow(TagsetUpdateMessage):
-    @property
-    def tags(self):
-        # The "show" operator accepts exactly one tag; we'll take the first
-        # (even if it's None) and ignore the rest.
-        return self.data.data32[:1]
-
-    @property
-    def function(self):
-        return lambda x, y: y
-
-@client_message_type("_DIM_TAGSET_UNION")
-class TagsetUnion(TagsetUpdateMessage):
-    @property
-    def function(self):
-        return set.union
-
-@client_message_type("_DIM_TAGSET_INTERSECTION")
-class TagsetIntersection(TagsetUpdateMessage):
-    @property
-    def function(self):
-        return set.intersection
-
-@client_message_type("_DIM_TAGSET_DIFFERENCE")
-class TagsetDifference(TagsetUpdateMessage):
-    @property
-    def function(self):
-        return set.difference
+    pass
 
 class TagManager(WindowManager):
     def __init__(self, *args, **kwargs):
-        self.tagsets = defaultdict(set) # sets of clients, indexed by tag
         super(TagManager, self).__init__(*args, **kwargs)
+
+        self.tagsets = defaultdict(set) # sets of clients, indexed by tag
+        opcodes = {"_DIM_TAGSET_UNION": "union",
+                   "_DIM_TAGSET_INTERSECTION": "intersection",
+                   "_DIM_TAGSET_DIFFERENCE": "difference",
+                   "_DIM_TAGSET_COMPLEMENT": "complement",
+                   "_DIM_TAGSET_SHOW": "show",
+                   "_DIM_ALL_TAGS": "all_tags",
+                   "_DIM_CURRENT_TAGSET": "current_set",
+                   "_DIM_EMPTY_TAGSET": "empty_set",
+                   None: "nop"}
+        self.atoms.prime_cache(opcodes.keys())
+        self.tag_machine = TagMachine(self.clients, self.tagsets,
+                                      dict((self.atoms[code], name)
+                                           for code, name in opcodes.items()))
 
     def manage(self, window):
         client = super(TagManager, self).manage(window)
@@ -65,37 +139,15 @@ class TagManager(WindowManager):
         client.unregister_property_change_handler("_DIM_TAGS", self.note_tags)
         super(TagManager, self).unmanage(client)
 
-    def note_tags(self, client, *args):
+    def note_tags(self, client, name="_DIM_TAGS", deleted=False):
         for tagset in self.tagsets.values():
             tagset.discard(client)
-        for tag in client.dim_tags:
-            log.debug("Adding client window 0x%x to tagset %s.",
-                      client.window, self.atoms.name(tag))
-            self.tagsets[tag].add(client)
+        if not deleted:
+            for tag in client.dim_tags:
+                log.debug("Adding client window 0x%x to tagset %s.",
+                          client.window, self.atoms.name(tag, "UTF-8"))
+                self.tagsets[tag].add(client)
 
-    def update_tagset(self, function, tags):
-        def tagset(tag):
-            if not tag:
-                # The null atom denotes the set of client windows with no tags.
-                return set(c for c in self.clients.values() if not c.dim_tags)
-            elif tag == self.atoms["_DIM_ALL_WINDOWS"]:
-                return set(c for c in self.clients.values())
-            elif tag == self.atoms["_DIM_EMPTY_TAGSET"]:
-                return set()
-            else:
-                return self.tagsets.get(tag, set())
-        if self.atoms["_DIM_ALL_TAGS"] in tags:
-            tags = self.tagsets.keys()
-        log.debug("Updating from tagsets %s." % map(self.atoms.name, tags))
-        u = set(self.clients.values())
-        s = reduce(function,
-                   map(tagset, tags),
-                   set(c for c in u if c.wm_state == WMState.NormalState))
-        for c in u - s:
-            c.unmap()
-        for c in s:
-            c.map()
-
-    @handler([TagsetShow, TagsetUnion, TagsetIntersection, TagsetDifference])
+    @handler(TagsetUpdateMessage)
     def handle_tagset_update(self, message):
-        self.update_tagset(message.function, message.tags)
+        self.tag_machine.run(message.data.data32)
