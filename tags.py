@@ -150,4 +150,7 @@ class TagManager(WindowManager):
 
     @handler(TagsetUpdateMessage)
     def handle_tagset_update(self, message):
-        self.tag_machine.run(message.data.data32)
+        try:
+            self.tag_machine.run(message.data.data32)
+        except StackUnderflow:
+            log.info("Stack underflow while executing tagset update.")
