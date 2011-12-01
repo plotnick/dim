@@ -65,7 +65,7 @@ class FocusPolicy(WindowManager):
 
     def focus(self, client, time):
         """Offer the given client the input focus."""
-        if client.wm_state != WMState.NormalState:
+        if client.properties.wm_state != WMState.NormalState:
             return False
         if client == self.current_focus or client == self.pending_focus:
             return True
@@ -91,7 +91,7 @@ class FocusPolicy(WindowManager):
 
     def unfocus(self, client):
         """Unfocus the currently focused client."""
-        if client.wm_state != WMState.NormalState:
+        if client.properties.wm_state != WMState.NormalState:
             return False
         self.__log.debug("Unfocusing client window 0x%x.", client.window)
         client.unfocus()

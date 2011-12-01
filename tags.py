@@ -100,7 +100,7 @@ class TagMachine(object):
     def current_set(self):
         return self.push(set(client
                              for client in self.clients.values()
-                             if client.wm_state == WMState.NormalState))
+                             if client.properties.wm_state == WMState.NormalState))
 
     def empty_set(self):
         return self.push(set())
@@ -132,21 +132,27 @@ class TagManager(WindowManager):
         client = super(TagManager, self).manage(window)
         if client:
             self.note_tags(client)
-            client.register_property_change_handler("_DIM_TAGS", self.note_tags)
+            client.properties.register_change_handler("_DIM_TAGS",
+                                                      self.tags_changed)
         return client
 
     def unmanage(self, client):
-        client.unregister_property_change_handler("_DIM_TAGS", self.note_tags)
+        client.properties.unregister_change_handler("_DIM_TAGS",
+                                                    self.tags_changed)
         super(TagManager, self).unmanage(client)
 
-    def note_tags(self, client, name="_DIM_TAGS", deleted=False):
+    def note_tags(self, client):
+        for tag in client.properties.dim_tags:
+            log.debug("Adding client window 0x%x to tagset %s.",
+                      client.window, self.atoms.name(tag, "UTF-8"))
+            self.tagsets[tag].add(client)
+
+    def tags_changed(self, window, name, deleted):
+        client = self.get_client(window, True)
         for tagset in self.tagsets.values():
             tagset.discard(client)
         if not deleted:
-            for tag in client.dim_tags:
-                log.debug("Adding client window 0x%x to tagset %s.",
-                          client.window, self.atoms.name(tag, "UTF-8"))
-                self.tagsets[tag].add(client)
+            self.note_tags(client)
 
     @handler(TagsetUpdateMessage)
     def handle_tagset_update(self, message):

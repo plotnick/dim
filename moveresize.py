@@ -325,7 +325,7 @@ class ClientResize(ClientUpdate):
     def __init__(self, *args):
         super(ClientResize, self).__init__(*args)
         self.initial_geometry = self.geometry
-        self.size_hints = self.client.wm_normal_hints
+        self.size_hints = self.client.properties.wm_normal_hints
 
         # We'll use the offset gravity representation; see comment in the
         # geometry module for details. Technically, this is anti-gravity,

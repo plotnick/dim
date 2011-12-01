@@ -3,21 +3,180 @@
 """Classes and utilites for managing various X properties."""
 
 from array import array
+from collections import defaultdict
 from codecs import decode
+import logging
 from operator import lt, gt
 from struct import Struct
 
-from xcb.xproto import Gravity
+from xcb.xproto import *
 
 from geometry import *
 
-__all__ = ["PropertyError", "PropertyValue", "PropertyValueList",
-           "String", "UTF8String", "AtomList",
+__all__ = ["PropertyError", "PropertyDescriptor", "PropertyManager",
+           "PropertyValue", "PropertyValueList",
+           "AtomList", "String", "UTF8String",
            "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
            "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
 
 class PropertyError(Exception):
     pass
+
+class PropertyDescriptor(object):
+    """A descriptor class for cached properties. To be used as attributes of
+    a PropertyManager."""
+
+    def __init__(self, name, type, default=None):
+        assert isinstance(name, basestring), "invalid property name"
+        assert issubclass(type, PropertyValue), "invalid property value type"
+        self.name = name
+        self.type = type
+        self.default = default
+
+    def __get__(self, instance, owner):
+        # Check the value cache.
+        try:
+            return instance.values[self.name]
+        except KeyError:
+            pass
+
+        # Request the property, construct a new value from the reply data,
+        # and cache it.
+        try:
+            reply = instance.request_property(self.name).reply()
+        except BadWindow:
+            instance.log.warning("Error fetching property %s.", self.name)
+            return self.default
+        value = (owner.properties[self.name].unpack(reply.value.buf())
+                 if reply.type
+                 else self.default)
+        instance.values[self.name] = value
+        return value
+
+    def __set__(self, instance, value):
+        if instance.values.get(self.name, None) != value:
+            instance.set_property(self.name, self.type.property_type, value)
+
+    def __delete__(self, instance):
+        instance.delete_property(self.name)
+
+class PropertyManagerClass(type):
+    """A metaclass for PropertyManager that supports auto-registration of
+    property descriptors."""
+
+    def __new__(metaclass, name, bases, namespace):
+        cls = super(PropertyManagerClass, metaclass).__new__(metaclass, name,
+                                                             bases, namespace)
+        cls.properties = {}
+        for superclass in reversed(cls.__mro__):
+            if hasattr(superclass, "properties"):
+                cls.properties.update(superclass.properties)
+        for attr in namespace.values():
+            if isinstance(attr, PropertyDescriptor):
+                cls.properties[attr.name] = attr.type
+        return cls
+
+class PropertyManager(object):
+    """Manages a set of properties on a window."""
+
+    __metaclass__ = PropertyManagerClass
+
+    def __init__(self, conn, window, atoms):
+        self.conn = conn
+        self.window = window
+        self.atoms = atoms
+        self.values = {} # cached property values
+        self.cookies = {} # pending property request cookies
+        self.change_handlers = defaultdict(set)
+        self.__log = logging.getLogger("properties.0x%x" % self.window)
+
+    def request_property(self, name, type=None):
+        """Request the value of a property on the window, and return a cookie
+        for the request. Does not wait for a reply."""
+        if type is None:
+            type = (self.properties[name].property_type
+                    if name in self.properties
+                    else GetPropertyType.Any)
+        try:
+            return self.cookies[name]
+        except KeyError:
+            pass
+        self.__log.debug("Requesting property %s.", name)
+        def atom(x):
+            return self.atoms[x] if isinstance(x, basestring) else x
+        cookie = self.conn.core.GetProperty(False, self.window,
+                                            atom(name), atom(type),
+                                            0, 0xffffffff)
+        self.cookies[name] = cookie
+        return cookie
+
+    def set_property(self, name, type, value, mode=PropMode.Replace):
+        """Change the value of a property on the window."""
+        if isinstance(value, unicode):
+            format = 8
+            data = value.encode("UTF-8")
+            data_len = len(data)
+        elif isinstance(value, str):
+            format = 8
+            data = value
+            data_len = len(data)
+        elif isinstance(value, PropertyValue):
+            format, data_len, data = value.change_property_args()
+        else:
+            raise PropertyError("unknown property value type")
+        self.conn.core.ChangeProperty(mode, self.window,
+                                      self.atoms[name], self.atoms[type],
+                                      format, data_len, data)
+
+        # We'll accept the given value as provisionally correct until a
+        # PropertyNotify comes in to inform us that the server has a new,
+        # canonical value.
+        self.values[name] = value
+
+        # Any pending request for the property value should be canceled.
+        self.cookies.pop(name, None)
+
+    def request_properties(self):
+        """Request the values of all the registered properties for which we
+        don't have a cached value or a pending request. Does not wait for
+        any of the replies."""
+        for name in self.properties:
+            if name not in self.values:
+                self.request_property(name)
+
+    def delete_property(self, name):
+        """Remove the given property from the window."""
+        self.__log.debug("Deleting property %s.", name)
+        self.conn.core.DeleteProperty(self.window, self.atoms[name])
+        self.invalidate_cached_property(name)
+
+    def property_changed(self, name, deleted):
+        """Handle a change or deletion of a property."""
+        self.__log.debug("Property %s %s.",
+                         name, ("deleted" if deleted else "changed"))
+        if deleted:
+            self.invalidate_cached_property(name)
+        else:
+            # Dump our cached value and, if it's a property that we care
+            # about, request (but do not wait for) the new value.
+            self.invalidate_cached_property(name)
+            if name in self.properties:
+                self.request_property(name)
+
+        # Invoke any handlers registered for this property change.
+        for handler in self.change_handlers.get(name, []):
+            handler(self.window, name, deleted)
+
+    def invalidate_cached_property(self, name):
+        """Invalidate any cached request or value for the given property."""
+        self.values.pop(name, None)
+        self.cookies.pop(name, None)
+
+    def register_change_handler(self, name, handler):
+        self.change_handlers[name].add(handler)
+
+    def unregister_change_handler(self, name, handler):
+        self.change_handlers[name].discard(handler)
 
 # Translate between X property formats and Python's struct & array type codes.
 type_codes = {8: "B", 16: "H", 32: "I"}
@@ -148,6 +307,11 @@ class PropertyValueList(PropertyValue):
     def __eq__(self, other):
         return list(self.elements) == list(other)
 
+class AtomList(PropertyValueList):
+    __slots__ = ()
+    property_format = [32]
+    property_type = "ATOM"
+
 class String(PropertyValueList):
     """A representation of property values of type STRING.
 
@@ -179,11 +343,6 @@ class UTF8String(String):
     property_format = [8]
     property_type = "UTF8_STRING"
     encoding = "UTF-8"
-
-class AtomList(PropertyValueList):
-    __slots__ = ()
-    property_format = [32]
-    property_type = "ATOM"
 
 class WMClass(String):
     """A representation of the WM_STATE property (ICCCM §4.1.2.5)"""

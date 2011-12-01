@@ -7,7 +7,6 @@ import xcb
 from xcb.xproto import *
 
 from cursor import *
-from decorator import Decorator
 from geometry import *
 from keysym import *
 from moveresize import bsearch_floor, bsearch_ceil, \
@@ -17,14 +16,22 @@ from xutil import int16
 
 from test_manager import EventType, TestClient, WMTestCase, WarpedPointer
 
+class MockDecorator(object):
+    def message(self, message):
+        pass
+
+class MockProperties(object):
+    def __init__(self, size_hints):
+        self.wm_normal_hints = size_hints
+
 class MockClient(object):
     def __init__(self, test, geometry, size_hints=WMSizeHints()):
         self.test = test
         self.absolute_geometry = self.frame_geometry = self.geometry = geometry
         self.screen = None
         self.window = 0
-        self.decorator = Decorator(None, self)
-        self.wm_normal_hints = size_hints
+        self.decorator = MockDecorator()
+        self.properties = MockProperties(size_hints)
 
     def move(self, position):
         self.test.assertTrue(isinstance(position, Position))

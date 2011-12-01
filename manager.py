@@ -213,14 +213,14 @@ class WindowManager(EventHandler):
     def normalize(self, client):
         """Complete the transition of a client to the Normal state."""
         log.debug("Client window 0x%x entering Normal state.", client.window)
-        client.wm_state = WMState(WMState.NormalState)
-        client.request_properties()
+        client.properties.wm_state = WMState(WMState.NormalState)
+        client.properties.request_properties()
         return client
 
     def withdraw(self, client):
         """Complete the transition of a client to the Withdrawn state."""
         log.debug("Client window 0x%x entering Withdrawn state.", client.window)
-        client.wm_state = WMState(WMState.WithdrawnState)
+        client.properties.wm_state = WMState(WMState.WithdrawnState)
         client.decorator.undecorate()
         return client
 
@@ -228,14 +228,14 @@ class WindowManager(EventHandler):
         """Complete the transition of a client to the Iconic state."""
         log.debug("Client window 0x%x entering Iconic state.", client.window)
         self.conn.core.UnmapWindow(client.window)
-        client.wm_state = WMState(WMState.IconicState)
+        client.properties.wm_state = WMState(WMState.IconicState)
         return client
             
     def unmanage(self, client):
         """Unmanage the given client."""
         log.debug("Unmanaging client window 0x%x.", client.window)
         client.decorator.undecorate()
-        del client.wm_state
+        del client.properties.wm_state
         return self.clients.pop(client.window, None)
 
     def place(self, client, requested_geometry, resize=False):
@@ -265,7 +265,7 @@ class WindowManager(EventHandler):
         resize is requested, only the requested geometry is required.
         If the gravity argument is supplied, it overrides the win_gravity
         field of the size hints."""
-        size_hints = client.wm_normal_hints
+        size_hints = client.properties.wm_normal_hints
         if size is None:
             size = geometry.size()
         if border_width is None:
@@ -390,8 +390,8 @@ class WindowManager(EventHandler):
     def handle_map_request(self, event):
         """Map a top-level window on behalf of a client."""
         client = self.manage(event.window)
-        if (client.wm_state == WMState.WithdrawnState and
-            client.wm_hints.initial_state == WMState.IconicState):
+        if (client.properties.wm_state == WMState.WithdrawnState and
+            client.properties.wm_hints.initial_state == WMState.IconicState):
             # Withdrawn → Iconic state transition (ICCCM §4.1.4).
             self.iconify(client)
         else:
@@ -455,8 +455,8 @@ class WindowManager(EventHandler):
     def handle_property_notify(self, event):
         """Note the change of a window property."""
         client = self.get_client(event.window)
-        client.property_changed(self.atoms.name(event.atom),
-                                event.state == Property.Delete)
+        client.properties.property_changed(self.atoms.name(event.atom),
+                                           event.state == Property.Delete)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):

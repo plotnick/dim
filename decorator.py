@@ -122,7 +122,7 @@ class FrameDecorator(Decorator):
         # geometry and gravity together with the offsets needed for the
         # actual decoration.
         offset = self.client.offset
-        gravity = self.client.wm_normal_hints.win_gravity
+        gravity = self.client.properties.wm_normal_hints.win_gravity
         geometry = self.client.absolute_geometry
         frame_geometry = geometry.resize(geometry.size() + offset.size(),
                                          self.frame_border_width,
@@ -164,7 +164,7 @@ class FrameDecorator(Decorator):
             # geometry, the original border width, and the window gravity.
             size = self.client.geometry.size()
             bw = self.original_border_width
-            gravity = self.client.wm_normal_hints.win_gravity
+            gravity = self.client.properties.wm_normal_hints.win_gravity
             geometry = self.client.frame_geometry.resize(size, bw, gravity)
 
             self.conn.core.ReparentWindow(self.client.window, self.screen.root,
@@ -323,25 +323,26 @@ class SimpleTitlebar(Titlebar):
                                   x, self.config.baseline,
                                   len(text_items), "".join(text_items))
 
-    def name_changed(self, client, *args):
-        assert client is self.client
+    def name_changed(self, window, *args):
+        assert window is self.client.window
         self.title = self.client_name()
         self.draw()
 
     def client_name(self):
-        return self.client.net_wm_name or self.client.wm_name
+        return (self.client.properties.net_wm_name or
+                self.client.properties.wm_name)
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         for property_name in ("WM_NAME", "_NET_WM_NAME"):
-            self.client.register_property_change_handler(property_name,
-                                                         self.name_changed)
+            self.client.properties.register_change_handler(property_name,
+                                                           self.name_changed)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         for property_name in ("WM_NAME", "_NET_WM_NAME"):
-            self.client.unregister_property_change_handler(property_name,
-                                                           self.name_changed)
+            self.client.properties.unregister_change_handler(property_name,
+                                                             self.name_changed)
 
 class InputFieldTitlebar(Titlebar):
     """A one-line, editable input field."""
