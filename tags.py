@@ -153,4 +153,4 @@ class TagManager(WindowManager):
         try:
             self.tag_machine.run(message.data.data32)
         except StackUnderflow:
-            log.info("Stack underflow while executing tagset update.")
+            log.warning("Stack underflow while executing tagset update.")
