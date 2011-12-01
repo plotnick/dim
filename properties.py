@@ -11,10 +11,13 @@ from xcb.xproto import Gravity
 
 from geometry import *
 
-__all__ = ["PropertyValue", "PropertyValueList",
+__all__ = ["PropertyError", "PropertyValue", "PropertyValueList",
            "String", "UTF8String", "AtomList",
            "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
            "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
+
+class PropertyError(Exception):
+    pass
 
 # Translate between X property formats and Python's struct & array type codes.
 type_codes = {8: "B", 16: "H", 32: "I"}
@@ -53,7 +56,7 @@ class PropertyValueListClass(PropertyValueClass):
             raise TypeError("property value lists must specify format")
         assert (isinstance(format, (list, tuple)) and
                 len(format) == 1 and format[0] in type_codes), \
-                "invalid property format %r" % format
+            "invalid property format %r" % format
         return cls
 
 class PropertyValue(object):
@@ -99,8 +102,8 @@ class PropertyValue(object):
         """Return the property data as a byte string."""
         data = self.formatter.pack(*(getattr(self, slot, 0)
                                      for slot in self.__slots__))
-        assert len(self.__slots__) == len(data) // (self.property_format // 8), \
-            "invalid property data"
+        if len(self.__slots__) != len(data) // (self.property_format // 8):
+            raise PropertyError("invalid property data")
         return data
 
     def change_property_args(self):
@@ -260,8 +263,8 @@ class PropertyField(object):
         self.flag = flag
         self.type = type
         self.slots = slots if isinstance(slots, (list, tuple)) else (slots,)
-        self.defaults = defaults if defaults is not None \
-            else (0,) * len(self.slots)
+        self.defaults = (defaults if defaults is not None
+                         else (0,) * len(self.slots))
 
     def __get__(self, instance, owner):
         if not instance:
@@ -279,8 +282,8 @@ class PropertyField(object):
     def __set__(self, instance, value):
         if isinstance(value, (list, tuple)):
             if len(value) != len(self.slots):
-                raise AttributeError("attribute value must have %d elements" % \
-                                         len(slots))
+                raise AttributeError("attribute value must have %d elements" %
+                                     len(slots))
             for slot, slot_value in zip(self.slots, value):
                 setattr(instance, slot, slot_value)
         elif len(self.slots) == 1:
@@ -327,9 +330,9 @@ class WMSizeHints(PropertyValue):
 
     min_size = PropertyField(PMinSize, Rectangle,
                              ("_min_width", "_min_height"),
-                             lambda self: self.base_size \
-                                 if self.flags & self.PBaseSize \
-                                 else (1, 1))
+                             lambda self: (self.base_size
+                                           if self.flags & self.PBaseSize
+                                           else (1, 1)))
     max_size = PropertyField(PMaxSize, Rectangle,
                              ("_max_width", "_max_height"),
                              (0x7fffffff, 0x7fffffff))
@@ -344,9 +347,9 @@ class WMSizeHints(PropertyValue):
                                (None, None))
     base_size = PropertyField(PBaseSize, Rectangle,
                               ("_base_width", "_base_height"),
-                              lambda self: self.min_size \
-                                  if self.flags & self.PMinSize \
-                                  else (1, 1))
+                              lambda self: (self.min_size
+                                            if self.flags & self.PMinSize
+                                            else (1, 1)))
     win_gravity = PropertyField(PWinGravity, int,
                                 "_win_gravity",
                                 Gravity.NorthWest)
