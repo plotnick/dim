@@ -2,10 +2,19 @@
 
 from __future__ import unicode_literals
 
+from random import randint
 from math import sqrt
 import unittest
 
+from xcb.xproto import *
+
+from event import *
+from geometry import *
+from properties import AtomList
 from tags import StackUnderflow, TagMachine, TagManager
+from xutil import send_client_message
+
+from test_manager import TestClient, WMTestCase
 
 def primes(n):
     """Return prime numbers < n. Thanks to Ulf Bartelt, via the Python
@@ -104,5 +113,91 @@ class TestTagMachine(unittest.TestCase):
         self.assertEqual(self.tvm.pop(), self.all_clients)
         self.assertRaises(StackUnderflow, self.tvm.pop)
 
+class TaggedClient(TestClient):
+    def __init__(self, tags):
+        # The geometry is irrelevant, so we'll use a random one.
+        super(TaggedClient, self).__init__(Geometry(randint(0, 100),
+                                                    randint(0, 100),
+                                                    randint(50, 100),
+                                                    randint(50, 100),
+                                                    1))
+
+        self.tagged = False
+        self.tags = AtomList(map(self.atoms.intern, tags))
+        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
+                                             self.atoms["_DIM_TAGS"],
+                                             self.atoms["ATOM"],
+                                             *self.tags.change_property_args())
+
+    @handler(PropertyNotifyEvent)
+    def handle_property_notify(self, event):
+        assert event.window == self.window
+        if event.atom == self.atoms["_DIM_TAGS"]:
+            self.tagged = (event.state == Property.NewValue)
+        else:
+            raise UnhandledEvent(event)
+
+class TestTagManager(WMTestCase):
+    wm_class = TagManager
+
+    def update_tagset(self, pexpr, show=True):
+        def pad(sequence, padding=0, n=5):
+            return sequence + [padding] * (n - len(sequence))
+        if show:
+            pexpr += ["_DIM_TAGSET_SHOW"]
+        assert len(pexpr) <= 5, "tagset update expression too long"
+        send_client_message(self.conn, self.screen.root, self.screen.root,
+                            (EventMask.SubstructureNotify |
+                             EventMask.SubstructureRedirect),
+                            32, self.atoms["_DIM_TAGSET_UPDATE"],
+                            pad(map(self.atoms.intern, pexpr)))
+        self.conn.flush()
+
+    def test_tags(self):
+        a = TaggedClient(["a"])
+        b = TaggedClient(["b"])
+        c = TaggedClient(["c"])
+        ab = TaggedClient(["a", "b"])
+        ac = TaggedClient(["a", "c"])
+        bc = TaggedClient(["b", "c"])
+        abc = TaggedClient(["a", "b", "c"])
+        all_clients = set([a, b, c, ab, ac, bc, abc])
+        tagsets = {"a": set([a, ab, ac, abc]),
+                   "b": set([b, ab, bc, abc]),
+                   "c": set([c, ac, bc, abc])}
+        for client in all_clients:
+            self.add_client(client).map()
+        self.loop(lambda: all(client.mapped and client.managed and client.tagged
+                              for client in all_clients))
+
+        def make_mapped_test(clients):
+            return lambda: (all(client.mapped for client in clients) and
+                            not any(client.mapped
+                                    for client in all_clients - clients))
+
+        self.update_tagset(["a"])
+        self.loop(make_mapped_test(tagsets["a"]))
+
+        self.update_tagset(["a", "b", "_DIM_TAGSET_UNION"])
+        self.loop(make_mapped_test(tagsets["a"] | tagsets["b"]))
+
+        self.update_tagset(["b", "c", "_DIM_TAGSET_INTERSECTION"])
+        self.loop(make_mapped_test(tagsets["b"] & tagsets["c"]))
+
+        self.update_tagset(["a", "c", "_DIM_TAGSET_DIFFERENCE"])
+        self.loop(make_mapped_test(tagsets["a"] - tagsets["c"]))
+
+        self.update_tagset(["_DIM_EMPTY_TAGSET"])
+        self.loop(make_mapped_test(set()))
+
+        self.update_tagset(["_DIM_EMPTY_TAGSET", "_DIM_TAGSET_COMPLEMENT"])
+        self.loop(make_mapped_test(all_clients))
+
 if __name__ == "__main__":
+    import logging
+    from tags import log
+
+    log.addHandler(logging.StreamHandler())
+    log.setLevel(logging.INFO)
+
     unittest.main()
