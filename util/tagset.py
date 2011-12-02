@@ -11,7 +11,7 @@ import xcb
 from xcb.xproto import *
 
 from atom import *
-from xutil import *
+from properties import AtomList
 
 class TagsetError(StandardError):
     pass
@@ -237,8 +237,7 @@ class SpecParser(object):
 def update_tagset(conn, pexpr, show=True):
     """Given a postfix tagset specification expression (i.e., a list of
     tag machine instructions), encode the expression as a list of atoms
-    and send it to the window manager via ClientMessage events on the
-    root window."""
+    and send it to the window manager via a property on the root window."""
     def atom(x,
              atoms=AtomCache(conn),
              aliases={"*": "_DIM_ALL_TAGS",
@@ -250,22 +249,14 @@ def update_tagset(conn, pexpr, show=True):
         else:
             x = aliases.get(x, x)
         return atoms.intern(x, "UTF-8")
-
-    # We can only fit five atoms in a ClientMessage event, so we'll
-    # split the expression into chunks and send as many as we need to.
-    # This works because the window manager maintains the tag machine
-    # stack contents until a "show" operation is executed.
-    def pad(sequence, padding=0, n=5):
-        return sequence + [padding] * (n - len(sequence))
     if show:
         pexpr += ["_DIM_TAGSET_SHOW"]
     root = conn.get_setup().roots[conn.pref_screen].root
-    for i in range(0, len(pexpr), 5):
-        send_client_message(conn, root, root,
-                            (EventMask.SubstructureNotify |
-                             EventMask.SubstructureRedirect),
-                            32, atom("_DIM_TAGSET_UPDATE"),
-                            pad(map(atom, pexpr[i:i + 5])))
+    conn.core.ChangeProperty(PropMode.Replace,
+                             root,
+                             atom("_DIM_TAGSET_UPDATE"),
+                             atom("ATOM"),
+                             *AtomList(map(atom, pexpr)).change_property_args())
 
 if __name__ == "__main__":
     from doctest import testmod

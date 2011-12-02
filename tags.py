@@ -4,8 +4,8 @@ from collections import defaultdict
 import logging
 
 from event import handler
-from manager import client_message_type, ClientMessage, WindowManager
-from properties import WMState
+from manager import WindowManager, WindowManagerProperties
+from properties import PropertyDescriptor, AtomList, WMState
 
 __all__ = ["TagManager"]
 
@@ -105,11 +105,12 @@ class TagMachine(object):
     def empty_set(self):
         return self.push(set())
 
-@client_message_type("_DIM_TAGSET_UPDATE")
-class TagsetUpdateMessage(ClientMessage):
-    pass
+class TagManagerProperties(WindowManagerProperties):
+    tagset_update = PropertyDescriptor("_DIM_TAGSET_UPDATE", AtomList, [])
 
 class TagManager(WindowManager):
+    property_class = TagManagerProperties
+
     def __init__(self, *args, **kwargs):
         super(TagManager, self).__init__(*args, **kwargs)
 
@@ -127,6 +128,8 @@ class TagManager(WindowManager):
         self.tag_machine = TagMachine(self.clients, self.tagsets,
                                       dict((self.atoms[code], name)
                                            for code, name in opcodes.items()))
+        self.properties.register_change_handler("_DIM_TAGSET_UPDATE",
+                                                self.update_tagset)
 
     def manage(self, window):
         client = super(TagManager, self).manage(window)
@@ -154,9 +157,11 @@ class TagManager(WindowManager):
         if not deleted:
             self.note_tags(client)
 
-    @handler(TagsetUpdateMessage)
-    def handle_tagset_update(self, message):
+    def update_tagset(self, window, name, deleted):
+        assert window == self.screen.root
+        if deleted:
+            return
         try:
-            self.tag_machine.run(message.data.data32)
+            self.tag_machine.run(self.properties.tagset_update)
         except StackUnderflow:
             log.warning("Stack underflow while executing tagset update.")

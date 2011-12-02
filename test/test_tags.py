@@ -12,7 +12,6 @@ from event import *
 from geometry import *
 from properties import AtomList
 from tags import StackUnderflow, TagMachine, TagManager
-from xutil import send_client_message
 
 from test_manager import TestClient, WMTestCase
 
@@ -123,11 +122,12 @@ class TaggedClient(TestClient):
                                                     1))
 
         self.tagged = False
-        self.tags = AtomList(map(self.atoms.intern, tags))
-        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
+        args = AtomList(map(self.atoms.intern, tags)).change_property_args()
+        self.conn.core.ChangePropertyChecked(PropMode.Replace,
+                                             self.window,
                                              self.atoms["_DIM_TAGS"],
                                              self.atoms["ATOM"],
-                                             *self.tags.change_property_args())
+                                             *args).check()
 
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
@@ -141,17 +141,14 @@ class TestTagManager(WMTestCase):
     wm_class = TagManager
 
     def update_tagset(self, pexpr, show=True):
-        def pad(sequence, padding=0, n=5):
-            return sequence + [padding] * (n - len(sequence))
         if show:
             pexpr += ["_DIM_TAGSET_SHOW"]
-        assert len(pexpr) <= 5, "tagset update expression too long"
-        send_client_message(self.conn, self.screen.root, self.screen.root,
-                            (EventMask.SubstructureNotify |
-                             EventMask.SubstructureRedirect),
-                            32, self.atoms["_DIM_TAGSET_UPDATE"],
-                            pad(map(self.atoms.intern, pexpr)))
-        self.conn.flush()
+        args = AtomList(map(self.atoms.intern, pexpr)).change_property_args()
+        self.conn.core.ChangePropertyChecked(PropMode.Replace,
+                                             self.screen.root,
+                                             self.atoms["_DIM_TAGSET_UPDATE"],
+                                             self.atoms["ATOM"],
+                                             *args).check()
 
     def test_tags(self):
         a = TaggedClient(["a"])

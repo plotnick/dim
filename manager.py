@@ -36,6 +36,9 @@ class NoSuchClient(UnhandledEvent):
     the given top-level window."""
     pass
 
+class WindowManagerProperties(PropertyManager):
+    pass
+
 # Client messages come in via ClientMessageEvent instances. Our handler
 # for that event type will generate instances of more specific classes
 # based on the "type" field of the events and dispatch those via the
@@ -89,7 +92,10 @@ class WindowManager(EventHandler):
 
     root_event_mask = (EventMask.StructureNotify |
                        EventMask.SubstructureNotify |
-                       EventMask.SubstructureRedirect)
+                       EventMask.SubstructureRedirect |
+                       EventMask.PropertyChange)
+
+    property_class = WindowManagerProperties
 
     def __init__(self, display=None, screen=None, grab_buttons=GrabButtons()):
         self.conn = xcb.connect(display)
@@ -106,6 +112,9 @@ class WindowManager(EventHandler):
         self.cursors = FontCursor(self.conn)
         self.fonts = FontCache(self.conn)
         self.keymap = KeyboardMap(self.conn)
+        self.properties = self.property_class(self.conn,
+                                              self.screen.root,
+                                              self.atoms)
         self.next_event = None
         self.window_handlers = {}
         self.current_focus = None # unused here; see FocusPolicy
@@ -454,9 +463,11 @@ class WindowManager(EventHandler):
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
         """Note the change of a window property."""
-        client = self.get_client(event.window)
-        client.properties.property_changed(self.atoms.name(event.atom),
-                                           event.state == Property.Delete)
+        properties = (self.properties
+                      if event.window == self.screen.root
+                      else self.get_client(event.window).properties)
+        properties.property_changed(self.atoms.name(event.atom),
+                                    event.state == Property.Delete)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):
