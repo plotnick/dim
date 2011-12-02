@@ -446,27 +446,32 @@ class TitlebarDecorator(FrameDecorator):
                                              self.titlebar.config.height, 0))
 
     def compute_client_offset(self):
-        config = (self.titlebar.config if self.titlebar
-                                       else self.titlebar_configs[0])
+        config = (self.titlebar.config if self.titlebar else
+                  self.titlebar_configs[0])
         return Geometry(0, config.height, 0, config.height, None)
 
     def focus(self):
-        self.titlebar.config = self.titlebar_configs[1]
-        self.titlebar.draw()
+        if self.titlebar:
+            self.titlebar.config = self.titlebar_configs[1]
+            self.titlebar.draw()
         super(TitlebarDecorator, self).focus()
 
     def unfocus(self):
-        self.titlebar.config = self.titlebar_configs[0]
-        self.titlebar.draw()
+        if self.titlebar:
+            self.titlebar.config = self.titlebar_configs[0]
+            self.titlebar.draw()
         super(TitlebarDecorator, self).unfocus()
 
     def message(self, message):
-        self.titlebar.title = message
-        self.titlebar.draw()
+        if self.titlebar:
+            self.titlebar.title = message
+            self.titlebar.draw()
 
     def read_from_user(self, prompt, initial_value="",
                        continuation=lambda value: None,
                        config=None):
+        if self.titlebar is None:
+            return
         if config is None:
             config = self.titlebar.config
         titlebar = self.titlebar
