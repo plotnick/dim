@@ -20,9 +20,9 @@ from keymap import KeymapError, KeyboardMap
 from properties import *
 from xutil import *
 
-__all__ = ["ExitWindowManager", "NoSuchClient", "compress",
-           "client_message_type", "ClientMessage",
-           "WindowManager", "ReparentingWindowManager"]
+__all__ = ["ExitWindowManager", "NoSuchClient",
+           "client_message_type", "ClientMessage", "WindowManagerProperties",
+           "compress", "WindowManager", "ReparentingWindowManager"]
 
 log = logging.getLogger("manager")
 
@@ -34,9 +34,6 @@ class ExitWindowManager(Exception):
 class NoSuchClient(UnhandledEvent):
     """Raised to indicate that there is no currently-managed client with
     the given top-level window."""
-    pass
-
-class WindowManagerProperties(PropertyManager):
     pass
 
 # Client messages come in via ClientMessageEvent instances. Our handler
@@ -67,6 +64,10 @@ class WMChangeState(ClientMessage):
 @client_message_type("WM_EXIT")
 class WMExit(ClientMessage):
     """Sent by a client that would like the window manager to shut down."""
+    pass
+
+class WindowManagerProperties(PropertyManager):
+    """Track and manage properties on the root window."""
     pass
 
 def compress(handler):
