@@ -46,7 +46,7 @@ class PropertyDescriptor(object):
             reply = instance.request_property(self.name).reply()
         except BadWindow:
             instance.log.warning("Error fetching property %s.", self.name)
-            return self.default
+            return None
         value = (owner.properties[self.name].unpack(reply.value.buf())
                  if reply.type
                  else self.default)
@@ -88,7 +88,7 @@ class PropertyManager(object):
         self.values = {} # cached property values
         self.cookies = {} # pending property request cookies
         self.change_handlers = defaultdict(set)
-        self.__log = logging.getLogger("properties.0x%x" % self.window)
+        self.log = logging.getLogger("properties.0x%x" % self.window)
 
     def request_property(self, name, type=None):
         """Request the value of a property on the window, and return a cookie
@@ -101,7 +101,7 @@ class PropertyManager(object):
             return self.cookies[name]
         except KeyError:
             pass
-        self.__log.debug("Requesting property %s.", name)
+        self.log.debug("Requesting property %s.", name)
         def atom(x):
             return self.atoms[x] if isinstance(x, basestring) else x
         cookie = self.conn.core.GetProperty(False, self.window,
@@ -146,14 +146,14 @@ class PropertyManager(object):
 
     def delete_property(self, name):
         """Remove the given property from the window."""
-        self.__log.debug("Deleting property %s.", name)
+        self.log.debug("Deleting property %s.", name)
         self.conn.core.DeleteProperty(self.window, self.atoms[name])
         self.invalidate_cached_property(name)
 
     def property_changed(self, name, deleted):
         """Handle a change or deletion of a property."""
-        self.__log.debug("Property %s %s.",
-                         name, ("deleted" if deleted else "changed"))
+        self.log.debug("Property %s %s.",
+                       name, ("deleted" if deleted else "changed"))
         if deleted:
             self.invalidate_cached_property(name)
         else:
