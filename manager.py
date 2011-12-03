@@ -217,30 +217,9 @@ class WindowManager(EventHandler):
         client.decorator.decorate()
         client.decorator.unfocus()
         if attrs.map_state != MapState.Unmapped:
-            self.normalize(client)
+            client.normalize()
         return client
 
-    def normalize(self, client):
-        """Complete the transition of a client to the Normal state."""
-        log.debug("Client window 0x%x entering Normal state.", client.window)
-        client.properties.wm_state = WMState(WMState.NormalState)
-        client.properties.request_properties()
-        return client
-
-    def withdraw(self, client):
-        """Complete the transition of a client to the Withdrawn state."""
-        log.debug("Client window 0x%x entering Withdrawn state.", client.window)
-        client.properties.wm_state = WMState(WMState.WithdrawnState)
-        client.decorator.undecorate()
-        return client
-
-    def iconify(self, client):
-        """Complete the transition of a client to the Iconic state."""
-        log.debug("Client window 0x%x entering Iconic state.", client.window)
-        self.conn.core.UnmapWindow(client.window)
-        client.properties.wm_state = WMState(WMState.IconicState)
-        return client
-            
     def unmanage(self, client):
         """Unmanage the given client."""
         log.debug("Unmanaging client window 0x%x.", client.window)
@@ -403,7 +382,7 @@ class WindowManager(EventHandler):
         if (client.properties.wm_state == WMState.WithdrawnState and
             client.properties.wm_hints.initial_state == WMState.IconicState):
             # Withdrawn → Iconic state transition (ICCCM §4.1.4).
-            self.iconify(client)
+            client.iconify()
         else:
             self.conn.core.MapWindow(event.window)
 
@@ -413,8 +392,9 @@ class WindowManager(EventHandler):
         if event.override_redirect:
             raise UnhandledEvent(event)
         log.debug("Window 0x%x mapped.", event.window)
+        # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
         try:
-            self.normalize(self.get_client(event.window, True))
+            self.get_client(event.window, True).normalize()
         except BadWindow:
             pass
 
@@ -425,14 +405,13 @@ class WindowManager(EventHandler):
             raise UnhandledEvent(event)
         log.debug("Window 0x%x unmapped.", event.window)
         client = self.get_client(event.window, True)
-        try:
-            # See ICCCM §4.1.4.
-            if is_synthetic_event(event):
-                self.withdraw(client)
-            else:
-                self.iconify(client)
-        except BadWindow:
-            pass
+        if (client.properties.wm_state != WMState.IconicState or
+            is_synthetic_event(event)):
+            # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
+            try:
+                client.withdraw()
+            except BadWindow:
+                pass
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
@@ -492,7 +471,7 @@ class WindowManager(EventHandler):
                   client_message.window,
                   client_message.data.data32[0])
         if client_message.data.data32[0] == WMState.IconicState:
-            self.iconify(self.get_client(client_message.window, True))
+            self.get_client(client_message.window, True).iconify()
         else:
             raise UnhandledEvent
 
@@ -521,25 +500,6 @@ class ReparentingWindowManager(WindowManager):
     def decorator(self, client):
         return FrameDecorator(self.conn, client)
 
-    def normalize(self, client):
-        if not client.reparenting:
-            self.conn.core.MapWindow(client.frame)
-            return super(ReparentingWindowManager, self).normalize(client)
-
-    def withdraw(self, client):
-        if not client.reparenting:
-            frame = client.frame
-            self.conn.core.UnmapWindow(client.frame)
-            try:
-                return super(ReparentingWindowManager, self).withdraw(client)
-            finally:
-                self.frames.pop(frame, None)
-
-    def iconify(self, client):
-        if not client.reparenting:
-            self.conn.core.UnmapWindow(client.frame)
-            return super(ReparentingWindowManager, self).iconify(client)
-
     def get_client(self, window, client_only=False):
         if not client_only:
             # Walk up the window hierarchy until we come to a frame or a root.
@@ -562,6 +522,14 @@ class ReparentingWindowManager(WindowManager):
         self.parents.pop(event.window, None)
         raise UnhandledEvent(event)
 
+    @handler(UnmapNotifyEvent)
+    def handle_unmap_notify(self, event):
+        if self.get_client(event.window, True).reparenting:
+            # Ignore the unmap triggered by a reparent request.
+            pass
+        else:
+            raise UnhandledEvent(event)
+
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
         self.parents[event.window] = event.parent
@@ -570,6 +538,8 @@ class ReparentingWindowManager(WindowManager):
         client = self.get_client(event.window)
         if client.reparenting:
             assert issubclass(client.reparenting, ClientWindow)
+            if client.frame != event.parent:
+                self.frames.pop(client.frame, None)
             log.debug("Done reparenting window 0x%x.", client.window)
             client.__class__ = client.reparenting
             client.init(event.parent)

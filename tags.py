@@ -83,7 +83,7 @@ class TagMachine(object):
         self.dup()
         self.complement()
         for x in self.pop():
-            x.unmap()
+            x.iconify()
         for x in self.pop():
             x.map()
         self.clear()

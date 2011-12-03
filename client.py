@@ -180,6 +180,25 @@ class ClientWindow(object):
     def unmap(self):
         self.conn.core.UnmapWindow(self.window)
 
+    def normalize(self):
+        """Transition to the Normal state."""
+        self.__log.debug("Entering Normal state.")
+        self.properties.wm_state = WMState(WMState.NormalState)
+        self.properties.request_properties()
+        self.map()
+
+    def iconify(self):
+        """Transition to the Iconic state."""
+        self.__log.debug("Entering Iconic state.")
+        self.properties.wm_state = WMState(WMState.IconicState)
+        self.unmap()
+
+    def withdraw(self):
+        """Transition to the Withdrawn state."""
+        self.__log.debug("Entering Withdrawn state.")
+        self.properties.wm_state = WMState(WMState.WithdrawnState)
+        self.decorator.undecorate()
+
 class FramedClientWindow(ClientWindow):
     """A framed client window represents a client window that has been
     reparented to a new top-level window.
@@ -266,3 +285,7 @@ class FramedClientWindow(ClientWindow):
     def unmap(self):
         self.conn.core.UnmapWindow(self.frame)
         super(FramedClientWindow, self).unmap()
+
+    def withdraw(self):
+        self.conn.core.UnmapWindow(self.frame)
+        super(FramedClientWindow, self).withdraw()
