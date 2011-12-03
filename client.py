@@ -55,6 +55,7 @@ class ClientWindow(object):
         self.decorator = manager.decorator(self)
         self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.offset = None # determined and set by our decorator
+        self.focus_time = None
         self.focus_override = None
         self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
                                               [self.client_event_mask])
@@ -145,33 +146,62 @@ class ClientWindow(object):
                                        [stack_mode])
 
     def focus(self, time=Time.CurrentTime):
-        """Offer the input focus to the client."""
-        # We'll occasionally want to preempt focus of a client window
-        # (e.g., for user input in a titlebar).
+        """Offer the input focus to the client. Returns true if the client
+        accepts the focus offer or is already focused, and false otherwise."""
+        if time is None:
+            # FocusIn events don't contain a timestamp, so the handler
+            # for those events uses None as the time argument. In general,
+            # this will indicate confirmation of focus initiated by a prior
+            # SetInputFocus request. However, if we don't have a focus
+            # time, it means that we were previously unfocused and are now
+            # receiving the focus, presumably in PointerRoot mode. In that
+            # case, we'll make a new focus offer with CurrentTime.
+            self.decorator.focus()
+            if self.focus_time is not None:
+                return True
+            time = Time.CurrentTime
+        if self.focus_time is not None:
+            # We could be called more than once in response to some request,
+            # so we'll only update the focus if the timestamp is newer than
+            # the last-focus time for this client.
+            if time != Time.CurrentTime and time <= self.focus_time:
+                return True
+
+        def set_input_focus(window, time):
+            self.__log.debug("Setting input focus to window 0x%x at time %d.",
+                             window, time)
+            try:
+                self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
+                                                    window,
+                                                    time).check()
+            except (BadMatch, BadWindow):
+                self.__log.warning("Error trying to focus window 0x%x.", window)
+                return None
+            else:
+                return time
         if self.focus_override:
+            # We'll occasionally want to preempt focus of a client window
+            # (e.g., for user input in a titlebar).
             self.__log.debug("Redirecting focus to window 0x%x.",
                              self.focus_override)
-            self.conn.core.SetInputFocus(InputFocus.PointerRoot,
-                                         self.focus_override, time)
-            return True
-
-        # See ICCCM §4.1.7.
-        focused = False
-        if (self.properties.wm_hints.flags & WMHints.InputHint == 0 or
-            self.properties.wm_hints.input):
-            self.__log.debug("Setting input focus at time %d.", time)
-            self.conn.core.SetInputFocus(InputFocus.PointerRoot,
-                                         self.window, time)
-            focused = True
-        if self.atoms["WM_TAKE_FOCUS"] in self.properties.wm_protocols:
-            self.__log.debug("Taking input focus at time %d.", time)
-            send_client_message(self.conn, self.window, self.window, 0,
-                                32, self.atoms["WM_PROTOCOLS"],
-                                [self.atoms["WM_TAKE_FOCUS"], time, 0, 0, 0])
-            focused = True
-        return focused
+            self.focus_time = set_input_focus(self.focus_override, time)
+        else:
+            # See ICCCM §4.1.7.
+            self.focus_time = None
+            if (self.properties.wm_hints.flags & WMHints.InputHint == 0 or
+                self.properties.wm_hints.input):
+                self.focus_time = set_input_focus(self.window, time)
+            if self.atoms["WM_TAKE_FOCUS"] in self.properties.wm_protocols:
+                self.__log.debug("Taking input focus at time %d.", time)
+                send_client_message(self.conn, self.window, self.window, 0,
+                                    32, self.atoms["WM_PROTOCOLS"],
+                                    [self.atoms["WM_TAKE_FOCUS"], time,
+                                     0, 0, 0])
+                self.focus_time = time
+        return self.focus_time is not None
 
     def unfocus(self):
+        self.focus_time = None
         self.decorator.unfocus()
 
     def map(self):

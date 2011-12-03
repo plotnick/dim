@@ -160,19 +160,25 @@ class FrameDecorator(Decorator):
 
             super(FrameDecorator, self).undecorate()
 
-            # Determine the new window geometry based on the current frame
-            # geometry, the original border width, and the window gravity.
-            size = self.client.geometry.size()
-            bw = self.original_border_width
-            gravity = self.client.properties.wm_normal_hints.win_gravity
-            geometry = self.client.frame_geometry.resize(size, bw, gravity)
+            try:
+                # Determine the new window geometry based on the current frame
+                # geometry, the original border width, and the window gravity.
+                size = self.client.geometry.size()
+                bw = self.original_border_width
+                gravity = self.client.properties.wm_normal_hints.win_gravity
+                geometry = self.client.frame_geometry.resize(size, bw, gravity)
 
-            self.conn.core.ReparentWindow(self.client.window, self.screen.root,
-                                          geometry.x, geometry.y)
-            self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
-            self.conn.core.DestroyWindow(self.client.frame)
-            self.client.reparenting = ClientWindow
-            self.client.frame = None
+                self.conn.core.ReparentWindow(self.client.window,
+                                              self.screen.root,
+                                              geometry.x,
+                                              geometry.y)
+                self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
+                self.client.reparenting = ClientWindow
+            except (BadWindow, BadDrawable):
+                return
+            finally:
+                self.conn.core.DestroyWindow(self.client.frame)
+                self.client.frame = None
 
 class TitlebarConfig(object):
     def __init__(self, manager, fg_color, bg_color, font):

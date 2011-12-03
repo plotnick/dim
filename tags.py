@@ -150,14 +150,14 @@ class TagManager(WindowManager):
                       client.window, self.atoms.name(tag, "UTF-8"))
             self.tagsets[tag].add(client)
 
-    def tags_changed(self, window, name, deleted):
+    def tags_changed(self, window, name, deleted, time):
         client = self.get_client(window, True)
         for tagset in self.tagsets.values():
             tagset.discard(client)
         if not deleted:
             self.note_tags(client)
 
-    def update_tagset(self, window, name, deleted):
+    def update_tagset(self, window, name, deleted, time):
         assert window == self.screen.root
         if deleted:
             return

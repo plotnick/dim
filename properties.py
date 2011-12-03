@@ -150,7 +150,7 @@ class PropertyManager(object):
         self.conn.core.DeleteProperty(self.window, self.atoms[name])
         self.invalidate_cached_property(name)
 
-    def property_changed(self, name, deleted):
+    def property_changed(self, name, deleted, time):
         """Handle a change or deletion of a property."""
         self.log.debug("Property %s %s.",
                        name, ("deleted" if deleted else "changed"))
@@ -165,7 +165,7 @@ class PropertyManager(object):
 
         # Invoke any handlers registered for this property change.
         for handler in self.change_handlers.get(name, []):
-            handler(self.window, name, deleted)
+            handler(self.window, name, deleted, time)
 
     def invalidate_cached_property(self, name):
         """Invalidate any cached request or value for the given property."""

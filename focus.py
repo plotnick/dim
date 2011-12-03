@@ -1,15 +1,22 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from collections import deque
 import logging
+import exceptions
 
 from xcb.xproto import *
 
 from event import UnhandledEvent, handler
-from manager import NoSuchClient, WindowManager, ReparentingWindowManager
+from manager import *
 from properties import WMState
-from xutil import notify_detail_name
+from xutil import notify_detail_name, send_client_message
 
 __all__ = ["FocusPolicy", "SloppyFocus", "ClickToFocus"]
+
+@client_message_type("_DIM_ENSURE_FOCUS")
+class EnsureFocus(ClientMessage):
+    """Try to ensure that some client has the input focus."""
+    pass
 
 class FocusPolicy(WindowManager):
     """A focus policy determines how and when to assign the input focus to the
@@ -18,106 +25,116 @@ class FocusPolicy(WindowManager):
     __log = logging.getLogger("focus")
 
     def __init__(self, *args, **kwargs):
-        self.current_focus = None
-        self.pending_focus = None
         super(FocusPolicy, self).__init__(*args, **kwargs)
+        self.focus_list = deque()
 
     def adopt(self, windows):
-        self.reparenting_initial_clients = set()
-        for window in windows:
-            client = self.manage(window)
-            if client and client.reparenting:
-                self.reparenting_initial_clients.add(client)
-        self.initial_focus()
-
-    def normalize(self, client):
-        if super(FocusPolicy, self).normalize(client):
-            if self.reparenting_initial_clients is not None:
-                self.reparenting_initial_clients.discard(client)
-                self.initial_focus()
-            return client
-
-    def initial_focus(self):
-        """Query for and set the initial focus."""
-        # We need to wait to set the initial focus until all of the initial
-        # clients are done reparenting (if they need reparenting). Otherwise,
-        # the pointer might be over a window that is temporarily unmapped but
-        # that ought to get the initial focus.
-        if self.reparenting_initial_clients:
-            return
-        else:
-            self.reparenting_initial_clients = None
-
+        # Determine the initial focus.
         focus = self.conn.core.GetInputFocus().reply().focus
         if focus == InputFocus.PointerRoot:
             # If we're in PointerRoot mode, we need to query the server
             # again for the window currently containing the pointer.
             focus = self.conn.core.QueryPointer(self.screen.root).reply().child
-        if focus:
-            try:
-                client = self.get_client(focus)
-            except NoSuchClient:
-                return
-            self.__log.debug("Setting initial focus to window 0x%x.", focus)
-            self.focus(client, Time.CurrentTime)
+
+        super(FocusPolicy, self).adopt(windows)
+
+        try:
+            client = self.get_client(focus, True)
+        except NoSuchClient:
+            client = None
+        self.ensure_focus(client)
+
+    def manage(self, window):
+        client = super(FocusPolicy, self).manage(window)
+        if client:
+            self.focus_list.appendleft(client)
+        return client
+
+    def unmanage(self, client):
+        try:
+            self.focus_list.remove(client)
+        except exceptions.ValueError:
+            pass
+        return super(FocusPolicy, self).unmanage(client)
+
+    @property
+    def current_focus(self):
+        """Return the head of the focus list, ignoring clients not in the
+        Normal state."""
+        for client in reversed(self.focus_list):
+            if client.properties.wm_state == WMState.NormalState:
+                return client
         else:
             self.__log.debug("No window currently has the focus.")
+            return None
+
+    @current_focus.setter
+    def current_focus(self, client):
+        """Put a client at the head of the focus list."""
+        try:
+            self.focus_list.remove(client)
+        except exceptions.ValueError:
+            pass
+        self.focus_list.append(client)
 
     def focus(self, client, time):
-        """Offer the given client the input focus."""
-        if client.properties.wm_state != WMState.NormalState:
-            return False
-        if client == self.current_focus or client == self.pending_focus:
-            return True
-        self.__log.debug("Attempting to focus client window 0x%x.",
-                       client.window)
+        """Offer the input focus to a client."""
         if client.focus(time):
-            self.pending_focus = client
-            return True
-        else:
-            self.__log.debug("Client window 0x%x declined the focus offer.",
-                           client.window)
-            self.pending_focus = None
-            return False
-
-    def client_focused(self, client):
-        self.__log.debug("Client window 0x%x now has the focus.", client.window)
-        self.current_focus = client
-        if self.pending_focus:
-            if client != self.pending_focus:
-                self.__log.warning("Unexpected client got the focus.")
-            self.pending_focus = None
-        client.decorator.focus()
+            self.current_focus = client
 
     def unfocus(self, client):
-        """Unfocus the currently focused client."""
-        if client.properties.wm_state != WMState.NormalState:
-            return False
-        self.__log.debug("Unfocusing client window 0x%x.", client.window)
+        """Note that a client no longer has the input focus."""
         client.unfocus()
-        if client == self.current_focus:
-            self.current_focus = None
-        elif self.current_focus:
-            self.__log.warning("Unfocused client was not the current focus; "
-                               "0x%x was.", self.current_focus.window)
+
+    def update_tagset(self, window, name, deleted, time):
+        super(FocusPolicy, self).update_tagset(window, name, deleted, time)
+        self.ensure_focus(time=time)
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
-        if event.mode != NotifyMode.Normal or \
-                event.detail == NotifyDetail.Inferior:
+        if (event.mode != NotifyMode.Normal or
+            event.detail == NotifyDetail.Inferior):
             raise UnhandledEvent(event)
         self.__log.debug("Window 0x%x got the focus (%s).",
                          event.event, notify_detail_name(event))
-        self.client_focused(self.get_client(event.event))
+        self.focus(self.get_client(event.event), None)
 
     @handler(FocusOutEvent)
     def handle_focus_out(self, event):
-        if event.mode != NotifyMode.Normal or \
-                event.detail == NotifyDetail.Inferior:
+        if (event.mode != NotifyMode.Normal or
+            event.detail == NotifyDetail.Inferior or
+            event.detail == NotifyDetail.Pointer):
             raise UnhandledEvent(event)
         self.__log.debug("Window 0x%x lost the focus (%s).",
                          event.event, notify_detail_name(event))
         self.unfocus(self.get_client(event.event))
+
+    def ensure_focus(self, client=None, time=Time.CurrentTime):
+        # We use a client message for ensuring focus so that we can be sure
+        # that any outstanding requests or events generated as a result
+        # thereof have been completely processed before we go groveling
+        # through the focus list.
+        send_client_message(self.conn, self.screen.root, self.screen.root,
+                            (EventMask.SubstructureRedirect |
+                             EventMask.StructureNotify),
+                            32, self.atoms["_DIM_ENSURE_FOCUS"],
+                            [time, client.window if client else 0, 0, 0, 0])
+
+    @handler(EnsureFocus)
+    def handle_ensure_focus(self, client_message):
+        # There should be a timestamp in the first data slot and a window ID
+        # (which may be None) in the second.
+        time, window = client_message.data.data32[:2]
+        self.__log.debug("Received ensure-focus message (0x%x, %d).",
+                         window, time)
+        try:
+            client = self.get_client(window, True)
+        except NoSuchClient:
+            client = None
+        if not client or client.properties.wm_state != WMState.NormalState:
+            client = self.current_focus
+        if client:
+            client.focus(time)
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer
@@ -133,10 +150,7 @@ class SloppyFocus(FocusPolicy):
             return
         self.__log.debug("Window 0x%x entered (%s).",
                          event.event, notify_detail_name(event))
-        client = self.get_client(event.event)
-        self.focus(client, event.time)
-        if event.same_screen_focus & 1:
-            self.client_focused(client)
+        self.focus(self.get_client(event.event), event.time)
 
 class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     """Focus ignores the movement of the pointer, and changes only when
@@ -179,8 +193,7 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         self.conn.core.UngrabButton(1, client.frame, ModMask.Any)
 
     def unfocus(self, client):
-        if client == self.current_focus:
-            self.grab_focus_click(client)
+        self.grab_focus_click(client)
         super(ClickToFocus, self).unfocus(client)
 
     @handler(ButtonPressEvent)

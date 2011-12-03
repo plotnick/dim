@@ -118,7 +118,6 @@ class WindowManager(EventHandler):
                                               self.atoms)
         self.next_event = None
         self.window_handlers = {}
-        self.current_focus = None # unused here; see FocusPolicy
         self.init_graphics()
 
     def init_graphics(self):
@@ -447,7 +446,8 @@ class WindowManager(EventHandler):
                       if event.window == self.screen.root
                       else self.get_client(event.window).properties)
         properties.property_changed(self.atoms.name(event.atom),
-                                    event.state == Property.Delete)
+                                    event.state == Property.Delete,
+                                    event.time)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):
