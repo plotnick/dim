@@ -56,7 +56,9 @@ class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
 if __name__ == "__main__":
     from optparse import OptionParser
     import logging
+    import pdb
     import sys
+    import traceback
     import xcb
 
     focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
@@ -97,11 +99,14 @@ if __name__ == "__main__":
 
     log = logging.getLogger("wm")
     log.debug("Using %s focus policy.", options.focus_mode)
-    wm = type("WM",
-              (focus_modes[options.focus_mode], BaseWM),
-              dict(title_font=options.title_font))(options.display)
     try:
+        wm = type("WM",
+                  (focus_modes[options.focus_mode], BaseWM),
+                  dict(title_font=options.title_font))(options.display)
         wm.start()
     except KeyboardInterrupt:
         log.info("Interrupt caught; shutting down.")
         wm.shutdown()
+    except:
+        traceback.print_exc()
+        pdb.post_mortem()
