@@ -3,6 +3,7 @@
 """Client windows may be decorated with a frame, border, title bar, &c."""
 
 import logging
+from threading import Timer
 
 from xcb.xproto import *
 
@@ -12,6 +13,7 @@ from event import *
 from font import text_width
 from geometry import *
 from keysym import *
+from stringbuffer import StringBuffer
 from xutil import textitem16
 
 __all__ = ["Decorator", "BorderHighlightFocus", "FrameDecorator",
@@ -216,6 +218,12 @@ class TitlebarConfig(object):
                            [manager.colors[bg_color],
                             manager.colors[fg_color],
                             self.font])
+        self.xor_gc = conn.generate_id()
+        conn.core.CreateGC(self.xor_gc, root,
+                           GC.Function | GC.Foreground | GC.Font,
+                           [GX.xor,
+                            manager.colors[fg_color] ^ manager.colors[bg_color],
+                            self.font])
 
         high, low = self.highlight(bg_color)
         self.highlight_gc = conn.generate_id()
@@ -233,13 +241,6 @@ class TitlebarConfig(object):
 
     def text_width(self, string):
         return text_width(self.font_info, string)
-
-    def reversed(self):
-        rev = self.__class__(self.manager,
-                             self.bg_color, self.fg_color,
-                             self.font)
-        rev.highlight_gc, rev.lowlight_gc = rev.lowlight_gc, rev.highlight_gc
-        return rev
 
 class Titlebar(EventHandler):
     """A widget which displays a line of text. A titlebar need not display
@@ -363,7 +364,7 @@ class InputFieldTitlebar(Titlebar):
                  commit=lambda value: None, rollback=lambda: None,
                  time=Time.CurrentTime, **kwargs):
         self.prompt = unicode(prompt)
-        self.value = unicode(initial_value)
+        self.buffer = StringBuffer(initial_value)
         self.commit = commit
         self.rollback = rollback
         self.time = time
@@ -371,17 +372,40 @@ class InputFieldTitlebar(Titlebar):
 
     def draw(self, x=5):
         super(InputFieldTitlebar, self).draw()
-
+        y = self.config.baseline
         def draw_string(x, string):
             text_items = list(textitem16(string))
             self.conn.core.PolyText16(self.window, self.config.fg_gc,
-                                      x, self.config.baseline,
+                                      x, y,
                                       len(text_items), "".join(text_items))
+            return self.config.text_width(string)
         if self.prompt:
-            draw_string(x, self.prompt)
-            x += self.config.text_width(self.prompt)
-        if self.value:
-            draw_string(x, self.value)
+            x += draw_string(x, self.prompt)
+        if self.buffer:
+            x += draw_string(x, self.buffer)
+
+        # Draw an xor rectangle as a cursor.
+        c = self.buffer.cursor
+        n = len(self.buffer)
+        x -= self.config.text_width(self.buffer[c:])
+        w = self.config.text_width(" " if c >= n else self.buffer[c])
+        a = self.config.font_info.font_ascent
+        d = self.config.font_info.font_descent
+        self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
+                                         1, [x, y - a, w, a + d])
+
+    def flash(self):
+        # Draw an xor rectangle over the entire titlebar (minus the relief).
+        w = self.geometry.width - 2
+        h = self.geometry.height - 2
+        self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
+                                         1, [1, 1, w, h])
+        def refresh():
+            self.draw()
+            self.conn.flush()
+        timer = Timer(0.15, refresh)
+        timer.daemon = True
+        timer.start()
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
@@ -403,15 +427,32 @@ class InputFieldTitlebar(Titlebar):
     def handle_keypress(self, event):
         self.time = event.time
         keysym = self.manager.keymap.lookup_key(event.detail, event.state)
-        if keysym == XK_Escape:
-            self.rollback()
-        elif keysym == XK_Return:
-            self.commit(self.value)
-        elif keysym == XK_BackSpace:
-            self.value = self.value[:-1]
-            self.draw()
+        try:
+            if keysym == XK_Escape:
+                self.rollback()
+                return
+            elif keysym == XK_Return or keysym == XK_KP_Enter:
+                self.commit(unicode(self.buffer))
+                return
+            elif keysym == XK_BackSpace:
+                self.buffer.delete_backward_char()
+            elif keysym == XK_Delete or keysym == XK_KP_Delete:
+                self.buffer.delete_forward_char()
+            elif keysym == XK_Left or keysym == XK_KP_Left:
+                self.buffer.backward_char()
+            elif keysym == XK_Right or keysym == XK_KP_Right:
+                self.buffer.forward_char()
+            elif keysym == XK_Home or keysym == XK_KP_Home:
+                self.buffer.beginning_of_buffer()
+            elif keysym == XK_End or keysym == XK_KP_End:
+                self.buffer.end_of_buffer()
+            else:
+                char = keysym_to_string(keysym)
+                if char:
+                    self.buffer.insert_char(char)
+        except IndexError:
+            self.flash()
         else:
-            self.value += keysym_to_string(keysym)
             self.draw()
 
 class TitlebarDecorator(FrameDecorator):
