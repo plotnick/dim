@@ -361,11 +361,12 @@ class InputFieldTitlebar(Titlebar):
 
     def __init__(self, prompt="", initial_value="",
                  commit=lambda value: None, rollback=lambda: None,
-                 **kwargs):
+                 time=Time.CurrentTime, **kwargs):
         self.prompt = unicode(prompt)
         self.value = unicode(initial_value)
         self.commit = commit
         self.rollback = rollback
+        self.time = time
         super(InputFieldTitlebar, self).__init__(**kwargs)
 
     def draw(self, x=5):
@@ -385,19 +386,22 @@ class InputFieldTitlebar(Titlebar):
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         self.client.focus_override = self.window
-        if self.manager.current_focus == self.client:
-            # Override client focus.
-            self.client.focus()
+        try:
+            self.manager.focus(self.client, self.time)
+        except AttributeError:
+            pass
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         self.client.focus_override = None
-        if self.manager.current_focus == self.client:
-            # Revert focus to the client window.
-            self.client.focus()
+        try:
+            self.manager.ensure_focus(self.client, self.time)
+        except AttributeError:
+            pass
 
     @handler(KeyPressEvent)
     def handle_keypress(self, event):
+        self.time = event.time
         keysym = self.manager.keymap.lookup_key(event.detail, event.state)
         if keysym == XK_Escape:
             self.rollback()
@@ -475,7 +479,8 @@ class TitlebarDecorator(FrameDecorator):
 
     def read_from_user(self, prompt, initial_value="",
                        continuation=lambda value: None,
-                       config=None):
+                       config=None,
+                       time=Time.CurrentTime):
         if self.titlebar is None:
             return
         if config is None:
@@ -495,6 +500,7 @@ class TitlebarDecorator(FrameDecorator):
                                            parent=self.client.frame,
                                            geometry=titlebar.geometry,
                                            config=config,
+                                           time=time,
                                            prompt=prompt,
                                            initial_value=initial_value,
                                            commit=commit,

@@ -26,7 +26,7 @@ class FocusPolicy(WindowManager):
 
     def __init__(self, *args, **kwargs):
         super(FocusPolicy, self).__init__(*args, **kwargs)
-        self.focus_list = deque()
+        self.focus_list = deque() # most-recently focused first
 
     def adopt(self, windows):
         # Determine the initial focus.
@@ -47,7 +47,7 @@ class FocusPolicy(WindowManager):
     def manage(self, window):
         client = super(FocusPolicy, self).manage(window)
         if client:
-            self.focus_list.appendleft(client)
+            self.focus_list.append(client)
         return client
 
     def unmanage(self, client):
@@ -57,30 +57,14 @@ class FocusPolicy(WindowManager):
             pass
         return super(FocusPolicy, self).unmanage(client)
 
-    @property
-    def current_focus(self):
-        """Return the head of the focus list, ignoring clients not in the
-        Normal state."""
-        for client in reversed(self.focus_list):
-            if client.properties.wm_state == WMState.NormalState:
-                return client
-        else:
-            self.__log.debug("No window currently has the focus.")
-            return None
-
-    @current_focus.setter
-    def current_focus(self, client):
-        """Put a client at the head of the focus list."""
-        try:
-            self.focus_list.remove(client)
-        except exceptions.ValueError:
-            pass
-        self.focus_list.append(client)
-
     def focus(self, client, time):
         """Offer the input focus to a client."""
         if client.focus(time):
-            self.current_focus = client
+            try:
+                self.focus_list.remove(client)
+            except exceptions.ValueError:
+                pass
+            self.focus_list.appendleft(client)
 
     def unfocus(self, client):
         """Note that a client no longer has the input focus."""
@@ -93,7 +77,8 @@ class FocusPolicy(WindowManager):
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
         if (event.mode != NotifyMode.Normal or
-            event.detail == NotifyDetail.Inferior):
+            event.detail == NotifyDetail.Inferior or
+            event.detail == NotifyDetail.Pointer):
             raise UnhandledEvent(event)
         self.__log.debug("Window 0x%x got the focus (%s).",
                          event.event, notify_detail_name(event))
@@ -131,10 +116,17 @@ class FocusPolicy(WindowManager):
             client = self.get_client(window, True)
         except NoSuchClient:
             client = None
-        if not client or client.properties.wm_state != WMState.NormalState:
-            client = self.current_focus
-        if client:
-            client.focus(time)
+        while not (client and
+                   client.properties.wm_state == WMState.NormalState and
+                   client.focus(time)):
+            try:
+                self.focus_list.remove(client)
+            except exceptions.ValueError:
+                pass
+            try:
+                client = self.focus_list[0]
+            except IndexError:
+                break
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer

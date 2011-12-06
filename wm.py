@@ -43,7 +43,10 @@ class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
             def name(atom):
                 return self.atoms.name(atom, "UTF-8", "replace")
             tags = map(name, client.properties.dim_tags)
-            decorator.read_from_user("Tags: ", ", ".join(tags), tags_changed)
+            decorator.read_from_user("Tags: ",
+                                     ", ".join(tags),
+                                     tags_changed,
+                                     time=event.time)
         decorator = TitlebarDecorator(self.conn, client,
                                       focused_config=self.focused_config,
                                       unfocused_config=self.unfocused_config,
