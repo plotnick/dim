@@ -160,19 +160,25 @@ class FrameDecorator(Decorator):
 
             super(FrameDecorator, self).undecorate()
 
-            # Determine the new window geometry based on the current frame
-            # geometry, the original border width, and the window gravity.
-            size = self.client.geometry.size()
-            bw = self.original_border_width
-            gravity = self.client.properties.wm_normal_hints.win_gravity
-            geometry = self.client.frame_geometry.resize(size, bw, gravity)
+            try:
+                # Determine the new window geometry based on the current frame
+                # geometry, the original border width, and the window gravity.
+                size = self.client.geometry.size()
+                bw = self.original_border_width
+                gravity = self.client.properties.wm_normal_hints.win_gravity
+                geometry = self.client.frame_geometry.resize(size, bw, gravity)
 
-            self.conn.core.ReparentWindow(self.client.window, self.screen.root,
-                                          geometry.x, geometry.y)
-            self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
-            self.conn.core.DestroyWindow(self.client.frame)
-            self.client.reparenting = ClientWindow
-            self.client.frame = None
+                self.conn.core.ReparentWindow(self.client.window,
+                                              self.screen.root,
+                                              geometry.x,
+                                              geometry.y)
+                self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
+                self.client.reparenting = ClientWindow
+            except (BadWindow, BadDrawable):
+                return
+            finally:
+                self.conn.core.DestroyWindow(self.client.frame)
+                self.client.frame = None
 
 class TitlebarConfig(object):
     def __init__(self, manager, fg_color, bg_color, font):
@@ -355,11 +361,12 @@ class InputFieldTitlebar(Titlebar):
 
     def __init__(self, prompt="", initial_value="",
                  commit=lambda value: None, rollback=lambda: None,
-                 **kwargs):
+                 time=Time.CurrentTime, **kwargs):
         self.prompt = unicode(prompt)
         self.value = unicode(initial_value)
         self.commit = commit
         self.rollback = rollback
+        self.time = time
         super(InputFieldTitlebar, self).__init__(**kwargs)
 
     def draw(self, x=5):
@@ -379,19 +386,22 @@ class InputFieldTitlebar(Titlebar):
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         self.client.focus_override = self.window
-        if self.manager.current_focus == self.client:
-            # Override client focus.
-            self.client.focus()
+        try:
+            self.manager.focus(self.client, self.time)
+        except AttributeError:
+            pass
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         self.client.focus_override = None
-        if self.manager.current_focus == self.client:
-            # Revert focus to the client window.
-            self.client.focus()
+        try:
+            self.manager.ensure_focus(self.client, self.time)
+        except AttributeError:
+            pass
 
     @handler(KeyPressEvent)
     def handle_keypress(self, event):
+        self.time = event.time
         keysym = self.manager.keymap.lookup_key(event.detail, event.state)
         if keysym == XK_Escape:
             self.rollback()
@@ -446,27 +456,33 @@ class TitlebarDecorator(FrameDecorator):
                                              self.titlebar.config.height, 0))
 
     def compute_client_offset(self):
-        config = (self.titlebar.config if self.titlebar
-                                       else self.titlebar_configs[0])
+        config = (self.titlebar.config if self.titlebar else
+                  self.titlebar_configs[0])
         return Geometry(0, config.height, 0, config.height, None)
 
     def focus(self):
-        self.titlebar.config = self.titlebar_configs[1]
-        self.titlebar.draw()
+        if self.titlebar:
+            self.titlebar.config = self.titlebar_configs[1]
+            self.titlebar.draw()
         super(TitlebarDecorator, self).focus()
 
     def unfocus(self):
-        self.titlebar.config = self.titlebar_configs[0]
-        self.titlebar.draw()
+        if self.titlebar:
+            self.titlebar.config = self.titlebar_configs[0]
+            self.titlebar.draw()
         super(TitlebarDecorator, self).unfocus()
 
     def message(self, message):
-        self.titlebar.title = message
-        self.titlebar.draw()
+        if self.titlebar:
+            self.titlebar.title = message
+            self.titlebar.draw()
 
     def read_from_user(self, prompt, initial_value="",
                        continuation=lambda value: None,
-                       config=None):
+                       config=None,
+                       time=Time.CurrentTime):
+        if self.titlebar is None:
+            return
         if config is None:
             config = self.titlebar.config
         titlebar = self.titlebar
@@ -484,6 +500,7 @@ class TitlebarDecorator(FrameDecorator):
                                            parent=self.client.frame,
                                            geometry=titlebar.geometry,
                                            config=config,
+                                           time=time,
                                            prompt=prompt,
                                            initial_value=initial_value,
                                            commit=commit,

@@ -43,7 +43,10 @@ class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
             def name(atom):
                 return self.atoms.name(atom, "UTF-8", "replace")
             tags = map(name, client.properties.dim_tags)
-            decorator.read_from_user("Tags: ", ", ".join(tags), tags_changed)
+            decorator.read_from_user("Tags: ",
+                                     ", ".join(tags),
+                                     tags_changed,
+                                     time=event.time)
         decorator = TitlebarDecorator(self.conn, client,
                                       focused_config=self.focused_config,
                                       unfocused_config=self.unfocused_config,
@@ -53,7 +56,9 @@ class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
 if __name__ == "__main__":
     from optparse import OptionParser
     import logging
+    import pdb
     import sys
+    import traceback
     import xcb
 
     focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
@@ -94,11 +99,14 @@ if __name__ == "__main__":
 
     log = logging.getLogger("wm")
     log.debug("Using %s focus policy.", options.focus_mode)
-    wm = type("WM",
-              (focus_modes[options.focus_mode], BaseWM),
-              dict(title_font=options.title_font))(options.display)
     try:
+        wm = type("WM",
+                  (focus_modes[options.focus_mode], BaseWM),
+                  dict(title_font=options.title_font))(options.display)
         wm.start()
     except KeyboardInterrupt:
         log.info("Interrupt caught; shutting down.")
         wm.shutdown()
+    except:
+        traceback.print_exc()
+        pdb.post_mortem()

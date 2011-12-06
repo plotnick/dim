@@ -46,9 +46,14 @@ class FocusPolicyTestCase(WMTestCase):
         # The server, the window manager, and the client must agree on who
         # has the input focus.
         window = client.window
-        return (self.conn.core.GetInputFocus().reply().focus == window and
-                self.wm_thread.wm.current_focus and
-                self.wm_thread.wm.current_focus.window == window and
+        current_focus = self.conn.core.GetInputFocus().reply().focus
+        try:
+            wm_focus = self.wm_thread.wm.focus_list[0]
+        except IndexError:
+            wm_focus = None
+        return (current_focus == window and
+                wm_focus and
+                wm_focus.window == window and
                 client.focused)
 
     def make_focus_test(self, client):
