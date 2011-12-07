@@ -66,9 +66,11 @@ class StringBuffer(MutableSequence):
         if self.cursor <= len(self.buffer) - n:
             del self.buffer[self.cursor:self.cursor + n]
         else:
-            del self.buffer[self.cursor:]
             raise IndexError("end of buffer")
 
     def delete_backward_char(self, n=1):
-        self.backward_char(n)
-        self.delete_forward_char(n)
+        if self.cursor >= n:
+            del self.buffer[self.cursor - n:self.cursor]
+            self.cursor -= n
+        else:
+            raise IndexError("beginning of buffer")
