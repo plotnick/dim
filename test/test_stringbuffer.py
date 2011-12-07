@@ -20,10 +20,6 @@ class TestStringBuffer(unittest.TestCase):
         for i in range(len(buf)):
             self.assertEqual(buf[i], s[i])
         self.assertEqual(buf[1:-1], s[1:-1])
-        buf.insert(3, "z")
-        self.assertEqual(buf[3], "z")
-        del buf[3]
-        self.assertEqual(str(buf), s)
 
     def test_insert_char(self):
         buf = StringBuffer("abc")
@@ -79,6 +75,35 @@ class TestStringBuffer(unittest.TestCase):
         self.assertRaises(IndexError, lambda: buf.forward_char(4))
         self.assertEqual(buf.cursor, 3)
 
+    def test_backward_word(self):
+        buf = StringBuffer("abc xyz-123")
+        buf.backward_word()
+        self.assertEqual(buf.cursor, 8)
+
+        buf.backward_word(2)
+        self.assertEqual(buf.cursor, 0)
+        buf.backward_word()
+        self.assertEqual(buf.cursor, 0)
+
+        buf.end_of_buffer()
+        buf.backward_word(word_chars=r"[\w-]")
+        self.assertEqual(buf.cursor, 4)
+
+    def test_forward_word(self):
+        buf = StringBuffer("abc xyz-123")
+        buf.beginning_of_buffer()
+        buf.forward_word()
+        self.assertEqual(buf.cursor, 3)
+
+        buf.forward_word(2)
+        self.assertEqual(buf.cursor, len(buf))
+        buf.forward_word()
+        self.assertEqual(buf.cursor, len(buf))
+
+        buf.cursor = 3
+        buf.forward_word(word_chars=r"[\w-]")
+        self.assertEqual(buf.cursor, len(buf))
+
     def test_delete_backward_char(self):
         buf = StringBuffer("abc")
         buf.delete_backward_char()
@@ -106,6 +131,21 @@ class TestStringBuffer(unittest.TestCase):
         buf.beginning_of_buffer()
         self.assertRaises(IndexError, lambda: buf.delete_forward_char(4))
         self.assertBuffer(buf, "abc", 0)
+
+    def test_delete_backward_word(self):
+        buf = StringBuffer("abc xyz-123")
+        buf.delete_backward_word()
+        self.assertBuffer(buf, "abc xyz-", 8)
+        buf.delete_backward_word(2)
+        self.assertBuffer(buf, "", 0)
+
+    def test_delete_forward_word(self):
+        buf = StringBuffer("abc xyz-123")
+        buf.beginning_of_buffer()
+        buf.delete_forward_word()
+        self.assertBuffer(buf, " xyz-123", 0)
+        buf.delete_forward_word(2)
+        self.assertBuffer(buf, "", 0)
 
 if __name__ == "__main__":
     unittest.main()

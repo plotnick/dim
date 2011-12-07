@@ -1,11 +1,14 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from collections import MutableSequence
+from collections import Sequence
+import re
 
 __all__ = ["StringBuffer"]
 
-class StringBuffer(MutableSequence):
-    """A mutable string buffer class."""
+word_chars = re.compile(r"\w", re.UNICODE)
+
+class StringBuffer(Sequence):
+    """A string buffer supporting cursor-relative modifications."""
 
     def __init__(self, initial_value):
         self.buffer = list(unicode(initial_value))
@@ -24,22 +27,10 @@ class StringBuffer(MutableSequence):
         return iter(self.buffer)
 
     def __getitem__(self, index):
-        if isinstance(index, slice):
-            return u"".join(self.buffer[index])
-        else:
-            return self.buffer[index]
-
-    def __setitem__(self, index, value):
-        self.buffer[index] = value
-
-    def __delitem__(self, index):
-        del self.buffer[index]
-
-    def insert(self, index, value):
-        self.buffer.insert(index, value)
+        return unicode(self)[index]
 
     def insert_char(self, char):
-        self.insert(self.cursor, char)
+        self.buffer.insert(self.cursor, char)
         self.cursor += 1
 
     def beginning_of_buffer(self):
@@ -62,15 +53,52 @@ class StringBuffer(MutableSequence):
             self.beginning_of_buffer()
             raise IndexError("beginning of buffer")
 
+    def forward_word(self, n=1, word_chars=word_chars):
+        for i in range(n):
+            while (self.cursor < len(self.buffer) and
+                   not re.match(word_chars, self.buffer[self.cursor])):
+                self.cursor += 1
+            while (self.cursor < len(self.buffer) and
+                   re.match(word_chars, self.buffer[self.cursor])):
+                self.cursor += 1
+
+    def backward_word(self, n=1, word_chars=word_chars):
+        for i in range(n):
+            self.cursor -= 1
+            while (self.cursor >= 0 and
+                   not re.match(word_chars, self.buffer[self.cursor])):
+                self.cursor -= 1
+            while (self.cursor >= 0 and
+                   re.match(word_chars, self.buffer[self.cursor])):
+                self.cursor -= 1
+            self.cursor += 1
+
     def delete_forward_char(self, n=1):
-        if self.cursor <= len(self.buffer) - n:
-            del self.buffer[self.cursor:self.cursor + n]
-        else:
+        if self.cursor > len(self.buffer) - n:
             raise IndexError("end of buffer")
+        del self.buffer[self.cursor:self.cursor + n]
 
     def delete_backward_char(self, n=1):
-        if self.cursor >= n:
-            del self.buffer[self.cursor - n:self.cursor]
-            self.cursor -= n
-        else:
+        if self.cursor < n:
             raise IndexError("beginning of buffer")
+        del self.buffer[self.cursor - n:self.cursor]
+        self.cursor -= n
+
+    def delete_forward_word(self, n=1, word_chars=word_chars):
+        mark = self.cursor
+        try:
+            self.forward_word(n, word_chars)
+            del self.buffer[mark:self.cursor]
+        except IndexError:
+            raise
+        finally:
+            self.cursor = mark
+
+    def delete_backward_word(self, n=1, word_chars=word_chars):
+        mark = self.cursor
+        try:
+            self.backward_word(n, word_chars)
+            del self.buffer[self.cursor:mark]
+        except IndexError:
+            self.cursor = mark
+            raise
