@@ -6,6 +6,8 @@ from xcb.xproto import *
 
 from keysym import *
 
+__all__ = ["Bindings"]
+
 def all_combinations(sequences):
     """Given a sequence of sequences, recursively yield all combinations of
     each element of the first sequence with all combinations of the rest of
@@ -35,6 +37,7 @@ class Bindings(object):
         self.keymap = keymap
         self.modmap = modmap
         self.butmap = butmap
+        self.keymap.scry_modifiers(self.modmap)
 
     def parse_bindings(self, raw_bindings, ensure_symbol):
         """A binding maps a symbol together with a set of modifiers to some
