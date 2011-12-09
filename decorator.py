@@ -7,6 +7,7 @@ from threading import Timer
 
 from xcb.xproto import *
 
+from bindings import *
 from client import *
 from color import *
 from event import *
@@ -351,6 +352,9 @@ class SimpleTitlebar(Titlebar):
             self.client.properties.unregister_change_handler(property_name,
                                                              self.name_changed)
 
+class AbortEdit(Exception):
+    pass
+
 class InputFieldTitlebar(Titlebar):
     """A one-line, editable input field."""
 
@@ -360,15 +364,39 @@ class InputFieldTitlebar(Titlebar):
                   EventMask.KeyPress |
                   EventMask.FocusChange)
 
+    key_bindings = KeyBindingMap({
+        XK_Escape: lambda self: self.abort(self.rollback),
+        XK_Return: lambda self: self.abort(self.commit, unicode(self.buffer)),
+        XK_BackSpace: lambda self: self.buffer.delete_backward_char(),
+        ("meta", XK_BackSpace): lambda self: self.buffer.delete_backward_word(),
+        XK_Delete: lambda self: self.buffer.delete_forward_char(),
+        XK_Left: lambda self: self.buffer.backward_char(),
+        XK_Right: lambda self: self.buffer.forward_char(),
+        XK_Home: lambda self: self.buffer.beginning_of_buffer(),
+        XK_End: lambda self: self.buffer.end_of_buffer(),
+        ("control", "f"): lambda self: self.buffer.forward_char(),
+        ("control", "b"): lambda self: self.buffer.backward_char(),
+        ("control", "a"): lambda self: self.buffer.beginning_of_buffer(),
+        ("control", "e"): lambda self: self.buffer.end_of_buffer(),
+        ("meta", "f"): lambda self: self.buffer.forward_word(),
+        ("meta", "b"): lambda self: self.buffer.backward_word(),
+        ("control", "d"): lambda self: self.buffer.delete_forward_char(),
+        ("meta", "d"): lambda self: self.buffer.delete_forward_word()
+    })
+
     def __init__(self, prompt="", initial_value="",
                  commit=lambda value: None, rollback=lambda: None,
                  time=Time.CurrentTime, **kwargs):
+        super(InputFieldTitlebar, self).__init__(**kwargs)
         self.prompt = unicode(prompt)
         self.buffer = StringBuffer(initial_value)
         self.commit = commit
         self.rollback = rollback
         self.time = time
-        super(InputFieldTitlebar, self).__init__(**kwargs)
+        self.bindings = Bindings(self.key_bindings, {},
+                                 self.manager.keymap,
+                                 self.manager.modmap,
+                                 self.manager.butmap)
 
     def draw(self, x=5):
         super(InputFieldTitlebar, self).draw()
@@ -407,6 +435,10 @@ class InputFieldTitlebar(Titlebar):
         timer.daemon = True
         timer.start()
 
+    def abort(self, continuation, *args):
+        continuation(*args)
+        raise AbortEdit
+
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         self.client.focus_override = self.window
@@ -426,34 +458,29 @@ class InputFieldTitlebar(Titlebar):
     @handler(KeyPressEvent)
     def handle_keypress(self, event):
         self.time = event.time
-        keysym = self.manager.keymap.lookup_key(event.detail, event.state)
         try:
-            if keysym == XK_Escape:
-                self.rollback()
+            action = self.bindings[event]
+        except KeyError as e:
+            # No binding; assume a self-inserting character unless any
+            # modifiers are present.
+            symbol, state = e.args
+            keymap = self.manager.keymap
+            if next(self.bindings.modsets(state)):
+                self.flash()
                 return
-            elif keysym == XK_Return or keysym == XK_KP_Enter:
-                self.commit(unicode(self.buffer))
-                return
-            elif keysym == XK_BackSpace:
-                self.buffer.delete_backward_char()
-            elif keysym == XK_Delete or keysym == XK_KP_Delete:
-                self.buffer.delete_forward_char()
-            elif keysym == XK_Left or keysym == XK_KP_Left:
-                self.buffer.backward_char()
-            elif keysym == XK_Right or keysym == XK_KP_Right:
-                self.buffer.forward_char()
-            elif keysym == XK_Home or keysym == XK_KP_Home:
-                self.buffer.beginning_of_buffer()
-            elif keysym == XK_End or keysym == XK_KP_End:
-                self.buffer.end_of_buffer()
-            else:
-                char = keysym_to_string(keysym)
-                if char:
-                    self.buffer.insert_char(char)
-        except IndexError:
-            self.flash()
+            char = keysym_to_string(symbol)
+            if char:
+                self.buffer.insert_char(char)
+                self.draw()
         else:
-            self.draw()
+            try:
+                action(self)
+            except IndexError:
+                self.flash()
+            except AbortEdit:
+                return
+            else:
+                self.draw()
 
 class TitlebarDecorator(FrameDecorator):
     """Decorate a client with a multi-purpose titlebar."""

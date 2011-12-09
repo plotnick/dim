@@ -16,7 +16,7 @@ from decorator import Decorator, FrameDecorator
 from event import UnhandledEvent, EventHandler, handler
 from font import FontCache
 from geometry import *
-from keymap import KeymapError, KeyboardMap
+from keymap import *
 from properties import *
 from xutil import *
 
@@ -112,7 +112,9 @@ class WindowManager(EventHandler):
         self.colors = ColorCache(self.conn, self.screen.default_colormap)
         self.cursors = FontCursor(self.conn)
         self.fonts = FontCache(self.conn)
-        self.keymap = KeyboardMap(self.conn)
+        self.modmap = ModifierMap(self.conn)
+        self.keymap = KeyboardMap(self.conn, modmap=self.modmap)
+        self.butmap = PointerMap(self.conn)
         self.properties = self.property_class(self.conn,
                                               self.screen.root,
                                               self.atoms)
