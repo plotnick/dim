@@ -147,17 +147,81 @@ class TestStringBuffer(unittest.TestCase):
         buf.delete_forward_word(2)
         self.assertBuffer(buf, "", 0)
 
+    def test_kill(self):
+        buf = StringBuffer("xyzzy")
+        buf.kill(1, len(buf) - 1)
+        self.assertBuffer(buf, "xy", len(buf) - 1)
+
+        buf.yank()
+        self.assertBuffer(buf, "xyzzy", len(buf) - 1)
+        buf.yank()
+        self.assertBuffer(buf, "xyzzyzzy", len(buf) - 1)
+
+    def test_append_kill(self):
+        buf = StringBuffer("abc")
+        buf.kill(0, 1)
+        buf.kill(0, 1)
+        self.assertBuffer(buf, "c", 0)
+
+        buf.yank()
+        self.assertBuffer(buf, "abc", 2)
+
+    def test_yank_pop(self):
+        buf = StringBuffer("foobarbaz")
+        buf.kill(0, 3); buf.beginning_of_buffer()
+        buf.kill(0, 3); buf.beginning_of_buffer()
+        buf.kill(0, 3)
+        self.assertBuffer(buf, "", 0)
+
+        self.assertRaises(IndexError, buf.yank_pop)
+
+        buf.yank()
+        self.assertBuffer(buf, "baz", len(buf))
+        buf.yank_pop()
+        self.assertBuffer(buf, "bar", len(buf))
+        buf.yank_pop()
+        self.assertBuffer(buf, "foo", len(buf))
+
+    def test_kill_word(self):
+        buf = StringBuffer("foo bar baz")
+        buf.cursor = 3
+        buf.kill_word()
+        self.assertBuffer(buf, "foo baz", 3)
+
+        buf.kill_word() # append to last kill
+        self.assertBuffer(buf, "foo", len(buf))
+
+        buf.yank()
+        self.assertBuffer(buf, "foo bar baz", len(buf))
+
+    def test_backward_kill_word(self):
+        buf = StringBuffer("foo bar baz")
+        buf.backward_kill_word()
+        self.assertBuffer(buf, "foo bar ", len(buf))
+
+        buf.backward_kill_word() # prepend to last kill
+        self.assertBuffer(buf, "foo ", len(buf))
+
+        buf.yank()
+        self.assertBuffer(buf, "foo bar baz", len(buf))
+
     def test_kill_line(self):
-        buf = StringBuffer("foo bar")
+        buf = StringBuffer("foobar")
         buf.cursor = 3
         buf.kill_line()
         self.assertBuffer(buf, "foo", 3)
 
+        buf.yank()
+        self.assertBuffer(buf, "foobar", len(buf))
+
     def test_kill_whole_line(self):
-        buf = StringBuffer("foo bar")
+        buf = StringBuffer("foobar")
         buf.cursor = 3
         buf.kill_whole_line()
         self.assertBuffer(buf, "", 0)
+
+        buf.yank()
+        self.assertBuffer(buf, "foobar", len(buf))
 
 if __name__ == "__main__":
     unittest.main()

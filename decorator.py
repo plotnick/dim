@@ -367,7 +367,7 @@ class InputFieldTitlebar(Titlebar):
     key_bindings = KeyBindingMap({XK_Return: "commit",
                                   XK_Escape: "rollback",
                                   XK_BackSpace: "delete-backward-char",
-                                  ("meta", XK_BackSpace): "delete-backward-word",
+                                  ("meta", XK_BackSpace): "backward-kill-word",
                                   XK_Delete: "delete-forward-char",
                                   XK_Left: "backward-char",
                                   XK_Right: "forward-char",
@@ -380,9 +380,11 @@ class InputFieldTitlebar(Titlebar):
                                   ("meta", "f"): "forward-word",
                                   ("meta", "b"): "backward-word",
                                   ("control", "d"): "delete-forward-char",
-                                  ("meta", "d"): "delete-forward-word",
+                                  ("meta", "d"): "kill-word",
                                   ("control", "k"): "kill-line",
-                                  ("control", "u"): "kill-whole-line"})
+                                  ("control", "u"): "kill-whole-line",
+                                  ("control", "y"): "yank",
+                                  ("meta", "y"): "yank-pop"})
 
     button_bindings = ButtonBindingMap({})
 
