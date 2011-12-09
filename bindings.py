@@ -6,7 +6,7 @@ from xcb.xproto import *
 
 from keysym import *
 
-__all__ = ["Bindings"]
+__all__ = ["KeyBindingMap", "ButtonBindingMap", "Bindings"]
 
 def all_combinations(sequences):
     """Given a sequence of sequences, recursively yield all combinations of
@@ -30,16 +30,11 @@ def ensure_keysym(x):
     else:
         raise exceptions.ValueError("invalid keysym designator '%s'" % x)
 
-class Bindings(object):
-    def __init__(self, key_bindings, button_bindings, keymap, modmap, butmap):
-        self.key_bindings = self.parse_bindings(key_bindings, ensure_keysym)
-        self.button_bindings = self.parse_bindings(button_bindings, int)
-        self.keymap = keymap
-        self.modmap = modmap
-        self.butmap = butmap
-        self.keymap.scry_modifiers(self.modmap)
+class BindingMap(dict):
+    def __init__(self, mapping):
+        return super(BindingMap, self).__init__(self.parse_bindings(mapping))
 
-    def parse_bindings(self, raw_bindings, ensure_symbol):
+    def parse_bindings(self, mapping):
         """A binding maps a symbol together with a set of modifiers to some
         value. The former is represented by a designator for a sequence
         whose last element is a designator for a symbol and whose other
@@ -47,13 +42,38 @@ class Bindings(object):
         a keysym or a pointer button number, depending on whether the
         binding is a key or pointer binding; the ensure_symbol function
         should accept such a designator and return an appropriate symbol."""
-        bindings = {}
-        for key, value in raw_bindings.items():
+        try:
+            iterable = mapping.iteritems()
+        except AttributeError:
+            iterable = iter(mapping)
+        for key, value in iterable:
             key = ensure_sequence(key)
             modifiers = frozenset(mod.lower() for mod in key[:-1])
-            symbol = ensure_symbol(key[-1])
-            bindings[(modifiers, symbol)] = value
-        return bindings
+            symbol = self.ensure_symbol(key[-1])
+            yield ((modifiers, symbol), value)
+
+class KeyBindingMap(BindingMap):
+    @staticmethod
+    def ensure_symbol(x):
+        return ensure_keysym(x)
+
+class ButtonBindingMap(BindingMap):
+    @staticmethod
+    def ensure_symbol(x):
+        return int(x)
+
+class Bindings(object):
+    def __init__(self, key_bindings, button_bindings, keymap, modmap, butmap):
+        self.key_bindings = (key_bindings
+                             if isinstance(key_bindings, KeyBindingMap)
+                             else KeyBindingMap(key_bindings))
+        self.button_bindings = (button_bindings
+                                if isinstance(button_bindings, ButtonBindingMap)
+                                else ButtonBindingMap(button_bindings))
+        self.keymap = keymap
+        self.modmap = modmap
+        self.butmap = butmap
+        self.keymap.scry_modifiers(self.modmap)
 
     def modifiers(self, bit):
         """Yield each of the modifiers bound to the given bucky bit."""
@@ -86,7 +106,7 @@ class Bindings(object):
                 return bindings[(modset, symbol)]
             except KeyError:
                 continue
-        raise KeyError((symbol, state))
+        raise KeyError(symbol, state)
 
     def key_binding(self, keycode, state):
         return self.get_binding(self.key_bindings,
