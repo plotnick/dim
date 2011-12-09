@@ -364,38 +364,45 @@ class InputFieldTitlebar(Titlebar):
                   EventMask.KeyPress |
                   EventMask.FocusChange)
 
-    key_bindings = KeyBindingMap({
-        XK_Escape: lambda self: self.abort(self.rollback),
-        XK_Return: lambda self: self.abort(self.commit, unicode(self.buffer)),
-        XK_BackSpace: lambda self: self.buffer.delete_backward_char(),
-        ("meta", XK_BackSpace): lambda self: self.buffer.delete_backward_word(),
-        XK_Delete: lambda self: self.buffer.delete_forward_char(),
-        XK_Left: lambda self: self.buffer.backward_char(),
-        XK_Right: lambda self: self.buffer.forward_char(),
-        XK_Home: lambda self: self.buffer.beginning_of_buffer(),
-        XK_End: lambda self: self.buffer.end_of_buffer(),
-        ("control", "f"): lambda self: self.buffer.forward_char(),
-        ("control", "b"): lambda self: self.buffer.backward_char(),
-        ("control", "a"): lambda self: self.buffer.beginning_of_buffer(),
-        ("control", "e"): lambda self: self.buffer.end_of_buffer(),
-        ("meta", "f"): lambda self: self.buffer.forward_word(),
-        ("meta", "b"): lambda self: self.buffer.backward_word(),
-        ("control", "d"): lambda self: self.buffer.delete_forward_char(),
-        ("meta", "d"): lambda self: self.buffer.delete_forward_word(),
-        ("control", "k"): lambda self: self.buffer.kill_line(),
-        ("control", "u"): lambda self: self.buffer.kill_whole_line()
-    })
+    key_bindings = KeyBindingMap({XK_Return: "commit",
+                                  XK_Escape: "rollback",
+                                  XK_BackSpace: "delete-backward-char",
+                                  ("meta", XK_BackSpace): "delete-backward-word",
+                                  XK_Delete: "delete-forward-char",
+                                  XK_Left: "backward-char",
+                                  XK_Right: "forward-char",
+                                  XK_Home: "beginning-of-buffer",
+                                  XK_End: "end-of-buffer",
+                                  ("control", "f"): "forward-char",
+                                  ("control", "b"): "backward-char",
+                                  ("control", "a"): "beginning-of-buffer",
+                                  ("control", "e"): "end-of-buffer",
+                                  ("meta", "f"): "forward-word",
+                                  ("meta", "b"): "backward-word",
+                                  ("control", "d"): "delete-forward-char",
+                                  ("meta", "d"): "delete-forward-word",
+                                  ("control", "k"): "kill-line",
+                                  ("control", "u"): "kill-whole-line"})
 
-    def __init__(self, prompt="", initial_value="",
-                 commit=lambda value: None, rollback=lambda: None,
-                 time=Time.CurrentTime, **kwargs):
+    button_bindings = ButtonBindingMap({})
+
+    def __init__(self,
+                 prompt="",
+                 initial_value="",
+                 commit=lambda value: None,
+                 rollback=lambda: None,
+                 time=Time.CurrentTime,
+                 key_bindings=key_bindings,
+                 button_bindings=button_bindings,
+                 **kwargs):
         super(InputFieldTitlebar, self).__init__(**kwargs)
         self.prompt = unicode(prompt)
         self.buffer = StringBuffer(initial_value)
-        self.commit = commit
+        self.commit = lambda: commit(unicode(self.buffer))
         self.rollback = rollback
         self.time = time
-        self.bindings = Bindings(self.key_bindings, {},
+        self.bindings = Bindings(key_bindings,
+                                 button_bindings,
                                  self.manager.keymap,
                                  self.manager.modmap,
                                  self.manager.butmap)
@@ -437,10 +444,6 @@ class InputFieldTitlebar(Titlebar):
         timer.daemon = True
         timer.start()
 
-    def abort(self, continuation, *args):
-        continuation(*args)
-        raise AbortEdit
-
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         self.client.focus_override = self.window
@@ -464,25 +467,31 @@ class InputFieldTitlebar(Titlebar):
             action = self.bindings[event]
         except KeyError as e:
             # No binding; assume a self-inserting character unless any
-            # modifiers are present.
+            # interesting modifiers are present.
             symbol, state = e.args
             keymap = self.manager.keymap
             if next(self.bindings.modsets(state)):
                 self.flash()
-                return
-            char = keysym_to_string(symbol)
-            if char:
-                self.buffer.insert_char(char)
-                self.draw()
-        else:
-            try:
-                action(self)
-            except IndexError:
-                self.flash()
-            except AbortEdit:
-                return
             else:
-                self.draw()
+                char = keysym_to_string(symbol)
+                if char:
+                    self.buffer.insert_char(char)
+                    self.draw()
+        else:
+            # Actions are strings naming attributes of either ourself or
+            # our buffer. The values must be zero-argument functions.
+            name = action.replace("-", "_")
+            method = getattr(self, name, None)
+            if method:
+                method()
+            else:
+                method = getattr(self.buffer, name)
+                try:
+                    method()
+                except IndexError:
+                    self.flash()
+                else:
+                    self.draw()
 
 class TitlebarDecorator(FrameDecorator):
     """Decorate a client with a multi-purpose titlebar."""
