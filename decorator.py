@@ -381,7 +381,9 @@ class InputFieldTitlebar(Titlebar):
         ("meta", "f"): lambda self: self.buffer.forward_word(),
         ("meta", "b"): lambda self: self.buffer.backward_word(),
         ("control", "d"): lambda self: self.buffer.delete_forward_char(),
-        ("meta", "d"): lambda self: self.buffer.delete_forward_word()
+        ("meta", "d"): lambda self: self.buffer.delete_forward_word(),
+        ("control", "k"): lambda self: self.buffer.kill_line(),
+        ("control", "u"): lambda self: self.buffer.kill_whole_line()
     })
 
     def __init__(self, prompt="", initial_value="",

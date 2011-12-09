@@ -102,3 +102,10 @@ class StringBuffer(Sequence):
         except IndexError:
             self.cursor = mark
             raise
+
+    def kill_line(self):
+        del self.buffer[self.cursor:]
+
+    def kill_whole_line(self):
+        del self.buffer[:]
+        self.cursor = 0

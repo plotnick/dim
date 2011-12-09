@@ -147,5 +147,17 @@ class TestStringBuffer(unittest.TestCase):
         buf.delete_forward_word(2)
         self.assertBuffer(buf, "", 0)
 
+    def test_kill_line(self):
+        buf = StringBuffer("foo bar")
+        buf.cursor = 3
+        buf.kill_line()
+        self.assertBuffer(buf, "foo", 3)
+
+    def test_kill_whole_line(self):
+        buf = StringBuffer("foo bar")
+        buf.cursor = 3
+        buf.kill_whole_line()
+        self.assertBuffer(buf, "", 0)
+
 if __name__ == "__main__":
     unittest.main()
