@@ -4,7 +4,10 @@ from collections import deque, Sequence
 from functools import wraps
 import re
 
-__all__ = ["StringBuffer"]
+__all__ = ["CommandError", "StringBuffer"]
+
+class CommandError(Exception):
+    pass
 
 def command(method):
     """A decorator for interactive commands."""
@@ -29,7 +32,7 @@ class StringBuffer(Sequence):
 
     def __init__(self, initial_value="", kill_ring_max=10):
         self.buffer = list(unicode(initial_value))
-        self.cursor = len(self.buffer)
+        self.point = len(self.buffer)
         self.kill_ring = deque([], kill_ring_max)
         self.last_command = ""
         self.command_level = 0
@@ -49,10 +52,25 @@ class StringBuffer(Sequence):
     def __getitem__(self, index):
         return unicode(self)[index]
 
+    @property
+    def point(self):
+        return self._point
+
+    @point.setter
+    def point(self, n):
+        if n < 0:
+            self._point = 0
+            raise IndexError("beginning of buffer")
+        elif n > len(self):
+            self._point = len(self)
+            raise IndexError("end of buffer")
+        else:
+            self._point = n
+
     @command
     def insert(self, chars):
-        self.buffer[self.cursor:self.cursor] = list(chars)
-        self.cursor += len(chars)
+        self.buffer[self.point:self.point] = list(chars)
+        self.point += len(chars)
 
     @command
     def insert_char(self, char, n=1):
@@ -65,11 +83,10 @@ class StringBuffer(Sequence):
     @command
     def yank_pop(self):
         if not self.last_command.startswith("yank"):
-            raise IndexError("previous command was not a yank")
-        mark = self.cursor
-        self.cursor -= len(self.kill_ring[-1])
-        assert self.cursor >= 0
-        del self.buffer[self.cursor:mark]
+            raise CommandError("previous command was not a yank")
+        mark = self.point
+        self.point -= len(self.kill_ring[-1])
+        del self.buffer[self.point:mark]
         self.kill_ring.rotate(1)
         self.yank()
 
@@ -88,107 +105,101 @@ class StringBuffer(Sequence):
             # Make a new entry in the kill ring.
             self.kill_ring.append(kill)
         del self.buffer[start:end]
-        self.cursor = start
+        self.point = start
 
     @command
     def beginning_of_buffer(self):
-        self.cursor = 0
+        self.point = 0
 
     @command
     def end_of_buffer(self):
-        self.cursor = len(self.buffer)
+        self.point = len(self.buffer)
 
     @command
     def forward_char(self, n=1):
-        if self.cursor <= len(self.buffer) - n:
-            self.cursor += n
-        else:
-            self.end_of_buffer()
-            raise IndexError("end of buffer")
+        self.point += n
 
     @command
     def backward_char(self, n=1):
-        if self.cursor >= n:
-            self.cursor -= n
-        else:
-            self.beginning_of_buffer()
-            raise IndexError("beginning of buffer")
+        self.point -= n
 
     @command
     def forward_word(self, n=1, word_chars=word_chars):
-        for i in range(n):
-            while (self.cursor < len(self.buffer) and
-                   not re.match(word_chars, self.buffer[self.cursor])):
-                self.cursor += 1
-            while (self.cursor < len(self.buffer) and
-                   re.match(word_chars, self.buffer[self.cursor])):
-                self.cursor += 1
+        try:
+            for i in range(n):
+                while not re.match(word_chars, self.buffer[self.point]):
+                    self.point += 1
+                while re.match(word_chars, self.buffer[self.point]):
+                    self.point += 1
+        except IndexError:
+            return
 
     @command
     def backward_word(self, n=1, word_chars=word_chars):
-        for i in range(n):
-            self.cursor -= 1
-            while (self.cursor >= 0 and
-                   not re.match(word_chars, self.buffer[self.cursor])):
-                self.cursor -= 1
-            while (self.cursor >= 0 and
-                   re.match(word_chars, self.buffer[self.cursor])):
-                self.cursor -= 1
-            self.cursor += 1
+        try:
+            self.point -= 1
+            for i in range(n):
+                while not re.match(word_chars, self.buffer[self.point]):
+                    self.point -= 1
+                while re.match(word_chars, self.buffer[self.point]):
+                    self.point -= 1
+            self.point += 1
+        except IndexError:
+            return
 
     @command
     def delete_forward_char(self, n=1):
-        if self.cursor > len(self.buffer) - n:
+        if self.point > len(self.buffer) - n:
             raise IndexError("end of buffer")
-        del self.buffer[self.cursor:self.cursor + n]
+        del self.buffer[self.point:self.point + n]
 
     @command
     def delete_backward_char(self, n=1):
-        if self.cursor < n:
+        if self.point < n:
             raise IndexError("beginning of buffer")
-        del self.buffer[self.cursor - n:self.cursor]
-        self.cursor -= n
+        del self.buffer[self.point - n:self.point]
+        self.point -= n
 
     @command
     def delete_forward_word(self, n=1, word_chars=word_chars):
-        mark = self.cursor
+        mark = self.point
         try:
             self.forward_word(n, word_chars)
-            del self.buffer[mark:self.cursor]
+            del self.buffer[mark:self.point]
         except IndexError:
             raise
         finally:
-            self.cursor = mark
+            self.point = mark
 
     @command
     def delete_backward_word(self, n=1, word_chars=word_chars):
-        mark = self.cursor
+        mark = self.point
         try:
             self.backward_word(n, word_chars)
-            del self.buffer[self.cursor:mark]
+            del self.buffer[self.point:mark]
         except IndexError:
-            self.cursor = mark
+            self.point = mark
             raise
 
     @command
     def kill_word(self, n=1, word_chars=word_chars):
-        mark = self.cursor
+        mark = self.point
         self.forward_word(n, word_chars)
-        self.kill(mark, self.cursor)
+        self.kill(mark, self.point)
 
     @command
     def backward_kill_word(self, n=1, word_chars=word_chars):
-        mark = self.cursor
+        mark = self.point
         self.backward_word(n, word_chars)
-        self.kill(mark, self.cursor)
+        self.kill(mark, self.point)
 
     @command
     def kill_line(self):
-        mark = self.cursor
+        mark = self.point
         self.end_of_buffer()
-        self.kill(mark, self.cursor)
+        self.kill(mark, self.point)
 
     @command
     def kill_whole_line(self):
         self.end_of_buffer()
-        self.kill(0, self.cursor)
+        self.kill(0, self.point)

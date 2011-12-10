@@ -14,7 +14,7 @@ from event import *
 from font import text_width
 from geometry import *
 from keysym import *
-from stringbuffer import StringBuffer
+from stringbuffer import *
 from xutil import textitem16
 
 __all__ = ["Decorator", "BorderHighlightFocus", "FrameDecorator",
@@ -424,7 +424,7 @@ class InputFieldTitlebar(Titlebar):
             x += draw_string(x, self.buffer)
 
         # Draw an xor rectangle as a cursor.
-        c = self.buffer.cursor
+        c = self.buffer.point
         n = len(self.buffer)
         x -= self.config.text_width(self.buffer[c:])
         w = self.config.text_width(" " if c >= n else self.buffer[c])
@@ -490,7 +490,7 @@ class InputFieldTitlebar(Titlebar):
                 method = getattr(self.buffer, name)
                 try:
                     method()
-                except IndexError:
+                except (IndexError, CommandError):
                     self.flash()
                 else:
                     self.draw()
