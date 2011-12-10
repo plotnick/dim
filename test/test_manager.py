@@ -342,6 +342,7 @@ class TestWMStates(WMTestCase):
     geometry = Geometry(0, 0, 100, 100, 1)
 
     def test_withdrawn_normal(self):
+        """Withdrawn → Normal state transition"""
         client = self.add_client(TestClient(self.geometry))
         client.wm_hints = WMHints(initial_state=WMState.NormalState)
         client.map()
@@ -350,6 +351,7 @@ class TestWMStates(WMTestCase):
                            client.wm_state == WMState.NormalState))
 
     def test_withdrawn_iconic(self):
+        """Withdrawn → Iconic state transition"""
         client = self.add_client(TestClient(self.geometry))
         client.wm_hints = WMHints(initial_state=WMState.IconicState)
         client.map()
@@ -358,6 +360,7 @@ class TestWMStates(WMTestCase):
                            client.wm_state == WMState.IconicState))
 
     def test_normal_withdrawn(self):
+        """Normal → Withdrawn state transition"""
         client = self.add_client(TestClient(self.geometry))
         client.wm_hints = WMHints(initial_state=WMState.NormalState)
         client.map()
@@ -371,6 +374,7 @@ class TestWMStates(WMTestCase):
                            client.wm_state == WMState.WithdrawnState))
 
     def test_normal_iconic(self):
+        """Normal → Iconic state transition"""
         client = self.add_client(TestClient(self.geometry))
         client.wm_hints = WMHints(initial_state=WMState.NormalState)
         client.map()
