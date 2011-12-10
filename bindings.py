@@ -31,21 +31,27 @@ def ensure_keysym(x):
         raise exceptions.ValueError("invalid keysym designator '%s'" % x)
 
 class BindingMap(dict):
+    """A dictionary of bindings which is parsed at initialization time.
+
+    A binding maps a symbol together with a set of modifiers to some value.
+    The former is represented by a designator for a sequence whose last
+    element is a designator for a symbol and whose other elements are
+    modifier names. The symbol is either a designator for a keysym or a
+    logical button number; the ensure_symbol method should accept such a
+    designator and return a corresponding symbol."""
+
     def __init__(self, mapping):
         return super(BindingMap, self).__init__(self.parse_bindings(mapping))
 
-    def parse_bindings(self, mapping):
-        """A binding maps a symbol together with a set of modifiers to some
-        value. The former is represented by a designator for a sequence
-        whose last element is a designator for a symbol and whose other
-        elements are modifier names. The symbol is either a designator for
-        a keysym or a pointer button number, depending on whether the
-        binding is a key or pointer binding; the ensure_symbol function
-        should accept such a designator and return an appropriate symbol."""
+    def parse_bindings(self, bindings={}):
+        """Given either a mapping object or a sequence of (key, value)
+        pairs, parse the keys as binding specifications and yield new
+        (key, value) tuples, where each key is a tuple consisting of a
+        (possibly empty) frozen set of modifiers and a symbol."""
         try:
-            iterable = mapping.iteritems()
+            iterable = bindings.iteritems()
         except AttributeError:
-            iterable = iter(mapping)
+            iterable = iter(bindings)
         for key, value in iterable:
             key = ensure_sequence(key)
             modifiers = frozenset(mod.lower() for mod in key[:-1])
@@ -53,16 +59,28 @@ class BindingMap(dict):
             yield ((modifiers, symbol), value)
 
 class KeyBindingMap(BindingMap):
-    @staticmethod
-    def ensure_symbol(x):
+    def ensure_symbol(self, x):
         return ensure_keysym(x)
 
 class ButtonBindingMap(BindingMap):
-    @staticmethod
-    def ensure_symbol(x):
+    def ensure_symbol(self, x):
         return int(x)
 
 class Bindings(object):
+    """Key and button bindings are specified using keysyms, logical button
+    numbers, and symbolic modifier names. However, the detail and state
+    fields of X KeyPress/Release and ButtonPress/Release events represent
+    only the physical state of the corresponding device: keycodes, physical
+    buttons, and raw modifier bits.
+
+    This class provides a mapping from the physical to the logical
+    representation. Keysyms and logical button numbers are resolved using
+    the current keyboard, modifier, and pointer button maps. Modifiers are
+    handled by generating all of the possible sets of symbolic modifiers
+    that correspond to a given physical state. Together, those two objects
+    (the symbol and the modifier set) provide a key for lookup in the
+    appropriate bindings table."""
+
     def __init__(self, key_bindings, button_bindings, keymap, modmap, butmap):
         self.key_bindings = (key_bindings
                              if isinstance(key_bindings, KeyBindingMap)
@@ -78,6 +96,10 @@ class Bindings(object):
     def modifiers(self, bit):
         """Yield each of the modifiers bound to the given bucky bit."""
         if bit == KeyButMask.Shift:
+            # Shift is special, inasmuch as we allow bindings that explicitly
+            # include it as a modifier and ones that implicitly assume it by
+            # specifying a symbol which is only selected when it is active
+            # (e.g., an uppercase letter or shifted punctuation symbol).
             yield "shift"
             yield None
         if bit == KeyButMask.Control:
@@ -119,9 +141,9 @@ class Bindings(object):
                                 state)
 
     def __getitem__(self, event):
-        if isinstance(event, KeyPressEvent):
+        if isinstance(event, (KeyPressEvent, KeyReleaseEvent)):
             return self.key_binding(event.detail, event.state)
-        elif isinstance(event, ButtonPressEvent):
+        elif isinstance(event, (ButtonPressEvent, ButtonReleaseEvent)):
             return self.button_binding(event.detail, event.state)
         else:
-            raise KeyError("unhandled event type")
+            raise TypeError("unhandled event type")
