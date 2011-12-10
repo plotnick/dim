@@ -1,10 +1,9 @@
 #!/bin/sh -e
+# Run all of the tests in the test directory, bailing out if any fail.
 
-TESTDIR=$(dirname $0)
-PYTHONPATH=$TESTDIR/..:$PYTHONPATH
-
-cd $TESTDIR
-for t in test_*.py; do
-	echo $t
-	python $t
+cd "$(dirname $0)"
+export PYTHONPATH=$(cd .. && pwd):$PYTHONPATH
+for test in test_*.py; do
+	echo "$test"
+	python "$test"
 done
