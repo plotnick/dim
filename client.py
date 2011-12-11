@@ -61,7 +61,7 @@ class ClientWindow(EventHandler):
         self.focus_time = None
         self.focus_override = None
         self.visibility = None
-        self.__log = logging.getLogger("client.0x%x" % self.window)
+        self.log = logging.getLogger("client.0x%x" % self.window)
         self.shared_init()
 
     def shared_init(self, reparenting=False, event_mask=None):
@@ -175,22 +175,22 @@ class ClientWindow(EventHandler):
                 return True
 
         def set_input_focus(window, time):
-            self.__log.debug("Setting input focus to window 0x%x at time %d.",
-                             window, time)
+            self.log.debug("Setting input focus to window 0x%x at time %d.",
+                           window, time)
             try:
                 self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
                                                     window,
                                                     time).check()
             except (BadMatch, BadWindow):
-                self.__log.warning("Error trying to focus window 0x%x.", window)
+                self.log.warning("Error trying to focus window 0x%x.", window)
                 return None
             else:
                 return time
         if self.focus_override:
             # We'll occasionally want to preempt focus of a client window
             # (e.g., for user input in a titlebar).
-            self.__log.debug("Redirecting focus to window 0x%x.",
-                             self.focus_override)
+            self.log.debug("Redirecting focus to window 0x%x.",
+                           self.focus_override)
             self.focus_time = set_input_focus(self.focus_override, time)
         else:
             # See ICCCM §4.1.7.
@@ -199,7 +199,7 @@ class ClientWindow(EventHandler):
                 self.properties.wm_hints.input):
                 self.focus_time = set_input_focus(self.window, time)
             if self.atoms["WM_TAKE_FOCUS"] in self.properties.wm_protocols:
-                self.__log.debug("Taking input focus at time %d.", time)
+                self.log.debug("Taking input focus at time %d.", time)
                 send_client_message(self.conn, self.window, self.window, 0,
                                     32, self.atoms["WM_PROTOCOLS"],
                                     [self.atoms["WM_TAKE_FOCUS"], time,
@@ -219,37 +219,37 @@ class ClientWindow(EventHandler):
 
     def normalize(self):
         """Transition to the Normal state."""
-        self.__log.debug("Entering Normal state.")
+        self.log.debug("Entering Normal state.")
         self.properties.wm_state = WMState(WMState.NormalState)
         self.properties.request_properties()
         if not self.decorated:
             try:
                 self.decorator.decorate()
             except (BadWindow, BadDrawable) as e:
-                self.__log.info("Received %s (%d) while applying decoration.",
-                                e.__class__.__name__,
-                                e.args[0].major_opcode)
+                self.log.info("Received %s (%d) while applying decoration.",
+                              e.__class__.__name__,
+                              e.args[0].major_opcode)
             else:
                 self.decorated = True
         self.map()
 
     def iconify(self):
         """Transition to the Iconic state."""
-        self.__log.debug("Entering Iconic state.")
+        self.log.debug("Entering Iconic state.")
         self.properties.wm_state = WMState(WMState.IconicState)
         self.unmap()
 
     def withdraw(self):
         """Transition to the Withdrawn state."""
-        self.__log.debug("Entering Withdrawn state.")
+        self.log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
         if self.decorated:
             try:
                 self.decorator.undecorate()
             except (BadWindow, BadDrawable) as e:
-                self.__log.info("Received %s (%d) while removing decoration.",
-                                e.__class__.__name__,
-                                e.args[0].major_opcode)
+                self.log.info("Received %s (%d) while removing decoration.",
+                              e.__class__.__name__,
+                              e.args[0].major_opcode)
             else:
                 self.decorated = False
 
