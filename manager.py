@@ -9,7 +9,7 @@ from select import select
 from xcb.xproto import *
 
 from atom import AtomCache
-from client import ClientWindow
+from client import ClientWindow, FramedClientWindow
 from color import ColorCache
 from cursor import FontCursor
 from decorator import Decorator, FrameDecorator
@@ -193,38 +193,31 @@ class WindowManager(EventHandler):
         """Adopt existing top-level windows."""
         for window in windows:
             log.debug("Adopting window 0x%x.", window)
-            self.manage(window)
+            client = self.manage(window)
+            try:
+                attrs = self.conn.core.GetWindowAttributes(window).reply()
+            except BadWindow:
+                log.warning("Error fetching attributes for window 0x%x.",
+                            window)
+                continue
+            if attrs.map_state != MapState.Unmapped:
+                client.normalize()
 
     def manage(self, window):
         """Manage a window and return the client instance."""
-        try:
-            attrs = self.conn.core.GetWindowAttributes(window).reply()
-        except BadWindow:
-            log.warning("Error fetching attributes for window 0x%x.", window)
-            return None
-
-        # Since we're not a compositing manager, we can simply ignore
-        # override-redirect windows.
-        if attrs.override_redirect:
-            return None
-
         if window in self.clients:
             return self.clients[window]
 
         log.debug("Managing client window 0x%x.", window)
-
         client = self.clients[window] = ClientWindow(self.conn, window, self)
         self.place(client, client.geometry)
-        client.decorator.decorate()
-        client.decorator.unfocus()
-        if attrs.map_state != MapState.Unmapped:
-            client.normalize()
         return client
 
     def unmanage(self, client):
         """Unmanage the given client."""
         log.debug("Unmanaging client window 0x%x.", client.window)
-        client.decorator.undecorate()
+        if client.properties.wm_state != WMState.WithdrawnState:
+            client.withdraw()
         del client.properties.wm_state
         return self.clients.pop(client.window, None)
 
@@ -378,26 +371,15 @@ class WindowManager(EventHandler):
 
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
-        """Map a top-level window on behalf of a client."""
+        """Handle a request to map a top-level window on behalf of a client."""
         client = self.manage(event.window)
         if (client.properties.wm_state == WMState.WithdrawnState and
             client.properties.wm_hints.initial_state == WMState.IconicState):
             # Withdrawn → Iconic state transition (ICCCM §4.1.4).
             client.iconify()
         else:
-            self.conn.core.MapWindow(event.window)
-
-    @handler(MapNotifyEvent)
-    def handle_map_notify(self, event):
-        """Note the mapping of a top-level window."""
-        if event.override_redirect:
-            raise UnhandledEvent(event)
-        log.debug("Window 0x%x mapped.", event.window)
-        # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
-        try:
-            self.get_client(event.window, True).normalize()
-        except BadWindow:
-            pass
+            # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
+            client.normalize()
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
@@ -488,17 +470,6 @@ class ReparentingWindowManager(WindowManager):
         self.frames = {} # client frames, indexed by window ID
         self.parents = {self.screen.root: None}
 
-    def manage(self, window):
-        client = super(ReparentingWindowManager, self).manage(window)
-        if client:
-            self.frames[client.frame] = client
-        return client
-
-    def unmanage(self, client):
-        if client.frame:
-            self.frames.pop(client.frame, None)
-        return super(ReparentingWindowManager, self).unmanage(client)
-
     def decorator(self, client):
         return FrameDecorator(self.conn, client)
 
@@ -522,6 +493,7 @@ class ReparentingWindowManager(WindowManager):
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
         self.parents.pop(event.window, None)
+        self.frames.pop(event.window, None)
         raise UnhandledEvent(event)
 
     @handler(UnmapNotifyEvent)
@@ -537,14 +509,15 @@ class ReparentingWindowManager(WindowManager):
         self.parents[event.window] = event.parent
         if event.override_redirect:
             raise UnhandledEvent(event)
-        client = self.get_client(event.window)
+        client = self.get_client(event.window, True)
         if client.reparenting:
-            assert issubclass(client.reparenting, ClientWindow)
-            if client.frame != event.parent:
+            if (isinstance(client, FramedClientWindow) and
+                client.frame == event.parent):
+                self.frames[client.frame] = client
+            else:
                 self.frames.pop(client.frame, None)
             log.debug("Done reparenting window 0x%x.", client.window)
-            client.__class__ = client.reparenting
-            client.init(event.parent)
+            client.reparenting = False
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):

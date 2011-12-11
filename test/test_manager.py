@@ -15,7 +15,7 @@ from atom import AtomCache
 from event import *
 from geometry import *
 from keymap import *
-from manager import WindowManager, compress
+from manager import *
 from properties import WMState, WMSizeHints, WMHints
 from xutil import *
 
@@ -60,6 +60,7 @@ class TestClient(EventHandler, Thread):
         self.window = self.conn.generate_id()
         self.mapped = False
         self.managed = False
+        self.parent = self.screen.root
         self.geometry = geometry
         self.synthetic_geometry = None
 
@@ -187,7 +188,10 @@ class TestClient(EventHandler, Thread):
                             [WMState.IconicState, 0, 0, 0, 0])
 
     def shutdown(self):
-        self.destroy()
+        try:
+            self.destroy()
+        except BadWindow:
+            pass
         self.conn.flush()
         self.conn.disconnect()
 
@@ -203,6 +207,11 @@ class TestClient(EventHandler, Thread):
     def handle_unmap_notify(self, event):
         assert event.window == self.window
         self.mapped = False
+
+    @handler(ReparentNotifyEvent)
+    def handle_reparent_notify(self, event):
+        assert event.window == self.window
+        self.parent = event.parent
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
@@ -339,58 +348,123 @@ class TestWMStartup(WMTestCase):
         self.loop(lambda: w3.managed)
 
 class TestWMStates(WMTestCase):
+    """Test the various state transitions, as described in ICCCM §4.1.4."""
+
     geometry = Geometry(0, 0, 100, 100, 1)
 
-    def test_withdrawn_normal(self):
-        """Withdrawn → Normal state transition"""
-        client = self.add_client(TestClient(self.geometry))
-        client.wm_hints = WMHints(initial_state=WMState.NormalState)
-        client.map()
-        self.loop(lambda: (client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.NormalState))
+    def setUp(self):
+        super(TestWMStates, self).setUp()
+        self.client = self.add_client(TestClient(self.geometry))
+
+    def normalize_client(self):
+        self.client.map()
+        self.loop(lambda: (self.client.mapped and
+                           self.client.managed and
+                           self.client.wm_state == WMState.NormalState))
+
+    def iconify_client(self):
+        self.client.iconify()
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.managed and
+                           self.client.wm_state == WMState.IconicState))
+
+    def withdraw_client(self):
+        self.client.unmap()
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.managed and
+                           self.client.wm_state == WMState.WithdrawnState))
+
+    def destroy_client(self):
+        self.client.destroy()
+        self.loop(lambda: not self.client.mapped and not self.client.managed)
 
     def test_withdrawn_iconic(self):
-        """Withdrawn → Iconic state transition"""
-        client = self.add_client(TestClient(self.geometry))
-        client.wm_hints = WMHints(initial_state=WMState.IconicState)
-        client.map()
-        self.loop(lambda: (not client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.IconicState))
+        """Withdrawn → Iconic → Normal state transitions"""
+        self.client.wm_hints = WMHints(initial_state=WMState.IconicState)
+        self.client.map()
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.managed and
+                           self.client.wm_state == WMState.IconicState))
+        self.normalize_client()
+        self.destroy_client()
 
-    def test_normal_withdrawn(self):
-        """Normal → Withdrawn state transition"""
-        client = self.add_client(TestClient(self.geometry))
-        client.wm_hints = WMHints(initial_state=WMState.NormalState)
-        client.map()
-        self.loop(lambda: (client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.NormalState))
+    def test_state_transitions(self):
+        """Test state transitions"""
+        self.client.wm_hints = WMHints(initial_state=WMState.NormalState)
+        self.normalize_client()
+        self.withdraw_client()
+        self.normalize_client()
+        self.iconify_client()
+        self.normalize_client()
+        self.destroy_client()
 
-        client.withdraw()
-        self.loop(lambda: (not client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.WithdrawnState))
+class TestReparentingWMStates(TestWMStates):
+    """Similar to the WM state transition test case above, but with reparenting.
 
-    def test_normal_iconic(self):
-        """Normal → Iconic state transition"""
-        client = self.add_client(TestClient(self.geometry))
-        client.wm_hints = WMHints(initial_state=WMState.NormalState)
-        client.map()
-        self.loop(lambda: (client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.NormalState))
+    In addition to verifying that the effect on the client is correct, we also
+    peek at the manager's internal data structures to ensure that they're being
+    updated correctly."""
 
-        client.iconify()
-        self.loop(lambda: (not client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.IconicState))
+    wm_class = ReparentingWindowManager
 
-        client.map()
-        self.loop(lambda: (client.mapped and
-                           client.managed and
-                           client.wm_state == WMState.NormalState))
+    def normalize_client(self):
+        self.client.map()
+        self.loop(lambda: (self.client.mapped and
+                           self.client.managed and
+                           self.client.wm_state == WMState.NormalState and
+                           self.client.parent != self.client.screen.root))
+
+        # Peek at WM bookkeeping.
+        wm_client = self.wm_thread.wm.clients[self.client.window]
+        self.assertFalse(wm_client.reparenting)
+        self.assertEqual(wm_client.window, self.client.window)
+        self.assertEqual(wm_client.frame, self.client.parent)
+
+    def iconify_client(self):
+        window = self.client.window
+        frame = self.client.parent
+
+        self.client.iconify()
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.managed and
+                           self.client.wm_state == WMState.IconicState and
+                           self.client.parent == frame))
+
+        # The manager should not undecorate iconified clients, so everything
+        # should be the same as for a client in the Normal state.
+        wm_client = self.wm_thread.wm.clients[window]
+        self.assertFalse(wm_client.reparenting)
+        self.assertEqual(wm_client.window, window)
+        self.assertEqual(wm_client.frame, frame)
+
+    def withdraw_client(self):
+        window = self.client.window
+        frame = self.client.parent
+
+        self.client.unmap()
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.wm_state == WMState.WithdrawnState and
+                           self.client.parent == self.client.screen.root))
+
+        # The manager should undecorate withdrawn clients, and so it should
+        # not have a frame entry for this client anymore.
+        wm_client = self.wm_thread.wm.clients[window]
+        self.assertEqual(wm_client.frame, None)
+        self.assertEqual(wm_client.window, window)
+        self.assertFalse(wm_client.reparenting)
+        self.assertTrue(frame not in self.wm_thread.wm.frames)
+
+    def destroy_client(self):
+        window = self.client.window
+        frame = self.client.parent
+
+        self.client.destroy()
+        self.loop(lambda: not self.client.mapped and not self.client.managed)
+
+        # Once destroyed, all record of this client window should be
+        # removed from the WM's books.
+        self.assertTrue(window not in self.wm_thread.wm.clients)
+        self.assertTrue(frame not in self.wm_thread.wm.frames)
 
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):

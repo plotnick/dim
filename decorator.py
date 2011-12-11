@@ -146,18 +146,15 @@ class FrameDecorator(Decorator):
         self.conn.core.ReparentWindow(window, frame, offset.x, offset.y)
         self.conn.core.ChangeSaveSet(SetMode.Insert, window)
 
-        # When the reparenting is complete, the manager will update the
-        # class of the client to reflect its new status. We'll set the
-        # frame attribute now, though, so that interested parties can
-        # use it immediately.
-        self.client.reparenting = FramedClientWindow
-        self.client.frame = frame
-
         # Changes to the border should now be applied to the frame.
         self.border_window = frame
 
+        # Change the class of the client and re-initialize.
+        self.client.__class__ = FramedClientWindow
+        self.client.shared_init(frame=frame, reparenting=True)
+
     def undecorate(self):
-        if isinstance(self.client, FramedClientWindow):
+        if isinstance(self.client, FramedClientWindow) and self.client.frame:
             self.conn.core.UnmapWindow(self.client.frame)
             self.border_window = self.client.window
 
@@ -176,7 +173,10 @@ class FrameDecorator(Decorator):
                                               geometry.x,
                                               geometry.y)
                 self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
-                self.client.reparenting = ClientWindow
+
+                # Change the class of the client and re-initialize.
+                self.client.__class__ = ClientWindow
+                self.client.shared_init(reparenting=True)
             except (BadWindow, BadDrawable):
                 return
             finally:
@@ -510,24 +510,25 @@ class TitlebarDecorator(FrameDecorator):
         super(TitlebarDecorator, self).__init__(conn, client, **kwargs)
 
     def decorate(self):
+        assert self.titlebar is None
         super(TitlebarDecorator, self).decorate()
-        if not self.titlebar:
-            config = self.titlebar_configs[0]
-            geometry = Geometry(0, 0,
-                                self.client.geometry.width, config.height, 0)
-            self.titlebar = SimpleTitlebar(conn=self.conn,
-                                           client=self.client,
-                                           manager=self.client.manager,
-                                           parent=self.client.frame,
-                                           geometry=geometry,
-                                           config=config)
-            for button, handler in self.button_press_handlers.items():
-                self.titlebar.register_button_press_handler(button, handler)
+
+        config = self.titlebar_configs[0]
+        geometry = Geometry(0, 0,
+                            self.client.geometry.width, config.height, 0)
+        self.titlebar = SimpleTitlebar(conn=self.conn,
+                                       client=self.client,
+                                       manager=self.client.manager,
+                                       parent=self.client.frame,
+                                       geometry=geometry,
+                                       config=config)
+        for button, handler in self.button_press_handlers.items():
+            self.titlebar.register_button_press_handler(button, handler)
 
     def undecorate(self):
-        if self.titlebar:
-            self.conn.core.DestroyWindow(self.titlebar.window)
-            self.titlebar = None
+        assert self.titlebar is not None
+        self.conn.core.DestroyWindow(self.titlebar.window)
+        self.titlebar = None
         super(TitlebarDecorator, self).undecorate()
 
     def configure(self, geometry):

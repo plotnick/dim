@@ -53,20 +53,20 @@ class ClientWindow(object):
         self.fonts = manager.fonts
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
-        self.properties = ClientProperties(self.conn, self.window, self.atoms)
+        self.decorated = False
         self.offset = None # determined and set by our decorator
+        self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.focus_time = None
         self.focus_override = None
         self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
                                               [self.client_event_mask])
         self.__log = logging.getLogger("client.0x%x" % self.window)
-        self.init(self.screen.root)
+        self.shared_init()
 
-    def init(self, parent):
+    def shared_init(self, reparenting=False):
         """Initialize a client window instance. Called during instance
         initialization and whenever an instance's class is changed."""
-        self.parent = parent
-        self.reparenting = None
+        self.reparenting = reparenting
         self._geometry = None
 
     @property
@@ -215,6 +215,9 @@ class ClientWindow(object):
         self.__log.debug("Entering Normal state.")
         self.properties.wm_state = WMState(WMState.NormalState)
         self.properties.request_properties()
+        if not self.decorated:
+            self.decorator.decorate()
+            self.decorated = True
         self.map()
 
     def iconify(self):
@@ -227,21 +230,23 @@ class ClientWindow(object):
         """Transition to the Withdrawn state."""
         self.__log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
-        self.decorator.undecorate()
+        if self.decorated:
+            self.decorator.undecorate()
+            self.decorated = False
 
 class FramedClientWindow(ClientWindow):
     """A framed client window represents a client window that has been
     reparented to a new top-level window.
 
-    Instances of this class are never created directly; a reparenting
-    window manager will change the class of ClientWindow instances to
-    this class upon receipt of a ReparentNotify event."""
+    Instances of this class are never created directly; a FrameDecorator
+    will change the class of ClientWindow instances to this class when it
+    reparents the client to a newly-created frame."""
 
-    def init(self, parent):
-        assert self.frame and self.frame == parent
-        assert self.offset is not None
-        super(FramedClientWindow, self).init(parent)
+    def shared_init(self, frame=None, **kwargs):
+        super(FramedClientWindow, self).shared_init(**kwargs)
+        self.frame = frame
         self._frame_geometry = None
+        assert self.offset is not None # set by our decorator
 
     @property
     def frame_geometry(self):
