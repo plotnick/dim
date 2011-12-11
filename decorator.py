@@ -111,7 +111,8 @@ class FrameDecorator(Decorator):
     frame_event_mask = (EventMask.SubstructureRedirect |
                         EventMask.SubstructureNotify |
                         EventMask.EnterWindow |
-                        EventMask.LeaveWindow)
+                        EventMask.LeaveWindow |
+                        EventMask.VisibilityChange)
 
     def __init__(self, *args, **kwargs):
         super(FrameDecorator, self).__init__(*args, **kwargs)

@@ -7,6 +7,7 @@ import logging
 
 from xcb.xproto import *
 
+from event import *
 from geometry import *
 from properties import *
 from xutil import *
@@ -33,14 +34,15 @@ class ClientProperties(PropertyManager):
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])
 
-class ClientWindow(object):
+class ClientWindow(EventHandler):
     """All top-level windows (other than those with override-redirect set) will
     be wrapped with an instance of this class."""
 
     client_event_mask = (EventMask.EnterWindow |
                          EventMask.LeaveWindow |
                          EventMask.FocusChange |
-                         EventMask.PropertyChange)
+                         EventMask.PropertyChange |
+                         EventMask.VisibilityChange)
 
     def __init__(self, conn, window, manager):
         self.conn = conn
@@ -58,16 +60,21 @@ class ClientWindow(object):
         self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.focus_time = None
         self.focus_override = None
-        self.conn.core.ChangeWindowAttributes(self.window, CW.EventMask,
-                                              [self.client_event_mask])
+        self.visibility = None
         self.__log = logging.getLogger("client.0x%x" % self.window)
         self.shared_init()
 
-    def shared_init(self, reparenting=False):
+    def shared_init(self, reparenting=False, event_mask=None):
         """Initialize a client window instance. Called during instance
         initialization and whenever an instance's class is changed."""
         self.reparenting = reparenting
         self._geometry = None
+        self.conn.core.ChangeWindowAttributes(self.window,
+                                              CW.EventMask,
+                                              [event_mask
+                                               if event_mask is not None
+                                               else self.client_event_mask])
+        self.manager.register_window_handler(self.window, self)
 
     @property
     def geometry(self):
@@ -246,6 +253,10 @@ class ClientWindow(object):
             else:
                 self.decorated = False
 
+    @handler(VisibilityNotifyEvent)
+    def handle_visibility_notify(self, event):
+        self.visibility = event.state
+
 class FramedClientWindow(ClientWindow):
     """A framed client window represents a client window that has been
     reparented to a new top-level window.
@@ -255,10 +266,17 @@ class FramedClientWindow(ClientWindow):
     reparents the client to a newly-created frame."""
 
     def shared_init(self, frame=None, **kwargs):
-        super(FramedClientWindow, self).shared_init(**kwargs)
+        assert self.offset is not None # set by our decorator
+
+        # We don't care about visibility notifications for the client window
+        # any more; we'll just worry about the frame as a whole.
+        event_mask = self.client_event_mask & ~EventMask.VisibilityChange
+        super(FramedClientWindow, self).shared_init(event_mask=event_mask,
+                                                    **kwargs)
+
         self.frame = frame
         self._frame_geometry = None
-        assert self.offset is not None # set by our decorator
+        self.manager.register_window_handler(self.frame, self)
 
     @property
     def frame_geometry(self):

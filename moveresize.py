@@ -9,7 +9,7 @@ from event import UnhandledEvent, handler
 from geometry import *
 from keysym import *
 from manager import WindowManager, compress
-from properties import WMSizeHints
+from properties import WMSizeHints, WMState
 from xutil import *
 
 __all__ = ["MoveResize"]
@@ -139,8 +139,8 @@ class ScreenEdgeResistance(Resistance):
                                                               axis, direction)
 
 class WindowEdgeResistance(Resistance):
-    """Classical edge resistance: windows' opposite external edges resist
-    moving past one another."""
+    """Classical edge resistance: visible windows' opposite external edges
+    resist moving past one another."""
 
     def __init__(self, client, window_edge_resistance=20, **kwargs):
         super(WindowEdgeResistance, self).__init__(client, **kwargs)
@@ -148,7 +148,9 @@ class WindowEdgeResistance(Resistance):
         self.window_edge_resistance = window_edge_resistance
         clients = [client
                    for client in client.manager.clients.values()
-                   if client is not self.client]
+                   if (client is not self.client and
+                       client.properties.wm_state == WMState.NormalState and
+                       client.visibility != Visibility.FullyObscured)]
         self.client_list = {}
         for direction in self.cardinal_directions:
             def edge(client):
