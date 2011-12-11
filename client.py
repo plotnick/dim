@@ -216,8 +216,14 @@ class ClientWindow(object):
         self.properties.wm_state = WMState(WMState.NormalState)
         self.properties.request_properties()
         if not self.decorated:
-            self.decorator.decorate()
-            self.decorated = True
+            try:
+                self.decorator.decorate()
+            except (BadWindow, BadDrawable) as e:
+                self.__log.info("Received %s (%d) while applying decoration.",
+                                e.__class__.__name__,
+                                e.args[0].major_opcode)
+            else:
+                self.decorated = True
         self.map()
 
     def iconify(self):
@@ -231,8 +237,14 @@ class ClientWindow(object):
         self.__log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
         if self.decorated:
-            self.decorator.undecorate()
-            self.decorated = False
+            try:
+                self.decorator.undecorate()
+            except (BadWindow, BadDrawable) as e:
+                self.__log.info("Received %s (%d) while removing decoration.",
+                                e.__class__.__name__,
+                                e.args[0].major_opcode)
+            else:
+                self.decorated = False
 
 class FramedClientWindow(ClientWindow):
     """A framed client window represents a client window that has been

@@ -119,6 +119,8 @@ class FrameDecorator(Decorator):
         self.border_width = 0
 
     def decorate(self):
+        assert not isinstance(self.client, FramedClientWindow)
+
         super(FrameDecorator, self).decorate()
 
         # Determine the frame geometry based on the current client window
@@ -154,34 +156,33 @@ class FrameDecorator(Decorator):
         self.client.shared_init(frame=frame, reparenting=True)
 
     def undecorate(self):
-        if isinstance(self.client, FramedClientWindow) and self.client.frame:
-            self.conn.core.UnmapWindow(self.client.frame)
-            self.border_window = self.client.window
+        assert isinstance(self.client, FramedClientWindow) and self.client.frame
 
-            super(FrameDecorator, self).undecorate()
+        self.conn.core.UnmapWindow(self.client.frame)
+        self.border_window = self.client.window
 
-            try:
-                # Determine the new window geometry based on the current frame
-                # geometry, the original border width, and the window gravity.
-                size = self.client.geometry.size()
-                bw = self.original_border_width
-                gravity = self.client.properties.wm_normal_hints.win_gravity
-                geometry = self.client.frame_geometry.resize(size, bw, gravity)
+        super(FrameDecorator, self).undecorate()
 
-                self.conn.core.ReparentWindow(self.client.window,
-                                              self.screen.root,
-                                              geometry.x,
-                                              geometry.y)
-                self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
+        try:
+            # Determine the new window geometry based on the current frame
+            # geometry, the original border width, and the window gravity.
+            size = self.client.geometry.size()
+            bw = self.original_border_width
+            gravity = self.client.properties.wm_normal_hints.win_gravity
+            geometry = self.client.frame_geometry.resize(size, bw, gravity)
 
-                # Change the class of the client and re-initialize.
-                self.client.__class__ = ClientWindow
-                self.client.shared_init(reparenting=True)
-            except (BadWindow, BadDrawable):
-                return
-            finally:
-                self.conn.core.DestroyWindow(self.client.frame)
-                self.client.frame = None
+            self.conn.core.ReparentWindow(self.client.window,
+                                          self.screen.root,
+                                          geometry.x,
+                                          geometry.y)
+            self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
+
+            # Change the class of the client and re-initialize.
+            self.client.__class__ = ClientWindow
+            self.client.shared_init(reparenting=True)
+        finally:
+            self.conn.core.DestroyWindow(self.client.frame)
+            self.client.frame = None
 
 class TitlebarConfig(object):
     def __init__(self, manager, fg_color, bg_color, font):
