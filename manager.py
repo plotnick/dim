@@ -20,8 +20,7 @@ from keymap import *
 from properties import *
 from xutil import *
 
-__all__ = ["ExitWindowManager", "NoSuchClient",
-           "client_message_type", "ClientMessage", "WindowManagerProperties",
+__all__ = ["ExitWindowManager", "NoSuchClient", "WindowManagerProperties",
            "compress", "WindowManager", "ReparentingWindowManager"]
 
 log = logging.getLogger("manager")
@@ -36,32 +35,7 @@ class NoSuchClient(UnhandledEvent):
     the given top-level window."""
     pass
 
-# Client messages come in via ClientMessageEvent instances. Our handler
-# for that event type will generate instances of more specific classes
-# based on the "type" field of the events and dispatch those via the
-# usual event dispatch mechanism. The following bit of machinery allows
-# easy registration of those classes.
-client_message_types = {}
-
-def client_message_type(event_type):
-    """A class decorator factory that registers a client message type."""
-    def register_client_message_type(cls):
-        client_message_types[event_type] = cls
-        return cls
-    return register_client_message_type
-
-class ClientMessage(object):
-    def __init__(self, window, format, data):
-        self.window = window
-        self.format = format
-        self.data = data
-
-@client_message_type("WM_CHANGE_STATE")
-class WMChangeState(ClientMessage):
-    """Sent by a client that would like its state changed (ICCCM §4.1.4)."""
-    pass
-
-@client_message_type("WM_EXIT")
+@client_message("WM_EXIT")
 class WMExit(ClientMessage):
     """Sent by a client that would like the window manager to shut down."""
     pass
@@ -357,18 +331,6 @@ class WindowManager(EventHandler):
                                                           event.stack_mode]))
         self.conn.flush()
 
-    @handler(ConfigureNotifyEvent)
-    def handle_configure_notify(self, event):
-        """Update our record of a client's geometry."""
-        if event.override_redirect:
-            raise UnhandledEvent(event)
-        client = self.get_client(event.window)
-        client.geometry = Geometry(event.x, event.y,
-                                   event.width, event.height,
-                                   event.border_width)
-        log.debug("Noting geometry for client 0x%x as %s.",
-                  client.window, client.geometry)
-
     @handler(MapRequestEvent)
     def handle_map_request(self, event):
         """Handle a request to map a top-level window on behalf of a client."""
@@ -388,8 +350,11 @@ class WindowManager(EventHandler):
             raise UnhandledEvent(event)
         log.debug("Window 0x%x unmapped.", event.window)
         client = self.get_client(event.window, True)
-        if (client.properties.wm_state != WMState.IconicState or
-            is_synthetic_event(event)):
+        if client.reparenting:
+            # Ignore the unmap triggered by a reparent request.
+            pass
+        elif (client.properties.wm_state != WMState.IconicState or
+              is_synthetic_event(event)):
             # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
             try:
                 client.withdraw()
@@ -444,20 +409,10 @@ class WindowManager(EventHandler):
         log.debug("Received ClientMessage of type %s on window 0x%x.",
                   event_type, event.window)
         try:
-            message_type = client_message_types[event_type]
+            message_type = client_message_type(event_type)
         except KeyError:
             raise UnhandledEvent(event)
         self.handle_event(message_type(event.window, event.format, event.data))
-
-    @handler(WMChangeState)
-    def handle_wm_change_state(self, client_message):
-        log.debug("Received change-state message for client window 0x%x (%d).",
-                  client_message.window,
-                  client_message.data.data32[0])
-        if client_message.data.data32[0] == WMState.IconicState:
-            self.get_client(client_message.window, True).iconify()
-        else:
-            raise UnhandledEvent
 
     @handler(WMExit)
     def handle_wm_exit(self, client_message):
@@ -496,14 +451,6 @@ class ReparentingWindowManager(WindowManager):
         self.frames.pop(event.window, None)
         raise UnhandledEvent(event)
 
-    @handler(UnmapNotifyEvent)
-    def handle_unmap_notify(self, event):
-        if self.get_client(event.window, True).reparenting:
-            # Ignore the unmap triggered by a reparent request.
-            pass
-        else:
-            raise UnhandledEvent(event)
-
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
         self.parents[event.window] = event.parent
@@ -518,22 +465,3 @@ class ReparentingWindowManager(WindowManager):
                 self.frames.pop(client.frame, None)
             log.debug("Done reparenting window 0x%x.", client.window)
             client.reparenting = False
-
-    @handler(ConfigureNotifyEvent)
-    def handle_configure_notify(self, event):
-        """Update our record of a frame's geometry."""
-        if event.window in self.clients:
-            client = self.clients[event.window]
-            if not client.reparenting:
-                client.geometry = Geometry(event.x, event.y,
-                                           event.width, event.height,
-                                           event.border_width)
-                log.debug(u"Noting geometry for client window 0x%x as %s.",
-                          client.window, client.geometry)
-        elif event.window in self.frames:
-            client = self.frames[event.window]
-            client.frame_geometry = Geometry(event.x, event.y,
-                                             event.width, event.height,
-                                             event.border_width)
-            log.debug(u"Noting frame geometry for client 0x%x as %s.",
-                      client.window, client.frame_geometry)

@@ -14,6 +14,11 @@ from xutil import *
 
 __all__ = ["ClientWindow", "FramedClientWindow"]
 
+@client_message("WM_CHANGE_STATE")
+class WMChangeState(ClientMessage):
+    """Sent by a client that would like its state changed (ICCCM §4.1.4)."""
+    pass
+
 class ClientProperties(PropertyManager):
     # ICCCM properties
     wm_name = PropertyDescriptor("WM_NAME", String, "")
@@ -253,9 +258,29 @@ class ClientWindow(EventHandler):
             else:
                 self.decorated = False
 
+    @handler(ConfigureNotifyEvent)
+    def handle_configure_notify(self, event):
+        if event.window != self.window:
+            raise UnhandledEvent(event)
+        self.geometry = Geometry(event.x, event.y,
+                                 event.width, event.height,
+                                 event.border_width)
+        self.log.debug("Noting geometry as %s.", self.geometry)
+
     @handler(VisibilityNotifyEvent)
     def handle_visibility_notify(self, event):
+        if event.window == self.window:
+            raise UnhandledEvent(event)
         self.visibility = event.state
+
+    @handler(WMChangeState)
+    def handle_wm_change_state(self, client_message):
+        if client_message.window != self.window:
+            raise UnhandledEvent
+        self.log.debug("Received change-state message (%d).",
+                       client_message.data.data32[0])
+        if client_message.data.data32[0] == WMState.IconicState:
+            self.iconify()
 
 class FramedClientWindow(ClientWindow):
     """A framed client window represents a client window that has been
@@ -354,3 +379,18 @@ class FramedClientWindow(ClientWindow):
     def withdraw(self):
         self.conn.core.UnmapWindow(self.frame)
         super(FramedClientWindow, self).withdraw()
+
+    @handler(ConfigureNotifyEvent)
+    def handle_configure_notify(self, event):
+        if event.window != self.frame:
+            raise UnhandledEvent(event)
+        self.frame_geometry = Geometry(event.x, event.y,
+                                       event.width, event.height,
+                                       event.border_width)
+        self.log.debug(u"Noting frame geometry as %s.", self.frame_geometry)
+
+    @handler(VisibilityNotifyEvent)
+    def handle_visibility_notify(self, event):
+        if event.window != self.frame:
+            raise UnhandledEvent(event)
+        self.visibility = event.state

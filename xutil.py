@@ -7,10 +7,12 @@ from struct import Struct
 from xcb.xproto import *
 
 __all__ = ["power_of_2", "popcount", "int16", "card16",
-           "is_synthetic_event", "event_window", "notify_detail_name",
+           "sequence_number", "is_synthetic_event",
+           "event_window", "notify_detail_name",
            "configure_notify", "send_client_message",
            "select_values", "value_list", "textitem16",
-           "GrabButtons", "GrabServer"]
+           "GrabButtons", "GrabServer",
+           "client_message_type", "client_message", "ClientMessage"]
 
 def power_of_2(x):
     """Check whether x is a power of 2."""
@@ -44,42 +46,43 @@ def is_synthetic_event(event):
     # most-significant bit of this code set.
     return (ord(event[0]) & 0x80) != 0
 
-def event_window(event,
-                 event_types={ButtonPressEvent: lambda e: e.event,
-                              ButtonReleaseEvent: lambda e: e.event,
-                              CirculateNotifyEvent: lambda e: e.event,
-                              CirculateRequestEvent: lambda e: e.event,
-                              ClientMessageEvent: lambda e: e.window,
-                              ColormapNotifyEvent: lambda e: e.window,
-                              ConfigureNotifyEvent: lambda e: e.event,
-                              ConfigureRequestEvent: lambda e: e.parent,
-                              CreateNotifyEvent: lambda e: e.parent,
-                              DestroyNotifyEvent: lambda e: e.event,
-                              EnterNotifyEvent: lambda e: e.event,
-                              ExposeEvent: lambda e: e.window,
-                              FocusInEvent: lambda e: e.event,
-                              FocusOutEvent: lambda e: e.event,
-                              GraphicsExposureEvent: lambda e: e.drawable,
-                              GravityNotifyEvent: lambda e: e.event,
-                              KeymapNotifyEvent: lambda e: None,
-                              KeyPressEvent: lambda e: e.event,
-                              KeyReleaseEvent: lambda e: e.event,
-                              LeaveNotifyEvent: lambda e: e.event,
-                              MapNotifyEvent: lambda e: e.event,
-                              MappingNotifyEvent: lambda e: None,
-                              MapRequestEvent: lambda e: e.parent,
-                              MotionNotifyEvent: lambda e: e.event,
-                              NoExposureEvent: lambda e: None,
-                              PropertyNotifyEvent: lambda e: e.window,
-                              ReparentNotifyEvent: lambda e: e.event,
-                              ResizeRequestEvent: lambda e: e.window,
-                              SelectionClearEvent: lambda e: e.owner,
-                              SelectionNotifyEvent: lambda e: None,
-                              SelectionRequestEvent: lambda e: e.owner,
-                              UnmapNotifyEvent: lambda e: e.event,
-                              VisibilityNotifyEvent: lambda e: e.window}):
+event_window_types = {ButtonPressEvent: lambda e: e.event,
+                      ButtonReleaseEvent: lambda e: e.event,
+                      CirculateNotifyEvent: lambda e: e.event,
+                      CirculateRequestEvent: lambda e: e.event,
+                      ClientMessageEvent: lambda e: e.window,
+                      ColormapNotifyEvent: lambda e: e.window,
+                      ConfigureNotifyEvent: lambda e: e.event,
+                      ConfigureRequestEvent: lambda e: e.parent,
+                      CreateNotifyEvent: lambda e: e.parent,
+                      DestroyNotifyEvent: lambda e: e.event,
+                      EnterNotifyEvent: lambda e: e.event,
+                      ExposeEvent: lambda e: e.window,
+                      FocusInEvent: lambda e: e.event,
+                      FocusOutEvent: lambda e: e.event,
+                      GraphicsExposureEvent: lambda e: e.drawable,
+                      GravityNotifyEvent: lambda e: e.event,
+                      KeymapNotifyEvent: lambda e: None,
+                      KeyPressEvent: lambda e: e.event,
+                      KeyReleaseEvent: lambda e: e.event,
+                      LeaveNotifyEvent: lambda e: e.event,
+                      MapNotifyEvent: lambda e: e.event,
+                      MappingNotifyEvent: lambda e: None,
+                      MapRequestEvent: lambda e: e.parent,
+                      MotionNotifyEvent: lambda e: e.event,
+                      NoExposureEvent: lambda e: None,
+                      PropertyNotifyEvent: lambda e: e.window,
+                      ReparentNotifyEvent: lambda e: e.event,
+                      ResizeRequestEvent: lambda e: e.window,
+                      SelectionClearEvent: lambda e: e.owner,
+                      SelectionNotifyEvent: lambda e: None,
+                      SelectionRequestEvent: lambda e: e.owner,
+                      UnmapNotifyEvent: lambda e: e.event,
+                      VisibilityNotifyEvent: lambda e: e.window}
+
+def event_window(event):
     """Return the window on which the given event was generated."""
-    return event_types.get(type(event), lambda e: None)(event)
+    return event_window_types.get(type(event), lambda e: None)(event)
 
 def notify_detail_name(event, detail={0: "Ancestor",
                                       1: "Virtual",
@@ -187,3 +190,23 @@ class GrabServer(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.conn.core.UngrabServer()
         self.conn.flush()
+
+client_message_types = {}
+
+def client_message_type(type_name):
+    """Look up a type name in the table of registered client message types."""
+    return client_message_types[type_name]
+
+def client_message(type_name):
+    """A class decorator factory that registers a client message type."""
+    def register_client_message_type(cls):
+        client_message_types[type_name] = cls
+        event_window_types[cls] = lambda e: e.window
+        return cls
+    return register_client_message_type
+
+class ClientMessage(object):
+    def __init__(self, window, format, data):
+        self.window = window
+        self.format = format
+        self.data = data

@@ -9,11 +9,11 @@ from xcb.xproto import *
 from event import UnhandledEvent, handler
 from manager import *
 from properties import WMState
-from xutil import notify_detail_name, send_client_message
+from xutil import *
 
 __all__ = ["FocusPolicy", "SloppyFocus", "ClickToFocus"]
 
-@client_message_type("_DIM_ENSURE_FOCUS")
+@client_message("_DIM_ENSURE_FOCUS")
 class EnsureFocus(ClientMessage):
     """Try to ensure that some client has the input focus."""
     pass
