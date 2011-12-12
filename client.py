@@ -69,16 +69,14 @@ class ClientWindow(EventHandler):
         self.log = logging.getLogger("client.0x%x" % self.window)
         self.shared_init()
 
-    def shared_init(self, reparenting=False, event_mask=None):
+    def shared_init(self, reparenting=False, event_mask=client_event_mask):
         """Initialize a client window instance. Called during instance
         initialization and whenever an instance's class is changed."""
         self.reparenting = reparenting
         self._geometry = None
         self.conn.core.ChangeWindowAttributes(self.window,
                                               CW.EventMask,
-                                              [event_mask
-                                               if event_mask is not None
-                                               else self.client_event_mask])
+                                              [event_mask])
         self.manager.register_window_handler(self.window, self)
 
     @property
