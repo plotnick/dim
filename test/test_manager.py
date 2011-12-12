@@ -416,9 +416,9 @@ class TestReparentingWMStates(TestWMStates):
 
         # Peek at WM bookkeeping.
         wm_client = self.wm_thread.wm.clients[self.client.window]
-        self.assertFalse(wm_client.reparenting)
-        self.assertEqual(wm_client.window, self.client.window)
-        self.assertEqual(wm_client.frame, self.client.parent)
+        self.loop(lambda: (not wm_client.reparenting and
+                           wm_client.window == self.client.window and
+                           wm_client.frame == self.client.parent))
 
     def iconify_client(self):
         window = self.client.window
@@ -433,9 +433,9 @@ class TestReparentingWMStates(TestWMStates):
         # The manager should not undecorate iconified clients, so everything
         # should be the same as for a client in the Normal state.
         wm_client = self.wm_thread.wm.clients[window]
-        self.assertFalse(wm_client.reparenting)
-        self.assertEqual(wm_client.window, window)
-        self.assertEqual(wm_client.frame, frame)
+        self.loop(lambda: (not wm_client.reparenting and
+                           wm_client.window == window and
+                           wm_client.frame == frame))
 
     def withdraw_client(self):
         window = self.client.window
@@ -449,10 +449,10 @@ class TestReparentingWMStates(TestWMStates):
         # The manager should undecorate withdrawn clients, and so it should
         # not have a frame entry for this client anymore.
         wm_client = self.wm_thread.wm.clients[window]
-        self.assertEqual(wm_client.frame, None)
-        self.assertEqual(wm_client.window, window)
-        self.assertFalse(wm_client.reparenting)
-        self.assertTrue(frame not in self.wm_thread.wm.frames)
+        self.loop(lambda: (wm_client.frame is None and
+                           wm_client.window == window and
+                           not wm_client.reparenting and
+                           frame not in self.wm_thread.wm.frames))
 
     def destroy_client(self):
         window = self.client.window
@@ -463,8 +463,8 @@ class TestReparentingWMStates(TestWMStates):
 
         # Once destroyed, all record of this client window should be
         # removed from the WM's books.
-        self.assertTrue(window not in self.wm_thread.wm.clients)
-        self.assertTrue(frame not in self.wm_thread.wm.frames)
+        self.loop(lambda: window not in self.wm_thread.wm.clients)
+        self.loop(lambda: frame not in self.wm_thread.wm.frames)
 
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):
