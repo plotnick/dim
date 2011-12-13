@@ -29,12 +29,7 @@ class FocusPolicy(WindowManager):
         self.focus_list = deque() # most-recently focused first
 
     def adopt(self, windows):
-        # Determine the initial focus.
-        focus = self.conn.core.GetInputFocus().reply().focus
-        if focus == InputFocus.PointerRoot:
-            # If we're in PointerRoot mode, we need to query the server
-            # again for the window currently containing the pointer.
-            focus = self.conn.core.QueryPointer(self.screen.root).reply().child
+        focus = get_input_focus(self.conn)
 
         super(FocusPolicy, self).adopt(windows)
 
@@ -58,13 +53,18 @@ class FocusPolicy(WindowManager):
         return super(FocusPolicy, self).unmanage(client)
 
     def focus(self, client, time):
-        """Offer the input focus to a client."""
+        """Offer the input focus to a client. If the offer is accepted,
+        returns true and moves the client to the head of the focus list;
+        otherwise, returns false."""
         if client.focus(time):
             try:
                 self.focus_list.remove(client)
             except exceptions.ValueError:
                 pass
             self.focus_list.appendleft(client)
+            return True
+        else:
+            return False
 
     def unfocus(self, client):
         """Note that a client no longer has the input focus."""
@@ -107,26 +107,44 @@ class FocusPolicy(WindowManager):
 
     @handler(EnsureFocus)
     def handle_ensure_focus(self, client_message):
+        """Attempt to focus a client."""
         # There should be a timestamp in the first data slot and a window ID
         # (which may be None) in the second.
         time, window = client_message.data.data32[:2]
         self.__log.debug("Received ensure-focus message (0x%x, %d).",
                          window, time)
-        try:
-            client = self.get_client(window, True)
-        except NoSuchClient:
-            client = None
-        while not (client and
-                   client.properties.wm_state == WMState.NormalState and
-                   client.focus(time)):
-            try:
-                self.focus_list.remove(client)
-            except exceptions.ValueError:
-                pass
-            try:
-                client = self.focus_list[0]
-            except IndexError:
+
+        def choose_focus_client():
+            # Start with the window specified in the message, if any.
+            if window:
+                try:
+                    yield self.get_client(window, True)
+                except NoSuchClient:
+                    pass
+
+            # Next we'll try the focus list, starting with the most recently
+            # focused client. We run over a copy because failed focus attempts
+            # will cause clients to be removed from the focus list.
+            for client in list(self.focus_list):
+                yield client
+
+            # Now try the window that has the input focus, if there is one.
+            focus = get_input_focus(self.conn, self.screen)
+            if focus:
+                try:
+                    yield self.get_client(focus, True)
+                except NoSuchClient:
+                    pass
+
+            # Finally, we'll just pick clients at random.
+            for client in set(self.clients.values()) - set(self.focus_list):
+                yield client
+
+        for client in choose_focus_client():
+            if self.focus(client, time):
                 break
+        else:
+            self.__log.debug("Couldn't find a client to focus.")
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer

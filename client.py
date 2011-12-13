@@ -158,6 +158,9 @@ class ClientWindow(EventHandler):
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. Returns true if the client
         accepts the focus offer or is already focused, and false otherwise."""
+        if self.properties.wm_state != WMState.NormalState:
+            return False
+
         if time is None:
             # FocusIn events don't contain a timestamp, so the handler
             # for those events uses None as the time argument. In general,

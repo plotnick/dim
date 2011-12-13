@@ -9,7 +9,7 @@ from xcb.xproto import *
 __all__ = ["power_of_2", "popcount", "int16", "card16",
            "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
-           "configure_notify", "send_client_message",
+           "configure_notify", "send_client_message", "get_input_focus",
            "select_values", "value_list", "textitem16",
            "GrabButtons", "GrabServer",
            "client_message_type", "client_message", "ClientMessage"]
@@ -126,6 +126,20 @@ def send_client_message(connection, destination, window, event_mask,
                                                     window,
                                                     type,
                                                     *data))
+
+def get_input_focus(connection, screen=None):
+    """Return the window that has the input focus."""
+    focus = connection.core.GetInputFocus().reply().focus
+    if focus == InputFocus.PointerRoot:
+        # If we're in PointerRoot mode, we need to query the server
+        # again for the window currently containing the pointer.
+        if screen is None:
+            screen = connection.pref_screen
+        if isinstance(screen, int):
+            screen = connection.get_setup().roots[screen]
+        return connection.core.QueryPointer(screen.root).reply().child
+    else:
+        return focus
 
 def select_values(value_mask, values):
     """Create a value-list from the supplied possible values according to the
