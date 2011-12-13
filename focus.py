@@ -180,11 +180,9 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         self.ignore_focus_click = ignore_focus_click
         super(ClickToFocus, self).__init__(display, screen, **kwargs)
 
-    def manage(self, window):
-        client = super(ClickToFocus, self).manage(window)
-        if client:
-            self.grab_focus_click(client)
-        return client
+    def framed(self, client):
+        super(ClickToFocus, self).framed(client)
+        self.grab_focus_click(client)
 
     def grab_focus_click(self, client):
         self.conn.core.GrabButton(False, client.frame,
@@ -194,13 +192,15 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
                                   1, ModMask.Any)
 
     def focus(self, client, time):
-        super(ClickToFocus, self).focus(client, time)
-
-        # Once a client is focused, we can release our grab. This is purely
-        # an optimization: we don't want to be responsible for proxying all
-        # button press events to the client. We'll re-establish our grab
-        # when the client loses focus.
-        self.conn.core.UngrabButton(1, client.frame, ModMask.Any)
+        if super(ClickToFocus, self).focus(client, time):
+            # Once a client is focused, we can release our grab. This is
+            # purely an optimization: we don't want to be responsible
+            # for proxying all button press events to the client. We'll
+            # re-establish our grab when the client loses focus.
+            self.conn.core.UngrabButton(1, client.frame, ModMask.Any)
+            return True
+        else:
+            return False
 
     def unfocus(self, client):
         self.grab_focus_click(client)

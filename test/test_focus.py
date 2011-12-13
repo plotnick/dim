@@ -95,7 +95,7 @@ class TestSloppyFocus(FocusPolicyTestCase):
             geometry = Geometry(5, 5, 100, 100, 1)
             client = self.add_client(FocusTestClient(geometry))
             client.map()
-            self.loop(lambda: client.managed and client.mapped)
+            self.loop(lambda: client.mapped and client.managed)
 
             # Move the pointer into the window and make sure it gets the focus.
             self.fake_input(EventType.MotionNotify, False, *center(geometry))
@@ -103,6 +103,20 @@ class TestSloppyFocus(FocusPolicyTestCase):
 
             # Now move it back to the root and ensure that it's still focused.
             self.fake_input(EventType.MotionNotify, False, 1, 1)
+            self.loop(self.make_focus_test(client))
+
+class TestClickToFocus(FocusPolicyTestCase):
+    wm_class = ClickToFocus
+
+    def test_focus(self):
+        geometry = Geometry(0, 0, 100, 100, 1)
+        with WarpedPointer(self, center(geometry)):
+            client = self.add_client(FocusTestClient(geometry))
+            client.map()
+            self.loop(lambda: client.mapped and client.managed)
+
+            self.assertNotFocus(client)
+            self.fake_input(EventType.ButtonPress, 1)
             self.loop(self.make_focus_test(client))
 
 if __name__ == "__main__":

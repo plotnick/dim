@@ -434,6 +434,11 @@ class ReparentingWindowManager(WindowManager):
     def decorator(self, client):
         return FrameDecorator(self.conn, client)
 
+    def framed(self, client):
+        """Record the frame of a client. Gives subclasses a hook for
+        post-reparenting client initialization."""
+        self.frames[client.frame] = client
+
     def get_client(self, window, client_only=False):
         if not client_only:
             # Walk up the window hierarchy until we come to a frame or a root.
@@ -466,7 +471,7 @@ class ReparentingWindowManager(WindowManager):
         if client.reparenting:
             if (isinstance(client, FramedClientWindow) and
                 client.frame == event.parent):
-                self.frames[client.frame] = client
+                self.framed(client)
             else:
                 self.frames.pop(client.frame, None)
             log.debug("Done reparenting window 0x%x.", client.window)
