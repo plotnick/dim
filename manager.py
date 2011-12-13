@@ -288,16 +288,16 @@ class WindowManager(EventHandler):
 
     def unhandled_event(self, event):
         log.debug("Ignoring unhandled %s on window 0x%x.",
-                      event.__class__.__name__, event_window(event))
+                  event.__class__.__name__, event_window(event))
 
     def get_client(self, window, client_only=False):
         """Retrieve the client with the given top-level window, or raise an
-        UnhandledEvent exception if there is no such client. Intended for
-        use only in event handlers.
+        exception if there is no such client. Intended for use only in event
+        handlers.
 
         The second (optional) argument controls whether the window must
-        be a client window, or if it is permissible to return a client
-        instance from its frame or a subwindow thereof."""
+        be a top-level client window, or if it is permissible to return
+        a client instance from its frame or a subwindow thereof."""
         try:
             return self.clients[window]
         except KeyError:
@@ -420,6 +420,12 @@ class WindowManager(EventHandler):
         raise ExitWindowManager
 
 class ReparentingWindowManager(WindowManager):
+    """A reparenting window manager creates new parents (frames) for top-level
+    client windows, primarily to allow for a greater variety of decoration
+    than simple borders. The actual frames are created by the frame decorator
+    classes, and most of the frame management is performed by the framed
+    client window class; here we handle only the global bookkeeping."""
+
     def __init__(self, *args, **kwargs):
         super(ReparentingWindowManager, self).__init__(*args, **kwargs)
         self.frames = {} # client frames, indexed by window ID
