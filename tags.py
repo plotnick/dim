@@ -82,10 +82,10 @@ class TagMachine(object):
     def show(self):
         self.dup()
         self.complement()
-        for x in self.pop():
-            x.iconify()
-        for x in self.pop():
-            x.map()
+        for client in self.pop():
+            client.iconify()
+        for client in self.pop():
+            client.normalize()
         self.clear()
 
     def tag(self, tag):
