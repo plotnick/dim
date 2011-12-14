@@ -153,14 +153,53 @@ class SloppyFocus(FocusPolicy):
 
     __log = logging.getLogger("focus.sloppy")
 
+    def __init__(self, *args, **kwargs):
+        super(SloppyFocus, self).__init__(*args, **kwargs)
+
+        # In a comment in the source of AHWM (event.c,v 1.72 2002/02/16),
+        # Alex Hioreanu writes:
+        #
+        #   We want to discriminate between EnterNotify events caused by
+        #   the user moving the mouse and EnterNotify events caused by a
+        #   change in the window configuration brought about by either
+        #   this window manager or clients unmapping themselves, etc.
+        #
+        # He proceeds to suggest a strategy for performing this
+        # discrimination: by keeping the sequence numbers of all events
+        # which may cause the pointer to enter a window without motion,
+        # and assuming that the consequent EnterNotify event is generated
+        # without servicing any other requests, we can simply ignore the
+        # EnterNotify with the same sequence number as the preceeding
+        # modification event. As he points out, only the ordering is
+        # guaranteed by the X protocol; a server is in theory free to
+        # service other requests before generating any EnterNotify events.
+        # Nevertheless, this simple heuristic seems to work flawlessly on
+        # all current X servers.
+        self.last_modify_serial = None
+
     @handler(EnterNotifyEvent)
     def handle_enter_notify(self, event):
-        if event.mode != NotifyMode.Normal or \
-                event.detail == NotifyDetail.Inferior:
-            return
         self.__log.debug("Window 0x%x entered (%s).",
                          event.event, notify_detail_name(event))
-        self.focus(self.get_client(event.event), event.time)
+        if (event.mode == NotifyMode.Normal and
+            event.detail != NotifyDetail.Inferior and
+            sequence_number(event) != self.last_modify_serial):
+            self.focus(self.get_client(event.event), event.time)
+
+    @handler((UnmapNotifyEvent,
+              MapNotifyEvent,
+              MapRequestEvent,
+              ConfigureNotifyEvent,
+              ConfigureRequestEvent,
+              GravityNotifyEvent,
+              CirculateNotifyEvent,
+              CirculateRequestEvent))
+    def note_serial(self, event):
+        self.last_modify_serial = sequence_number(event)
+        # Issue a request so that subsequent events will not have the same
+        # sequence number, even if no other requests intervene.
+        self.conn.core.NoOperation()
+        raise UnhandledEvent(event)
 
 class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     """Focus ignores the movement of the pointer, and changes only when
