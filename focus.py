@@ -30,20 +30,8 @@ class FocusPolicy(WindowManager):
 
     def adopt(self, windows):
         focus = get_input_focus(self.conn)
-
         super(FocusPolicy, self).adopt(windows)
-
-        try:
-            client = self.get_client(focus, True)
-        except NoSuchClient:
-            client = None
-        self.ensure_focus(client)
-
-    def manage(self, window):
-        client = super(FocusPolicy, self).manage(window)
-        if client:
-            self.focus_list.append(client)
-        return client
+        self.ensure_focus(focus)
 
     def unmanage(self, client):
         try:
@@ -71,15 +59,23 @@ class FocusPolicy(WindowManager):
         client.unfocus()
 
     def ensure_focus(self, client=None, time=Time.CurrentTime):
-        # We use a client message for ensuring focus so that we can be sure
-        # that any outstanding requests or events generated as a result
-        # thereof have been completely processed before we go groveling
-        # through the focus list.
+        """Send a message to ourselves requesting that some client receive
+        the input focus. If the client argument is provided, it must be
+        either a client instance or a window; that window will be tried
+        first in the search for a client to focus.
+
+        We use a client message for ensuring focus so that we can be sure
+        that any outstanding requests or events generated as a result
+        thereof have been completely processed before we go groveling
+        through the focus list."""
+        window = (Window._None
+                  if client is None
+                  else getattr(client, "window", client))
         send_client_message(self.conn, self.screen.root, self.screen.root,
                             (EventMask.SubstructureRedirect |
                              EventMask.StructureNotify),
                             32, self.atoms["_DIM_ENSURE_FOCUS"],
-                            [time, client.window if client else 0, 0, 0, 0])
+                            [time, window, 0, 0, 0])
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
@@ -101,10 +97,17 @@ class FocusPolicy(WindowManager):
                          event.event, notify_detail_name(event))
         self.unfocus(self.get_client(event.event))
 
+    @handler(MapNotifyEvent)
+    def handle_map_notify(self, event):
+        if not self.focus_list:
+            self.ensure_focus()
+        raise UnhandledEvent(event)
+
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         client = self.get_client(event.window, True)
         if not client.reparenting and client is self.focus_list[0]:
+            # Losing the current focus; try to focus another window.
             self.ensure_focus()
         raise UnhandledEvent(event)
 
