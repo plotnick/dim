@@ -538,7 +538,7 @@ class EventCompressionTester(EventLoopTester):
     @handler(ConfigureNotifyEvent)
     @compress
     def handle_configure_notify(self, event):
-        raise UnhandledEvent(event) # decline; pass to the next handler
+        return
 
 class TestWMEventLoopWithCompression(TestWMEventLoop):
     wm_class = EventCompressionTester

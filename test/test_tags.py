@@ -134,8 +134,6 @@ class TaggedClient(TestClient):
         assert event.window == self.window
         if event.atom == self.atoms["_DIM_TAGS"]:
             self.tagged = (event.state == Property.NewValue)
-        else:
-            raise UnhandledEvent(event)
 
 class TestTagManager(WMTestCase):
     wm_class = TagManager

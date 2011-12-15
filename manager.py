@@ -13,14 +13,14 @@ from client import ClientWindow, FramedClientWindow
 from color import ColorCache
 from cursor import FontCursor
 from decorator import Decorator, FrameDecorator
-from event import UnhandledEvent, EventHandler, handler
+from event import StopPropagation, UnhandledEvent, EventHandler, handler
 from font import FontCache
 from geometry import *
 from keymap import *
 from properties import *
 from xutil import *
 
-__all__ = ["ExitWindowManager", "NoSuchClient", "WindowManagerProperties",
+__all__ = ["ExitWindowManager", "WindowManagerProperties",
            "compress", "WindowManager", "ReparentingWindowManager"]
 
 log = logging.getLogger("manager")
@@ -28,11 +28,6 @@ log = logging.getLogger("manager")
 class ExitWindowManager(Exception):
     """An event handler may raise an exception of this type in order to break
     out of the main event loop."""
-    pass
-
-class NoSuchClient(UnhandledEvent):
-    """Raised to indicate that there is no currently-managed client with
-    the given top-level window."""
     pass
 
 @client_message("WM_EXIT")
@@ -54,7 +49,7 @@ def compress(handler):
     @wraps(handler)
     def compressed_handler(self, event):
         if isinstance(self.peek_next_event(), type(event)):
-            return
+            raise StopPropagation(event)
         return handler(self, event)
     return compressed_handler
 
@@ -277,7 +272,7 @@ class WindowManager(EventHandler):
         handler = self.window_handlers.get(event_window(event), None)
         if handler:
             try:
-                return handler.handle_event(event)
+                handler.handle_event(event)
             except UnhandledEvent:
                 pass
         return super(WindowManager, self).handle_event(event)
@@ -290,24 +285,21 @@ class WindowManager(EventHandler):
         log.debug("Ignoring unhandled %s on window 0x%x.",
                   event.__class__.__name__, event_window(event))
 
-    def get_client(self, window, client_only=False):
-        """Retrieve the client with the given top-level window, or raise an
-        exception if there is no such client. Intended for use only in event
-        handlers.
+    def get_client(self, window, client_window_only=False):
+        """Retrieve the client with the given top-level window, or None if
+        there is no such client.
 
         The second (optional) argument controls whether the window must
         be a top-level client window, or if it is permissible to return
         a client instance from its frame or a subwindow thereof."""
-        try:
-            return self.clients[window]
-        except KeyError:
-            raise NoSuchClient
+        return self.clients.get(window, None)
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event):
         """Handle a ConfigureWindow request from a top-level window.
         See ICCCM §4.1.5 for details."""
-        if event.window in self.clients:
+        client = self.get_client(event.window, True)
+        if client:
             client = self.clients[event.window]
             requested_geometry = Geometry(event.x, event.y,
                                           event.width, event.height,
@@ -347,10 +339,12 @@ class WindowManager(EventHandler):
     def handle_unmap_notify(self, event):
         """Note the unmapping of a top-level window."""
         if event.from_configure:
-            raise UnhandledEvent(event)
+            return
         log.debug("Window 0x%x unmapped.", event.window)
         client = self.get_client(event.window, True)
-        if client.reparenting:
+        if not client:
+            return
+        elif client.reparenting:
             # Ignore the unmap triggered by a reparent request.
             pass
         elif (client.properties.wm_state != WMState.IconicState or
@@ -372,7 +366,9 @@ class WindowManager(EventHandler):
             if self.window_handlers.pop(event.window, None):
                 log.debug("Removed event handler for window 0x%x.",
                           event.window)
-        self.unmanage(self.get_client(event.window, True))
+        client = self.get_client(event.window, True)
+        if client:
+            self.unmanage(client)
 
     @handler(MappingNotifyEvent)
     def handle_mapping_notify(self, event):
@@ -391,9 +387,14 @@ class WindowManager(EventHandler):
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
         """Note the change of a window property."""
-        properties = (self.properties
-                      if event.window == self.screen.root
-                      else self.get_client(event.window).properties)
+        if event.window == self.screen.root:
+            properties = self.properties
+        else:
+            client = self.get_client(event.window)
+            if client:
+                properties = client.properties
+            else:
+                return
         properties.property_changed(self.atoms.name(event.atom),
                                     event.state == Property.Delete,
                                     event.time)
@@ -405,13 +406,13 @@ class WindowManager(EventHandler):
         try:
             event_type = self.atoms.name(event.type)
         except BadAtom:
-            raise UnhandledEvent(event)
+            return
         log.debug("Received ClientMessage of type %s on window 0x%x.",
                   event_type, event.window)
         try:
             message_type = client_message_type(event_type)
         except KeyError:
-            raise UnhandledEvent(event)
+            return
         self.handle_event(message_type(event.window, event.format, event.data))
 
     @handler(WMExit)
@@ -439,8 +440,8 @@ class ReparentingWindowManager(WindowManager):
         post-reparenting client initialization."""
         self.frames[client.frame] = client
 
-    def get_client(self, window, client_only=False):
-        if not client_only:
+    def get_client(self, window, client_window_only=False):
+        if not client_window_only:
             # Walk up the window hierarchy until we come to a frame or a root.
             w = window
             while w:
@@ -448,27 +449,24 @@ class ReparentingWindowManager(WindowManager):
                     return self.frames[w]
                 except KeyError:
                     w = self.parents.get(w, None)
-        return super(ReparentingWindowManager, self).get_client(window,
-                                                                client_only)
+        return super(ReparentingWindowManager, self).get_client(window, client_window_only)
 
     @handler(CreateNotifyEvent)
     def handle_create_notify(self, event):
         self.parents[event.window] = event.parent
-        raise UnhandledEvent(event)
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
         self.parents.pop(event.window, None)
         self.frames.pop(event.window, None)
-        raise UnhandledEvent(event)
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
         self.parents[event.window] = event.parent
         if event.override_redirect:
-            raise UnhandledEvent(event)
+            return
         client = self.get_client(event.window, True)
-        if client.reparenting:
+        if client and client.reparenting:
             if (isinstance(client, FramedClientWindow) and
                 client.frame == event.parent):
                 self.framed(client)

@@ -3,7 +3,6 @@
 from collections import defaultdict
 import logging
 
-from event import handler
 from manager import WindowManager, WindowManagerProperties
 from properties import PropertyDescriptor, AtomList, WMState
 

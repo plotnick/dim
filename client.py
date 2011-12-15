@@ -263,7 +263,7 @@ class ClientWindow(EventHandler):
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
         if event.window != self.window:
-            raise UnhandledEvent(event)
+            return
         self.geometry = Geometry(event.x, event.y,
                                  event.width, event.height,
                                  event.border_width)
@@ -272,13 +272,13 @@ class ClientWindow(EventHandler):
     @handler(VisibilityNotifyEvent)
     def handle_visibility_notify(self, event):
         if event.window == self.window:
-            raise UnhandledEvent(event)
+            return
         self.visibility = event.state
 
     @handler(WMChangeState)
     def handle_wm_change_state(self, client_message):
         if client_message.window != self.window:
-            raise UnhandledEvent
+            return
         self.log.debug("Received change-state message (%d).",
                        client_message.data.data32[0])
         if client_message.data.data32[0] == WMState.IconicState:
@@ -385,7 +385,7 @@ class FramedClientWindow(ClientWindow):
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
         if event.window != self.frame:
-            raise UnhandledEvent(event)
+            return
         self.frame_geometry = Geometry(event.x, event.y,
                                        event.width, event.height,
                                        event.border_width)
@@ -394,5 +394,5 @@ class FramedClientWindow(ClientWindow):
     @handler(VisibilityNotifyEvent)
     def handle_visibility_notify(self, event):
         if event.window != self.frame:
-            raise UnhandledEvent(event)
+            return
         self.visibility = event.state

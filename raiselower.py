@@ -4,8 +4,7 @@ import logging
 
 from xcb.xproto import *
 
-from client import ClientWindow
-from event import UnhandledEvent, handler
+from event import handler
 from manager import WindowManager
 from xutil import GrabButtons
 
@@ -40,11 +39,9 @@ class RaiseLower(WindowManager):
     def handle_button_press(self, event):
         button = event.detail
         modifiers = event.state & 0xff
-        window = event.child
-
-        if not window or \
-                modifiers != self.__modifiers or \
-                button not in self.__buttons:
-            raise UnhandledEvent(event)
-
-        self.__buttons[button](self.get_client(window))
+        client = self.get_client(event.child)
+        if (not client or
+            modifiers != self.__modifiers or
+            button not in self.__buttons):
+            return
+        self.__buttons[button](client)

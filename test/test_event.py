@@ -6,107 +6,105 @@ from event import *
 
 class Event(object):
     def __init__(self):
-        self.handled = False
+        self.handled_by = []
 
 class FooEvent(Event): pass
 class BarEvent(Event): pass
 class BazEvent(Event): pass
-class QuxEvent(Event): pass
+class QuuxEvent(Event): pass
 
 class FooHandler(EventHandler):
     @handler(FooEvent)
     def handle_foo(self, event):
-        event.handled = True
-        return event
+        event.handled_by += [FooHandler]
 
 class BarHandler(FooHandler):
     @handler(BarEvent)
     def handle_bar(self, event):
-        event.handled = True
-        return event
+        event.handled_by += [BarHandler]
 
 class BazHandler(BarHandler):
-    @handler(BarEvent)
-    def decline_handle_bar(self, event):
-        event.declined = True
-        raise UnhandledEvent(event)
+    @handler(FooEvent)
+    def handle_foo(self, event):
+        event.handled_by += [BazHandler]
 
-    @handler(QuxEvent)
-    def decline_handle_qux(self, event):
-        event.declined = True
-        raise UnhandledEvent(event)
+    @handler(BarEvent)
+    def handle_bar(self, event):
+        event.handled_by += [BazHandler]
+        raise StopPropagation(event)
+
+    @handler(QuuxEvent)
+    def handle_quux(self, event):
+        event.handled_by += [BazHandler]
 
     def unhandled_event(self, event):
         return False
 
-class QuxHandler(EventHandler):
-    @handler(QuxEvent)
-    def handle_qux(self, event):
-        event.handled = True
-        return event
+class QuuxHandler(EventHandler):
+    @handler(QuuxEvent)
+    def handle_quux(self, event):
+        event.handled_by += [QuuxHandler]
+
+class SuperHandler(BazHandler, QuuxHandler):
+    pass
 
 class MultiHandler(EventHandler):
     @handler((FooEvent, BarEvent, BazEvent))
     def handle_foo_bar_baz(self, event):
-        event.handled = True
-        return event
-
-class SuperHandler(BazHandler, QuxHandler):
-    pass
+        event.handled_by = [MultiHandler]
 
 class TestEventHandler(unittest.TestCase):
     def test_base_handler(self):
-        """Test basic event dispatch and handling"""
-        foo_handler = FooHandler()
-        self.assertTrue(foo_handler.handle_event(FooEvent()).handled)
+        """Basic event dispatch and handling"""
+        handler = FooHandler()
+        foo = FooEvent(); handler.handle_event(foo)
+        self.assertEqual(foo.handled_by, [FooHandler])
         self.assertRaises(UnhandledEvent,
-                          lambda: foo_handler.handle_event(BarEvent()))
+                          lambda: handler.handle_event(BarEvent()))
 
     def test_derived_handler(self):
-        """Test inheritance of event handling"""
-        bar_handler = BarHandler()
-        self.assertTrue(bar_handler.handle_event(FooEvent()).handled)
-        self.assertTrue(bar_handler.handle_event(BarEvent()).handled)
+        """Inheritance of event handlers"""
+        handler = BarHandler()
+        foo = FooEvent(); handler.handle_event(foo)
+        bar = BarEvent(); handler.handle_event(bar)
+        self.assertEqual(foo.handled_by, [FooHandler])
+        self.assertEqual(bar.handled_by, [BarHandler])
 
     def test_default_event_handler(self):
-        """Test default event handler"""
-        baz_handler = BazHandler()
-        baz = BazEvent()
-        self.assertEqual(baz_handler.handle_event(baz), False)
-        self.assertFalse(baz.handled)
+        """Default event handler"""
+        handler = BazHandler()
+        baz = BazEvent(); handler.handle_event(baz)
+        self.assertFalse(baz.handled_by)
 
-    def test_declined_handler(self):
-        """Test declined handler"""
-        baz_handler = BazHandler()
-        bar = BarEvent()
-        self.assertEqual(baz_handler.handle_event(bar), bar)
-        self.assertTrue(bar.declined)
-        self.assertTrue(bar.handled)
+    def test_propagation(self):
+        """Event propagation"""
+        handler = BazHandler()
+        foo = FooEvent(); handler.handle_event(foo)
+        self.assertEqual(foo.handled_by, [BazHandler, FooHandler])
 
-    def test_unhandled_decline(self):
-        """Test decline of last applicable handler"""
-        baz_handler = BazHandler()
-        qux = QuxEvent()
-        self.assertEqual(baz_handler.handle_event(qux), False)
-        self.assertTrue(qux.declined)
-        self.assertFalse(qux.handled)
-
-    def test_multi_handler(self):
-        """Test multi-class handler"""
-        multi_handler = MultiHandler()
-        self.assertTrue(multi_handler.handle_event(FooEvent()).handled)
-        self.assertTrue(multi_handler.handle_event(BarEvent()).handled)
-        self.assertTrue(multi_handler.handle_event(BazEvent()).handled)
-        self.assertRaises(UnhandledEvent,
-                          lambda: multi_handler.handle_event(QuxEvent()))
+    def test_stop_propagation(self):
+        """Stop propagation"""
+        handler = BazHandler()
+        bar = BarEvent(); handler.handle_event(bar)
+        self.assertEqual(bar.handled_by, [BazHandler])
 
     def test_super_handler(self):
-        """Test multi-superclass handler inheritance"""
-        super_handler = SuperHandler()
-        qux = QuxEvent()
-        self.assertEqual(super_handler.handle_event(qux), qux)
-        self.assertTrue(qux.declined) # by BazHandler
-        self.assertTrue(qux.handled) # by QuxHandler
+        """Multiple superclass handler inheritance"""
+        handler = SuperHandler()
+        quux = QuuxEvent(); handler.handle_event(quux)
+        self.assertEqual(quux.handled_by, [BazHandler, QuuxHandler])
+
+    def test_multi_handler(self):
+        """One handler for many event types"""
+        handler = MultiHandler()
+        foo = FooEvent(); handler.handle_event(foo)
+        bar = BarEvent(); handler.handle_event(bar)
+        baz = BazEvent(); handler.handle_event(baz)
+        self.assertEqual(foo.handled_by, [MultiHandler])
+        self.assertEqual(bar.handled_by, [MultiHandler])
+        self.assertEqual(baz.handled_by, [MultiHandler])
+        self.assertRaises(UnhandledEvent,
+                          lambda: handler.handle_event(QuuxEvent()))
 
 if __name__ == "__main__":
     unittest.main()

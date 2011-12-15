@@ -6,7 +6,7 @@ import exceptions
 
 from xcb.xproto import *
 
-from event import UnhandledEvent, handler
+from event import handler
 from manager import *
 from properties import WMState
 from xutil import *
@@ -82,34 +82,36 @@ class FocusPolicy(WindowManager):
         if (event.mode != NotifyMode.Normal or
             event.detail == NotifyDetail.Inferior or
             event.detail == NotifyDetail.Pointer):
-            raise UnhandledEvent(event)
+            return
         self.__log.debug("Window 0x%x got the focus (%s).",
                          event.event, notify_detail_name(event))
-        self.focus(self.get_client(event.event), None)
+        client = self.get_client(event.event)
+        if client:
+            self.focus(client, None)
 
     @handler(FocusOutEvent)
     def handle_focus_out(self, event):
         if (event.mode != NotifyMode.Normal or
             event.detail == NotifyDetail.Inferior or
             event.detail == NotifyDetail.Pointer):
-            raise UnhandledEvent(event)
+            return
         self.__log.debug("Window 0x%x lost the focus (%s).",
                          event.event, notify_detail_name(event))
-        self.unfocus(self.get_client(event.event))
+        client = self.get_client(event.event)
+        if client:
+            self.unfocus(client)
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         if not self.focus_list:
             self.ensure_focus()
-        raise UnhandledEvent(event)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         client = self.get_client(event.window, True)
-        if not client.reparenting and client is self.focus_list[0]:
+        if client and not client.reparenting and client is self.focus_list[0]:
             # Losing the current focus; try to focus another window.
             self.ensure_focus()
-        raise UnhandledEvent(event)
 
     @handler(EnsureFocus)
     def handle_ensure_focus(self, client_message):
@@ -122,10 +124,9 @@ class FocusPolicy(WindowManager):
         def choose_focus_client():
             # Start with the window specified in the message, if any.
             if window:
-                try:
-                    yield self.get_client(window, True)
-                except NoSuchClient:
-                    pass
+                client = self.get_client(window, True)
+                if client:
+                    yield client
 
             # Next we'll try the focus list, starting with the most recently
             # focused client. We run over a copy because failed focus attempts
@@ -136,10 +137,9 @@ class FocusPolicy(WindowManager):
             # Now try the window that has the input focus, if there is one.
             focus = get_input_focus(self.conn, self.screen)
             if focus:
-                try:
-                    yield self.get_client(focus, True)
-                except NoSuchClient:
-                    pass
+                client = self.get_client(focus, True)
+                if client:
+                    yield client
 
             # Finally, we'll just pick clients at random.
             for client in set(self.clients.values()) - set(self.focus_list):
@@ -186,10 +186,13 @@ class SloppyFocus(FocusPolicy):
     def handle_enter_notify(self, event):
         self.__log.debug("Window 0x%x entered (%s).",
                          event.event, notify_detail_name(event))
-        if (event.mode == NotifyMode.Normal and
-            event.detail != NotifyDetail.Inferior and
-            sequence_number(event) != self.last_modify_serial):
-            self.focus(self.get_client(event.event), event.time)
+        if (event.mode != NotifyMode.Normal or
+            event.detail == NotifyDetail.Inferior or
+            sequence_number(event) == self.last_modify_serial):
+            return
+        client = self.get_client(event.event)
+        if client:
+            self.focus(client, event.time)
 
     @handler((UnmapNotifyEvent,
               MapNotifyEvent,
@@ -201,10 +204,10 @@ class SloppyFocus(FocusPolicy):
               CirculateRequestEvent))
     def note_serial(self, event):
         self.last_modify_serial = sequence_number(event)
+
         # Issue a request so that subsequent events will not have the same
         # sequence number, even if no other requests intervene.
         self.conn.core.NoOperation()
-        raise UnhandledEvent(event)
 
 class ClickToFocus(FocusPolicy, ReparentingWindowManager):
     """Focus ignores the movement of the pointer, and changes only when
@@ -258,7 +261,7 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         try:
             client = self.frames[event.event]
         except KeyError:
-            raise UnhandledEvent(event)
+            return
         self.__log.debug("Button %d press in window 0x%x.",
                          event.detail, event.event)
         if self.ignore_focus_click:

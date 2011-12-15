@@ -5,7 +5,7 @@ import logging
 from xcb.xproto import *
 
 from cursor import *
-from event import UnhandledEvent, handler
+from event import handler
 from geometry import *
 from keysym import *
 from manager import WindowManager, compress
@@ -447,34 +447,33 @@ class MoveResize(WindowManager):
     def handle_button_press(self, event):
         button = event.detail
         modifiers = event.state & 0xff
-        window = event.child
-
-        if not window or \
-                modifiers != self.__modifiers or \
-                button not in self.__buttons:
-            raise UnhandledEvent(event)
-
-        self.conn.core.GrabKeyboard(False, self.screen.root, event.time,
-                                    GrabMode.Async, GrabMode.Async)
+        client = self.get_client(event.child)
+        if (not client or
+            modifiers != self.__modifiers or
+            button not in self.__buttons):
+            return
 
         def cleanup(time=Time.CurrentTime):
             self.client_update.resistance.cleanup(time)
             self.conn.core.UngrabPointer(time)
             self.conn.core.UngrabKeyboard(time)
+
         def change_cursor(cursor, time=Time.CurrentTime):
             self.conn.core.ChangeActivePointerGrab(self.cursors[cursor], time,
                                                    self.__grab_event_mask)
+
         action = self.__buttons[button]
-        client = self.get_client(window)
         self.client_update = action(client,
                                     Position(event.root_x, event.root_y),
                                     cleanup, change_cursor)
         self.client_update.resistance = EdgeResistance(client)
+        self.conn.core.GrabKeyboard(False, self.screen.root, event.time,
+                                    GrabMode.Async, GrabMode.Async)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
         if not self.client_update:
-            raise UnhandledEvent(event)
+            return
         self.client_update.commit(event.time)
         self.client_update = None
 
@@ -482,7 +481,7 @@ class MoveResize(WindowManager):
     @compress
     def handle_motion_notify(self, event):
         if not self.client_update:
-            raise UnhandledEvent(event)
+            return
         self.client_update.update(self.query_pointer()
                                   if event.detail == Motion.Hint
                                   else Position(event.root_x, event.root_y))
@@ -490,7 +489,7 @@ class MoveResize(WindowManager):
     @handler(KeyPressEvent)
     def handle_key_press(self, event):
         if not self.client_update:
-            raise UnhandledEvent(event)
+            return
         keysym = self.keymap.lookup_key(event.detail, event.state)
         if keysym == XK_Escape:
             self.client_update.rollback(event.time)
