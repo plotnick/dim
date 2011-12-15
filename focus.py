@@ -70,9 +70,16 @@ class FocusPolicy(WindowManager):
         """Note that a client no longer has the input focus."""
         client.unfocus()
 
-    def update_tagset(self, window, name, deleted, time):
-        super(FocusPolicy, self).update_tagset(window, name, deleted, time)
-        self.ensure_focus(time=time)
+    def ensure_focus(self, client=None, time=Time.CurrentTime):
+        # We use a client message for ensuring focus so that we can be sure
+        # that any outstanding requests or events generated as a result
+        # thereof have been completely processed before we go groveling
+        # through the focus list.
+        send_client_message(self.conn, self.screen.root, self.screen.root,
+                            (EventMask.SubstructureRedirect |
+                             EventMask.StructureNotify),
+                            32, self.atoms["_DIM_ENSURE_FOCUS"],
+                            [time, client.window if client else 0, 0, 0, 0])
 
     @handler(FocusInEvent)
     def handle_focus_in(self, event):
@@ -94,20 +101,15 @@ class FocusPolicy(WindowManager):
                          event.event, notify_detail_name(event))
         self.unfocus(self.get_client(event.event))
 
-    def ensure_focus(self, client=None, time=Time.CurrentTime):
-        # We use a client message for ensuring focus so that we can be sure
-        # that any outstanding requests or events generated as a result
-        # thereof have been completely processed before we go groveling
-        # through the focus list.
-        send_client_message(self.conn, self.screen.root, self.screen.root,
-                            (EventMask.SubstructureRedirect |
-                             EventMask.StructureNotify),
-                            32, self.atoms["_DIM_ENSURE_FOCUS"],
-                            [time, client.window if client else 0, 0, 0, 0])
+    @handler(UnmapNotifyEvent)
+    def handle_unmap_notify(self, event):
+        client = self.get_client(event.window, True)
+        if not client.reparenting and client is self.focus_list[0]:
+            self.ensure_focus()
+        raise UnhandledEvent(event)
 
     @handler(EnsureFocus)
     def handle_ensure_focus(self, client_message):
-        """Attempt to focus a client."""
         # There should be a timestamp in the first data slot and a window ID
         # (which may be None) in the second.
         time, window = client_message.data.data32[:2]
@@ -224,6 +226,9 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         self.grab_focus_click(client)
 
     def grab_focus_click(self, client):
+        if not client.frame:
+            self.__log.debug("Unable to establish grab for focus click.")
+            return
         self.conn.core.GrabButton(False, client.frame,
                                   EventMask.ButtonPress,
                                   GrabMode.Sync, GrabMode.Async,

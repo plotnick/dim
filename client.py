@@ -61,6 +61,7 @@ class ClientWindow(EventHandler):
         self.keymap = manager.keymap
         self.decorator = manager.decorator(self)
         self.decorated = False
+        self.frame = None
         self.offset = None # determined and set by our decorator
         self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.focus_time = None

@@ -1,5 +1,13 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+# Most of these tests are based on Alex Hioreanu's description of sloppy
+# focus in AHWM:
+#
+#   <http://people.cs.uchicago.edu/~ahiorean/ahwm/sloppy-focus.html>
+#
+# AHWM was one of the first window managers to take the problems of sloppy
+# focus seriously, and our implementation owes it a debt of gratitude.
+
 import unittest
 
 from event import *
@@ -30,16 +38,23 @@ class FocusTestClient(TestClient):
 class FocusPolicyTestCase(WMTestCase):
     """Base class for focus policy integration tests."""
 
+    wm_class = FocusPolicy
+
     def setUp(self, start_wm=True):
         super(FocusPolicyTestCase, self).setUp(start_wm=start_wm)
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
                                             InputFocus.PointerRoot,
                                             Time.CurrentTime).check()
 
+        # Save the current pointer position.
+        reply = self.conn.core.QueryPointer(self.screen.root).reply()
+        self.original_pointer_position = Position(reply.root_x, reply.root_y)
+
     def tearDown(self):
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
                                             InputFocus.PointerRoot,
                                             Time.CurrentTime).check()
+        self.warp_pointer(*self.original_pointer_position)
         super(FocusPolicyTestCase, self).tearDown()
 
     def is_focused(self, client):
@@ -65,124 +80,177 @@ class FocusPolicyTestCase(WMTestCase):
     def assertNotFocus(self, client):
         self.assertFalse(self.is_focused(client))
 
-class TestInitialFocus(FocusPolicyTestCase):
-    wm_class = FocusPolicy
+    def steal_focus(self, client):
+        self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
+                                            client.window,
+                                            Time.CurrentTime).check()
+        self.loop(self.make_focus_test(client))
 
+    def focus(self, client):
+        """Give the client the focus. Subclasses should provide methods that
+        are better adapted to their focus policy."""
+        self.steal_focus(client)
+
+    def make_client(self, geometry, managed=True):
+        """Add a focus-test client with the given geometry, map it, and wait
+        for it to be mapped and (possibly) managed."""
+        client = FocusTestClient(geometry)
+        self.add_client(client)
+        client.map()
+        test = ((lambda: client.mapped and client.managed) if managed else
+                (lambda: client.mapped))
+        self.loop(test)
+        return client
+
+    def assertPointerRoot(self):
+        """Ensure that only the root window is currently under the pointer."""
+        reply = self.conn.core.QueryPointer(self.screen.root).reply()
+        self.assertFalse(reply.child,
+                         "there must not be a window at +%d+%d" %
+                         (reply.root_x, reply.root_y))
+
+class TestInitialFocus(FocusPolicyTestCase):
     def setUp(self, start_wm=False):
         super(TestInitialFocus, self).setUp(start_wm)
 
     def test_initial_focus(self):
+        """Initial focus"""
         geometry = Geometry(0, 0, 100, 100, 5)
         with WarpedPointer(self, center(geometry)):
-            client = self.add_client(FocusTestClient(geometry))
-            client.map()
-            self.loop(lambda: client.mapped)
-
+            client = self.make_client(geometry, False)
             self.assertNotFocus(client)
             self.wm_thread.start()
             self.loop(self.make_focus_test(client))
 
-class TestSloppyFocus(FocusPolicyTestCase):
+class SharedFocusPolicyTests(object):
+    """A mix-in for tests that apply to all focus policies."""
+
+    def test_pointer_focus(self):
+        """Ensure that we can focus the window under the pointer"""
+        geometry = Geometry(0, 0, 100, 100, 1)
+        self.warp_pointer(*center(geometry))
+        client = self.make_client(geometry)
+        client.map()
+        self.focus(client)
+
+    def test_steal_focus(self):
+        """Focus stealing"""
+        a = self.make_client(Geometry(0, 0, 100, 100, 1))
+        b = self.make_client(Geometry(75, 75, 100, 100, 1))
+        self.focus(a)
+        self.steal_focus(b)
+        self.steal_focus(a)
+
+    def test_focus_revert_over_root(self):
+        """Revert focus with pointer over root"""
+        # This is problem 4 in the AHWM sloppy focus document.
+        a = self.make_client(Geometry(0, 0, 100, 50, 1))
+        b = self.make_client(Geometry(75, 40, 100, 50, 1))
+        self.focus(a)
+        self.focus(b)
+
+        p = Position(110, 25) # over root, but not in A or B
+        self.warp_pointer(*p)
+        self.assertPointerRoot()
+
+        b.unmap()
+        self.loop(lambda: self.make_focus_test(a))
+
+    def test_focus_revert_over_window(self):
+        """Revert focus with pointer over another window"""
+        # This is problem 5 in the AHWM sloppy focus document.
+        a = self.make_client(Geometry(0, 0, 100, 50, 1))
+        b = self.make_client(Geometry(110, 40, 100, 50, 1))
+        c = self.make_client(Geometry(115, 0, 80, 35, 1))
+        self.warp_pointer(*center(b.geometry))
+        self.steal_focus(a)
+        self.steal_focus(b)
+        b.unmap()
+        self.loop(self.make_focus_test(a))
+
+class TestSloppyFocus(FocusPolicyTestCase, SharedFocusPolicyTests):
     """Test the behavior of the sloppy focus policy."""
-
-    # Most of these tests are based on Alex Hioreanu's description of
-    # sloppy focus in AHWM:
-    #
-    #   <http://people.cs.uchicago.edu/~ahiorean/ahwm/sloppy-focus.html>
-    #
-    # AHWM was one of the first window managers to take the problems of
-    # sloppy focus seriously, and our implementation owes it a debt of
-    # gratitude.
-
     wm_class = SloppyFocus
+
+    def focus(self, client):
+        # The only reliable way to focus a window under the sloppy focus
+        # policy is to move the pointer in such a way that it generates an
+        # EnterNotify event. We therefore need a "safe" position from which
+        # we can warp the pointer into the window. There should be no other
+        # windows at the safe position.
+        self.warp_pointer(500, 0)
+        self.assertPointerRoot()
+        self.warp_pointer(*center(client.geometry))
+        self.loop(self.make_focus_test(client))
 
     def pointer_window(self):
         root = self.screen.root
         return self.conn.core.QueryPointer(root).reply().child
 
     def test_sloppy(self):
-        with WarpedPointer(self, Position(1, 1)):
-            # We need to be able to reach the root window with the pointer.
-            # Let's ensure that the northwest corner is free of windows.
-            reply = self.conn.core.QueryPointer(self.screen.root).reply()
-            self.assertFalse(reply.child, "northwest corner must be clear")
+        """Basic sloppy focus"""
+        self.warp_pointer(1, 1)
+        self.assertPointerRoot()
 
-            geometry = Geometry(5, 5, 100, 100, 1)
-            client = self.add_client(FocusTestClient(geometry))
-            client.map()
-            self.loop(lambda: client.mapped and client.managed)
+        client = self.make_client(Geometry(2, 2, 100, 100, 1))
+        self.fake_input(EventType.MotionNotify, False, 10, 10)
+        self.loop(self.make_focus_test(client))
 
-            # Move the pointer into the window and make sure it gets the focus.
-            self.fake_input(EventType.MotionNotify, False, *center(geometry))
-            self.loop(self.make_focus_test(client))
-
-            # Now move it back to the root and ensure that it's still focused.
-            self.fake_input(EventType.MotionNotify, False, 1, 1)
-            self.loop(self.make_focus_test(client))
+        # Now move the pointer back to the root and ensure that we keep focus.
+        self.fake_input(EventType.MotionNotify, False, 1, 1)
+        self.loop(self.make_focus_test(client))
 
     def test_enter_window_keep_focus(self):
+        """Keep focus when pointer enters a window due to client configure"""
         # This is problem 2 in the AHWM sloppy focus document.
-        a = self.add_client(FocusTestClient(Geometry(0, 0, 100, 50, 1)))
-        a.map()
-        self.loop(lambda: a.mapped and a.managed)
+        a = self.make_client(Geometry(0, 0, 100, 50, 1))
+        b = self.make_client(Geometry(75, 25, 100, 50, 1))
+        self.focus(b)
 
-        b = self.add_client(FocusTestClient(Geometry(75, 25, 100, 50, 1)))
-        b.map()
-        self.loop(lambda: b.mapped and b.managed)
+        # Put the pointer right next to A.
+        self.warp_pointer(110, 10)
 
-        # Focus window B.
-        with WarpedPointer(self, Position(150, 50)):
-            self.loop(self.make_focus_test(b))
+        # Resize A so that it contains the pointer.
+        a.resize(Rectangle(150, 100), 1)
+        self.loop(lambda: (a.geometry == Geometry(0, 0, 150, 100, 1) and
+                           self.pointer_window() == a.window))
 
-        # Put the pointer right next to window A.
-        with WarpedPointer(self, Position(110, 10)):
-            # Resize A so that it now contains the pointer.
-            a.resize(Rectangle(150, 100), 1)
-            self.loop(lambda: (a.geometry == Geometry(0, 0, 150, 100, 1) and
-                               self.pointer_window() == a.window))
-
-            # B should still have the focus, since the entering of A was
-            # not a result of a pointer movement.
-            self.loop(self.make_focus_test(b))
+        # B should still have the focus, since the entering of A was
+        # not a result of a pointer movement.
+        self.loop(self.make_focus_test(b))
 
     def test_leave_window_keep_focus(self):
+        """Keep focus when pointer leaves a window due to client configure"""
         # This is problem 3 in the AHWM sloppy focus document. It is
         # closely related to problem 2, and shares a solution.
-        a = self.add_client(FocusTestClient(Geometry(0, 0, 100, 50, 1)))
-        a.map()
-        self.loop(lambda: a.mapped and a.managed)
+        a = self.make_client(Geometry(0, 0, 100, 50, 1))
+        b = self.make_client(Geometry(75, 25, 100, 50, 1))
 
-        b = self.add_client(FocusTestClient(Geometry(75, 25, 100, 50, 1)))
-        b.map()
-        self.loop(lambda: b.mapped and b.managed)
+        # Put the pointer in B, but over A.
+        self.warp_pointer(85, 30)
+        self.loop(self.make_focus_test(b))
 
-        # Put the pointer in window B, but over window A.
-        with WarpedPointer(self, Position(85, 30)):
-            self.loop(self.make_focus_test(b))
+        # Move & resize B so that the pointer is now in A.
+        geometry = Geometry(100, 25, 75, 50, 1)
+        b.configure(geometry)
+        self.loop(lambda: (b.geometry == geometry and
+                           self.pointer_window() == a.window))
 
-            # Move & resize B so that the pointer is now in A.
-            geometry = Geometry(100, 25, 75, 50, 1)
-            b.configure(geometry)
-            self.loop(lambda: (b.geometry == geometry and
-                               self.pointer_window() == a.window))
+        # B should still have the focus.
+        self.loop(self.make_focus_test(b))
 
-            # B should still have the focus.
-            self.loop(self.make_focus_test(b))
-
-class TestClickToFocus(FocusPolicyTestCase):
+class TestClickToFocus(FocusPolicyTestCase, SharedFocusPolicyTests):
     wm_class = ClickToFocus
 
-    def test_focus(self):
-        geometry = Geometry(0, 0, 100, 100, 1)
-        with WarpedPointer(self, center(geometry)):
-            client = self.add_client(FocusTestClient(geometry))
-            client.map()
-            self.loop(lambda: client.mapped and client.managed)
+    def focus(self, client):
+        self.warp_pointer(*center(client.geometry))
+        self.fake_input(EventType.ButtonPress, 1)
+        self.fake_input(EventType.ButtonRelease, 1)
+        self.loop(self.make_focus_test(client))
 
-            self.assertNotFocus(client)
-            self.fake_input(EventType.ButtonPress, 1)
-            self.fake_input(EventType.ButtonRelease, 1)
-            self.loop(self.make_focus_test(client))
+    def test_focus(self):
+        """Basic click-to-focus"""
+        self.focus(self.make_client(Geometry(0, 0, 100, 100, 1)))
 
 if __name__ == "__main__":
     import logging
