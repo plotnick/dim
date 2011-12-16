@@ -6,7 +6,41 @@ from xcb.xproto import *
 
 from keysym import *
 
-__all__ = ["KeyBindingMap", "ButtonBindingMap", "Bindings"]
+__all__ = ["keypad_aliases", "KeyBindingMap", "ButtonBindingMap", "Bindings"]
+
+keypad_aliases = {XK_KP_Space: XK_space,
+                  XK_KP_Tab: XK_Tab,
+                  XK_KP_Enter: XK_Return,
+                  XK_KP_Home: XK_Home,
+                  XK_KP_Left: XK_Left,
+                  XK_KP_Up: XK_Up,
+                  XK_KP_Right: XK_Right,
+                  XK_KP_Down: XK_Down,
+                  XK_KP_Prior: XK_Prior,
+                  XK_KP_Page_Up: XK_Page_Up,
+                  XK_KP_Next: XK_Next,
+                  XK_KP_Page_Down: XK_Page_Down,
+                  XK_KP_End: XK_End,
+                  XK_KP_Begin: XK_Begin,
+                  XK_KP_Insert: XK_Insert,
+                  XK_KP_Delete: XK_Delete,
+                  XK_KP_Equal: XK_equal,
+                  XK_KP_Multiply: XK_asterisk,
+                  XK_KP_Add: XK_plus,
+                  XK_KP_Separator: XK_comma,
+                  XK_KP_Subtract: XK_minus,
+                  XK_KP_Decimal: XK_period,
+                  XK_KP_Divide: XK_slash,
+                  XK_KP_0: XK_0,
+                  XK_KP_1: XK_1,
+                  XK_KP_2: XK_2,
+                  XK_KP_3: XK_3,
+                  XK_KP_4: XK_4,
+                  XK_KP_5: XK_5,
+                  XK_KP_6: XK_6,
+                  XK_KP_7: XK_7,
+                  XK_KP_8: XK_8,
+                  XK_KP_9: XK_9}
 
 def all_combinations(sequences):
     """Given a sequence of sequences, recursively yield all combinations of
@@ -40,7 +74,8 @@ class BindingMap(dict):
     logical button number; the ensure_symbol method should accept such a
     designator and return a corresponding symbol."""
 
-    def __init__(self, mapping):
+    def __init__(self, mapping, aliases={}):
+        self.aliases = aliases
         return super(BindingMap, self).__init__(self.parse_bindings(mapping))
 
     def parse_bindings(self, bindings={}):
@@ -123,6 +158,7 @@ class Bindings(object):
             yield frozenset(filter(None, modlist))
 
     def get_binding(self, bindings, symbol, state):
+        symbol = bindings.aliases.get(symbol, symbol)
         for modset in self.modsets(state):
             try:
                 return bindings[(modset, symbol)]

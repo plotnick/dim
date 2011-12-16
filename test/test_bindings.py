@@ -6,7 +6,8 @@ import unittest
 import xcb
 from xcb.xproto import *
 
-from bindings import all_combinations, ensure_sequence, ensure_keysym, Bindings
+from bindings import all_combinations, ensure_sequence, ensure_keysym, \
+    KeyBindingMap, ButtonBindingMap, Bindings
 from keymap import *
 from keysym import *
 from xutil import GrabServer
@@ -67,6 +68,30 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_C, 0, None)
         self.assertKeyBinding(XK_c, ModMask.Shift, "key-C")
         self.assertKeyBinding(XK_C, ModMask.Shift, "key-C")
+
+    def test_key_bindings_aliases(self):
+        # In this test, we'll assume that numlock is bound to some modifier,
+        # and that the mappings for both the normal and keypad "1" key are
+        # the usual ones (i.e., 1/exclam and KP_1/KP_End).
+        numlock = self.keymap.numlock
+        self.assertNotEqual(numlock, 0)
+
+        key_bindings = KeyBindingMap({XK_1: "1",
+                                      XK_exclam: "exclamation",
+                                      XK_End: "end"},
+                                     aliases={XK_KP_1: XK_1,
+                                              XK_KP_End: XK_End})
+        self.bindings = Bindings(key_bindings,
+                                 {},
+                                 self.keymap,
+                                 self.modmap,
+                                 self.butmap)
+        self.assertKeyBinding(XK_1, 0, "1")
+        self.assertKeyBinding(XK_1, ModMask.Shift, "exclamation")
+        self.assertKeyBinding(XK_End, 0, "end")
+        self.assertKeyBinding(XK_KP_1, 0, "end")
+        self.assertKeyBinding(XK_KP_1, numlock, "1")
+        self.assertKeyBinding(XK_KP_1, numlock | ModMask.Shift, "end")
 
     def test_key_bindings_modifiers(self):
         # In this test we'll assume that alt and meta are both bound,

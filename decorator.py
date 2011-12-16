@@ -386,7 +386,8 @@ class InputFieldTitlebar(Titlebar):
                                   ("control", "k"): "kill-line",
                                   ("control", "u"): "kill-whole-line",
                                   ("control", "y"): "yank",
-                                  ("meta", "y"): "yank-pop"})
+                                  ("meta", "y"): "yank-pop"},
+                                 aliases=keypad_aliases)
 
     button_bindings = ButtonBindingMap({})
 
