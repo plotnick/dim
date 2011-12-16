@@ -465,7 +465,7 @@ class InputFieldTitlebar(Titlebar):
             pass
 
     @handler(KeyPressEvent)
-    def handle_keypress(self, event):
+    def handle_keypress(self, event, shift=frozenset(["shift"])):
         self.time = event.time
         try:
             action = self.bindings[event]
@@ -473,8 +473,8 @@ class InputFieldTitlebar(Titlebar):
             # No binding; assume a self-inserting character unless any
             # interesting modifiers are present.
             symbol, state = e.args
-            keymap = self.manager.keymap
-            if next(self.bindings.modsets(state)):
+            modset = next(self.bindings.modsets(state))
+            if modset and modset != shift:
                 self.flash()
             else:
                 char = keysym_to_string(symbol)
