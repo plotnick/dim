@@ -5,27 +5,25 @@ from xcb.xproto import Atom
 
 __all__ = ["AtomCache"]
 
+def ensure_unicode(string, encoding, errors):
+    return (string
+            if isinstance(string, unicode)
+            else unicode(string, encoding, errors))
+
 class AtomCache(object):
-    """A simple cache for X atoms."""
+    """A simple cache for X atoms and their names."""
 
     def __init__(self, conn, names=[], encoding="Latin-1", errors="strict"):
         assert isinstance(conn, xcb.Connection)
         self.conn = conn
-        self.atoms = {} # atom cache
-        self.names = {} # name cache
+        self.atoms = {}
+        self.names = {}
         if names:
             self.prime_cache(names, encoding, errors)
 
-    def intern_atom(self, name, encoding="Latin-1", errors="strict"):
-        """Intern the given name and return a cookie for the request.
-        Does not wait for a reply."""
-        bytes = name.encode(encoding, errors)
-        return self.conn.core.InternAtom(False, len(bytes), bytes)
-
     def prime_cache(self, names, encoding="Latin-1", errors="strict"):
         """Prime the atom cache with the given names."""
-        names = [(name if isinstance(name, unicode) else
-                  unicode(name, encoding, errors))
+        names = [ensure_unicode(name, encoding, errors)
                  for name in names
                  if name is not None]
         cookies = [self.intern_atom(name, encoding, errors)
@@ -34,6 +32,12 @@ class AtomCache(object):
             atom = cookie.reply().atom
             self.atoms[name] = atom
             self.names[atom] = name
+
+    def intern_atom(self, name, encoding="Latin-1", errors="strict"):
+        """Intern the given name and return a cookie for the request.
+        Does not wait for a reply."""
+        buf = name.encode(encoding, errors)
+        return self.conn.core.InternAtom(False, len(buf), buf)
 
     def __getitem__(self, name):
         return self.intern(name)
@@ -51,8 +55,7 @@ class AtomCache(object):
 
         # From now on we'll insist that the name be a Unicode string. Just
         # because X treats atoms as byte strings doesn't mean we have to.
-        name = (name if isinstance(name, unicode) else
-                unicode(name, encoding, errors))
+        name = ensure_unicode(name, encoding, errors)
 
         # Check the cache.
         try:
@@ -73,8 +76,8 @@ class AtomCache(object):
         try:
             return self.names[atom]
         except KeyError:
-            name = unicode(self.conn.core.GetAtomName(atom).reply().name.buf(),
-                           encoding, errors)
+            buf = self.conn.core.GetAtomName(atom).reply().name.buf()
+            name = unicode(buf, encoding, errors)
             self.atoms[name] = atom
             self.names[atom] = name
             return name
