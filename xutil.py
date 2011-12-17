@@ -167,14 +167,13 @@ def value_list(flag_class, **kwargs):
             map(operator.itemgetter(0),
                 sorted(values, key=operator.itemgetter(1))))
 
-def textitem16(string):
-    """Given a string, yield a sequence of TEXTITEM16 byte strings suitable
-    for embedding in a PolyText16 request."""
+def textitem16(string, pack_header=Struct("Bx").pack):
+    """Given a string, yield a sequence of TEXTITEM16s suitable for embedding
+    in a PolyText16 request. Does not support font switching or deltas."""
     string = unicode(string)
-    segments = [string[i:i + 254] for i in range(0, len(string), 254)]
-    for segment in segments:
-        string16 = array("H", segment.encode("UTF-16BE"))
-        yield pack("BB", len(string16), 0) + string16.tostring()
+    for segment in (string[i:i + 254] for i in xrange(0, len(string), 254)):
+        string16 = segment.encode("UTF-16BE")
+        yield pack_header(len(string16) // 2) + string16
 
 class GrabButtons(dict):
     """Helper class for managing passive grabs established with GrabButton.
