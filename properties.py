@@ -6,7 +6,6 @@ from array import array
 from collections import defaultdict
 from codecs import decode
 import logging
-from operator import lt, gt
 from struct import Struct
 
 from xcb.xproto import *
