@@ -438,11 +438,11 @@ class InputFieldTitlebar(Titlebar):
                                          1, [x, y - a, w, a + d])
 
     def flash(self):
-        # Draw an xor rectangle over the entire titlebar (minus the relief).
-        w = self.geometry.width - 2
-        h = self.geometry.height - 2
+        # Draw an xor rectangle over the non-relief portion of the titlebar.
+        w = self.geometry.width
+        h = self.geometry.height
         self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
-                                         1, [1, 1, w, h])
+                                         1, [1, 1, w - 2, h - 2])
         def refresh():
             self.draw()
             self.conn.flush()
