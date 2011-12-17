@@ -2,6 +2,7 @@
 
 """Client windows may be decorated with a frame, border, title bar, &c."""
 
+from collections import deque
 import logging
 from threading import Timer
 
@@ -388,8 +389,8 @@ class InputFieldTitlebar(Titlebar):
                                   ("control", "y"): "yank",
                                   ("meta", "y"): "yank-pop"},
                                  aliases=keypad_aliases)
-
     button_bindings = ButtonBindingMap({})
+    kill_ring = deque([], 10)
 
     def __init__(self,
                  prompt="",
@@ -402,7 +403,7 @@ class InputFieldTitlebar(Titlebar):
                  **kwargs):
         super(InputFieldTitlebar, self).__init__(**kwargs)
         self.prompt = unicode(prompt)
-        self.buffer = StringBuffer(initial_value)
+        self.buffer = StringBuffer(initial_value, self.kill_ring)
         self.commit = lambda: commit(unicode(self.buffer))
         self.rollback = rollback
         self.time = time

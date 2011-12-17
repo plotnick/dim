@@ -30,10 +30,12 @@ class StringBuffer(Sequence):
     word_chars = re.compile(r"\w", re.UNICODE)
     kill_command = re.compile(r"(^|_)kill(_|$)")
 
-    def __init__(self, initial_value="", kill_ring_max=10):
+    def __init__(self, initial_value="", kill_ring=None, kill_ring_max=10):
         self.buffer = list(unicode(initial_value))
         self.point = len(self.buffer)
-        self.kill_ring = deque([], kill_ring_max)
+        self.kill_ring = (kill_ring
+                          if kill_ring is not None
+                          else deque([], kill_ring_max))
         self.last_command = ""
         self.command_level = 0
 
