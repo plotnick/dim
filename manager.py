@@ -228,6 +228,17 @@ class WindowManager(EventHandler):
                                border_width,
                                gravity)
 
+    def ensure_focus(self, client=None, time=Time.CurrentTime):
+        """Make a best-effort attempt to ensure that some client has the
+        input focus."""
+        # Subclasses that deal with focus policy are expected to provide
+        # proper implementations.
+        if client and client.focus(time):
+            return
+        self.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                     InputFocus.PointerRoot,
+                                     time)
+
     def decorator(self, client):
         """Return a decorator for the given client."""
         return Decorator(self.conn, client)

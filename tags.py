@@ -164,7 +164,4 @@ class TagManager(WindowManager):
             self.tag_machine.run(self.properties.tagset_update)
         except StackUnderflow:
             log.warning("Stack underflow while executing tagset update.")
-        try:
-            self.ensure_focus(time=time)
-        except AttributeError:
-            pass
+        self.ensure_focus(time=time)

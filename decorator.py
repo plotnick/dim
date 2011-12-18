@@ -461,10 +461,7 @@ class InputFieldTitlebar(Titlebar):
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         self.client.focus_override = None
-        try:
-            self.manager.ensure_focus(self.client, self.time)
-        except AttributeError:
-            pass
+        self.manager.ensure_focus(self.client, self.time)
 
     @handler(KeyPressEvent)
     def handle_keypress(self, event, shift=frozenset(["shift"])):
