@@ -109,7 +109,7 @@ class FocusPolicy(WindowManager):
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         client = self.get_client(event.window, True)
-        if client and not client.reparenting and client is self.focus_list[0]:
+        if client and self.focus_list and client is self.focus_list[0]:
             # Losing the current focus; try to focus another window.
             self.ensure_focus()
 
@@ -209,16 +209,15 @@ class SloppyFocus(FocusPolicy):
         # sequence number, even if no other requests intervene.
         self.conn.core.NoOperation()
 
-class ClickToFocus(FocusPolicy, ReparentingWindowManager):
+class ClickToFocus(FocusPolicy):
     """Focus ignores the movement of the pointer, and changes only when
     button 1 is pressed in a client window.
 
     In order to intercept focus clicks, we need to establish a passive grab
     on the pointer button for each client window. However, ICCCM §6.3 states
     that "[c]lients should establish button and key grabs only on windows that
-    they own." This policy therefore requires a reparenting window manager,
-    and establishes grabs only on the frames that we create, and not on the
-    client windows themselves."""
+    they own." This policy therefore only establishes grabs on client frames,
+    and not on the client windows themselves."""
 
     __log = logging.getLogger("focus.click")
 
@@ -227,13 +226,15 @@ class ClickToFocus(FocusPolicy, ReparentingWindowManager):
         self.ignore_focus_click = ignore_focus_click
         super(ClickToFocus, self).__init__(display, screen, **kwargs)
 
-    def framed(self, client):
-        super(ClickToFocus, self).framed(client)
-        self.grab_focus_click(client)
+    def manage(self, window):
+        client = super(ClickToFocus, self).manage(window)
+        if client:
+            self.grab_focus_click(client)
+        return client
 
     def grab_focus_click(self, client):
         if not client.frame:
-            self.__log.debug("Unable to establish grab for focus click.")
+            self.__log.warning("Unable to establish grab for focus click.")
             return
         self.conn.core.GrabButton(False, client.frame,
                                   EventMask.ButtonPress,

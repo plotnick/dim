@@ -12,7 +12,7 @@ from geometry import *
 from properties import *
 from xutil import *
 
-__all__ = ["ClientWindow", "FramedClientWindow"]
+__all__ = ["Client"]
 
 @client_message("WM_CHANGE_STATE")
 class WMChangeState(ClientMessage):
@@ -39,15 +39,17 @@ class ClientProperties(PropertyManager):
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])
 
-class ClientWindow(EventHandler):
-    """All top-level windows (other than those with override-redirect set) will
-    be wrapped with an instance of this class."""
+class Client(EventHandler):
+    """Represents a managed, top-level client window."""
 
     client_event_mask = (EventMask.EnterWindow |
-                         EventMask.LeaveWindow |
                          EventMask.FocusChange |
-                         EventMask.PropertyChange |
-                         EventMask.VisibilityChange)
+                         EventMask.PropertyChange)
+
+    frame_event_mask = (EventMask.SubstructureRedirect |
+                        EventMask.SubstructureNotify |
+                        EventMask.EnterWindow |
+                        EventMask.VisibilityChange)
 
     def __init__(self, conn, window, manager):
         self.conn = conn
@@ -59,26 +61,65 @@ class ClientWindow(EventHandler):
         self.cursors = manager.cursors
         self.fonts = manager.fonts
         self.keymap = manager.keymap
+        self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.decorator = manager.decorator(self)
         self.decorated = False
-        self.frame = None
-        self.offset = None # determined and set by our decorator
-        self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.focus_time = None
         self.focus_override = None
         self.visibility = None
         self.log = logging.getLogger("client.0x%x" % self.window)
-        self.shared_init()
 
-    def shared_init(self, reparenting=False, event_mask=client_event_mask):
-        """Initialize a client window instance. Called during instance
-        initialization and whenever an instance's class is changed."""
-        self.reparenting = reparenting
-        self._geometry = None
+        with GrabServer(self.conn):
+            geometry = window_geometry(self.conn, self.window)
+            if not geometry:
+                return
+
+            # Set the client's border width to 0, but save the current value
+            # so that we can restore it if and when we reparent the client
+            # back to the root.
+            self.original_border_width = geometry.border_width
+            self.conn.core.ConfigureWindow(self.window,
+                                           ConfigWindow.BorderWidth,
+                                           [0])
+
+            # Compute the frame geometry based on the current geometry
+            # and the requirements of our decorator.
+            offset = self.decorator.compute_client_offset()
+            gravity = self.properties.wm_normal_hints.win_gravity
+            frame_geometry = geometry.resize(geometry.size() + offset.size(),
+                                             self.decorator.border_width,
+                                             gravity)
+
+            # Create the frame and reparent the client window.
+            self.reparenting = True
+            self.frame = self.conn.generate_id()
+            self.log.debug("Creating frame 0x%x.", self.frame)
+            self.conn.core.CreateWindow(self.screen.root_depth,
+                                        self.frame,
+                                        self.screen.root,
+                                        frame_geometry.x,
+                                        frame_geometry.y,
+                                        frame_geometry.width,
+                                        frame_geometry.height,
+                                        frame_geometry.border_width,
+                                        WindowClass.InputOutput,
+                                        self.screen.root_visual,
+                                        CW.OverrideRedirect | CW.EventMask,
+                                        [True, self.frame_event_mask])
+            self.conn.core.ChangeSaveSet(SetMode.Insert, self.window)
+            self.conn.core.ReparentWindow(self.window, self.frame,
+                                          offset.x, offset.y)
+
+            # Record the new window and frame geometries.
+            self.geometry = geometry.reborder(0).move(offset.position())
+            self.frame_geometry = frame_geometry
+
+        # Register for events on the client window and frame.
         self.conn.core.ChangeWindowAttributes(self.window,
                                               CW.EventMask,
-                                              [event_mask])
+                                              [self.client_event_mask])
         self.manager.register_window_handler(self.window, self)
+        self.manager.register_window_handler(self.frame, self)
 
     @property
     def geometry(self):
@@ -94,30 +135,49 @@ class ClientWindow(EventHandler):
 
     @property
     def frame_geometry(self):
-        """Return the client frame geometry. For non-reparented client windows,
-        this will just be the window geometry."""
-        return self.geometry
+        """Return the geometry of the client's frame."""
+        if self._frame_geometry is None:
+            self._frame_geometry = window_geometry(self.conn, self.frame)
+        return self._frame_geometry
+
+    @frame_geometry.setter
+    def frame_geometry(self, geometry):
+        assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
+        self._frame_geometry = geometry
 
     @property
     def absolute_geometry(self):
-        """Return the client window geometry relative to the root's origin."""
-        return self.geometry
+        """Return the client window geometry, relative to the root's origin,
+        with the frame's border width."""
+        window_geometry = self.geometry
+        frame_geometry = self.frame_geometry
+        position = frame_geometry.position() + window_geometry.position()
+        bw = frame_geometry.border_width
+        return window_geometry.move(position).reborder(bw)
 
     def absolute_to_frame_geometry(self, geometry):
         """Convert an absolute client window geometry to a frame geometry."""
-        return geometry
+        window_geometry = self.geometry
+        frame_geometry = self.frame_geometry
+        return (geometry -
+                window_geometry.position() +
+                (frame_geometry.size() - window_geometry.size()))
 
     def frame_to_absolute_geometry(self, geometry):
         """Convert a frame geometry to an absolute client geometry."""
-        return geometry
+        window_geometry = self.geometry
+        frame_geometry = self.frame_geometry
+        return (geometry +
+                window_geometry.position() -
+                (frame_geometry.size() - window_geometry.size()))
 
     def move(self, position):
         """Move the client window and return its new position."""
         position = self.manager.constrain_position(self, position)
-        self.conn.core.ConfigureWindow(self.window,
+        self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
-        self.geometry = self.geometry.move(position) # provisional
+        self.frame_geometry = self.frame_geometry.move(position)
         return position
 
     def resize(self, size, border_width=None, gravity=None):
@@ -135,24 +195,38 @@ class ClientWindow(EventHandler):
                                                           gravity=gravity))
 
     def configure(self, geometry):
-        """Change the client window geometry."""
-        self.conn.core.ConfigureWindow(self.window,
+        """Given a requested client geometry in the root coordinate system,
+        update the client and frame geometry accordingly. Returns the new
+        client geometry."""
+        frame_geometry = self.absolute_to_frame_geometry(geometry)
+        self.conn.core.ConfigureWindow(self.frame,
                                        (ConfigWindow.X |
                                         ConfigWindow.Y |
                                         ConfigWindow.Width |
                                         ConfigWindow.Height |
                                         ConfigWindow.BorderWidth),
-                                       [int16(geometry.x),
-                                        int16(geometry.y),
-                                        card16(geometry.width),
-                                        card16(geometry.height),
-                                        card16(geometry.border_width)])
-        self.decorator.configure(geometry)
-        self.geometry = geometry # provisional update
+                                       [int16(frame_geometry.x),
+                                        int16(frame_geometry.y),
+                                        card16(frame_geometry.width),
+                                        card16(frame_geometry.height),
+                                        card16(frame_geometry.border_width)])
+        self.frame_geometry = frame_geometry
+        self.decorator.configure(frame_geometry)
+
+        # See ICCCM §4.1.5.
+        if self.geometry.size() != geometry.size():
+            self.conn.core.ConfigureWindow(self.window,
+                                           (ConfigWindow.Width |
+                                            ConfigWindow.Height),
+                                           [card16(geometry.width),
+                                            card16(geometry.height)])
+            self.geometry = self.geometry.resize(geometry.size())
+        else:
+            configure_notify(self.conn, self.window, *self.absolute_geometry)
         return geometry
 
     def restack(self, stack_mode):
-        self.conn.core.ConfigureWindow(self.window,
+        self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.StackMode,
                                        [stack_mode])
 
@@ -220,8 +294,10 @@ class ClientWindow(EventHandler):
 
     def map(self):
         self.conn.core.MapWindow(self.window)
+        self.conn.core.MapWindow(self.frame)
 
     def unmap(self):
+        self.conn.core.UnmapWindow(self.frame)
         self.conn.core.UnmapWindow(self.window)
 
     def normalize(self):
@@ -246,10 +322,11 @@ class ClientWindow(EventHandler):
         self.properties.wm_state = WMState(WMState.IconicState)
         self.unmap()
 
-    def withdraw(self):
+    def withdraw(self, destroyed=False):
         """Transition to the Withdrawn state."""
         self.log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
+
         if self.decorated:
             try:
                 self.decorator.undecorate()
@@ -260,139 +337,56 @@ class ClientWindow(EventHandler):
             else:
                 self.decorated = False
 
+        if not destroyed:
+            self.log.debug("Reparenting back to root window 0x%x.",
+                           self.screen.root)
+            with GrabServer(self.conn):
+                # Compute the new window geometry based on the current frame
+                # geometry, the original border width, and the window gravity.
+                bw = self.original_border_width
+                size = self.geometry.size()
+                gravity = self.properties.wm_normal_hints.win_gravity
+                geometry = self.frame_geometry.resize(size, bw, gravity)
+
+                self.conn.core.ConfigureWindow(self.window,
+                                               ConfigWindow.BorderWidth,
+                                               [bw])
+                self.conn.core.ReparentWindow(self.window,
+                                              self.screen.root,
+                                              geometry.x,
+                                              geometry.y)
+                self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
+
+        self.conn.core.DestroyWindow(self.frame)
+        self.frame = None
+
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
-        if event.window != self.window:
-            return
-        self.geometry = Geometry(event.x, event.y,
-                                 event.width, event.height,
-                                 event.border_width)
-        self.log.debug("Noting geometry as %s.", self.geometry)
+        geometry = Geometry(event.x, event.y,
+                            event.width, event.height,
+                            event.border_width)
+        if event.window == self.window:
+            self.log.debug("Noting client geometry as %s.", geometry)
+            self.geometry = geometry
+        elif event.window == self.frame:
+            self.log.debug("Noting frame geometry as %s.", geometry)
+            self.frame_geometry = geometry
+
+    @handler(ReparentNotifyEvent)
+    def handle_reparent_notify(self, event):
+        self.log.debug("Done reparenting.")
+        self.reparenting = False
 
     @handler(VisibilityNotifyEvent)
     def handle_visibility_notify(self, event):
-        if event.window == self.window:
-            return
-        self.visibility = event.state
+        if event.window == self.frame:
+            self.visibility = event.state
 
     @handler(WMChangeState)
     def handle_wm_change_state(self, client_message):
         if client_message.window != self.window:
             return
-        self.log.debug("Received change-state message (%d).",
-                       client_message.data.data32[0])
-        if client_message.data.data32[0] == WMState.IconicState:
+        state = client_message.data.data32[0]
+        self.log.debug("Received change-state message (%d).", state)
+        if state == WMState.IconicState:
             self.iconify()
-
-class FramedClientWindow(ClientWindow):
-    """A framed client window represents a client window that has been
-    reparented to a new top-level window.
-
-    Instances of this class are never created directly; a FrameDecorator
-    will change the class of ClientWindow instances to this class when it
-    reparents the client to a newly-created frame."""
-
-    def shared_init(self, frame=None, **kwargs):
-        assert self.offset is not None # set by our decorator
-
-        # We don't care about visibility notifications for the client window
-        # any more; we'll just worry about the frame as a whole.
-        event_mask = self.client_event_mask & ~EventMask.VisibilityChange
-        super(FramedClientWindow, self).shared_init(event_mask=event_mask,
-                                                    **kwargs)
-
-        self.frame = frame
-        self._frame_geometry = None
-        self.manager.register_window_handler(self.frame, self)
-
-    @property
-    def frame_geometry(self):
-        if self._frame_geometry is None:
-            self._frame_geometry = window_geometry(self.conn, self.frame)
-        return self._frame_geometry
-
-    @frame_geometry.setter
-    def frame_geometry(self, geometry):
-        assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
-        self._frame_geometry = geometry
-
-    @property
-    def absolute_geometry(self):
-        return self.geometry.move(self.frame_geometry.position() +
-                                  self.offset.position())
-
-    def absolute_to_frame_geometry(self, geometry):
-        return (geometry.reborder(self.frame_geometry.border_width) -
-                self.offset.position() +
-                self.offset.size())
-
-    def frame_to_absolute_geometry(self, geometry):
-        return (geometry.reborder(0) +
-                self.offset.position() -
-                self.offset.size())
-
-    def move(self, position):
-        position = self.manager.constrain_position(self, position)
-        self.conn.core.ConfigureWindow(self.frame,
-                                       ConfigWindow.X | ConfigWindow.Y,
-                                       map(int16, position))
-        self.frame_geometry = self.frame_geometry.move(position) # provisional
-        return position
-
-    def configure(self, geometry):
-        # Geometry is the requested client window geometry in the root
-        # coordinate system.
-        frame_geometry = self.absolute_to_frame_geometry(geometry)
-        self.conn.core.ConfigureWindow(self.frame,
-                                       (ConfigWindow.X |
-                                        ConfigWindow.Y |
-                                        ConfigWindow.Width |
-                                        ConfigWindow.Height |
-                                        ConfigWindow.BorderWidth),
-                                       [int16(frame_geometry.x),
-                                        int16(frame_geometry.y),
-                                        card16(frame_geometry.width),
-                                        card16(frame_geometry.height),
-                                        card16(frame_geometry.border_width)])
-        self.conn.core.ConfigureWindow(self.window,
-                                       (ConfigWindow.Width |
-                                        ConfigWindow.Height),
-                                       [card16(geometry.width),
-                                        card16(geometry.height)])
-        self.decorator.configure(frame_geometry)
-        # Provisionally set new geometry.
-        self.frame_geometry = frame_geometry
-        self.geometry = self.geometry.resize(geometry.size())
-        return geometry
-
-    def restack(self, stack_mode):
-        self.conn.core.ConfigureWindow(self.frame,
-                                       ConfigWindow.StackMode,
-                                       [stack_mode])
-
-    def map(self):
-        super(FramedClientWindow, self).map()
-        self.conn.core.MapWindow(self.frame)
-
-    def unmap(self):
-        self.conn.core.UnmapWindow(self.frame)
-        super(FramedClientWindow, self).unmap()
-
-    def withdraw(self):
-        self.conn.core.UnmapWindow(self.frame)
-        super(FramedClientWindow, self).withdraw()
-
-    @handler(ConfigureNotifyEvent)
-    def handle_configure_notify(self, event):
-        if event.window != self.frame:
-            return
-        self.frame_geometry = Geometry(event.x, event.y,
-                                       event.width, event.height,
-                                       event.border_width)
-        self.log.debug(u"Noting frame geometry as %s.", self.frame_geometry)
-
-    @handler(VisibilityNotifyEvent)
-    def handle_visibility_notify(self, event):
-        if event.window != self.frame:
-            return
-        self.visibility = event.state

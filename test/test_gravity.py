@@ -2,10 +2,10 @@
 
 import unittest
 
-from decorator import FrameDecorator
+from decorator import Decorator
 from event import handler
 from geometry import *
-from manager import ReparentingWindowManager
+from manager import WindowManager
 from properties import WMSizeHints
 
 from xcb.xproto import *
@@ -30,9 +30,9 @@ class Padding(object):
         self.top = top
         self.bottom = bottom
 
-class PaddingDecorator(FrameDecorator):
-    """A frame decorator which inserts a bit of padding between its inside
-    edge and the client window it's framing."""
+class PaddingDecorator(Decorator):
+    """A decorator which inserts a bit of padding between its inside edge
+    and the client window."""
 
     def __init__(self, conn, client, border_width=1,
                  padding=Padding(0, 0, 0, 0), **kwargs):
@@ -48,7 +48,7 @@ class PaddingDecorator(FrameDecorator):
                         self.padding.top + self.padding.bottom,
                         None)
 
-class GravityTestWM(ReparentingWindowManager):
+class GravityTestWM(WindowManager):
     def decorator(self, client):
         return PaddingDecorator(self.conn, client, border_width=5,
                                 padding=Padding(top=10, bottom=2,

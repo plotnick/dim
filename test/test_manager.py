@@ -43,7 +43,7 @@ class WindowManagerThread(Thread):
         finally:
             self.wm.shutdown()
 
-class ClientUnmanaged(Exception):
+class ClientDestroyed(Exception):
     pass
 
 class TestClient(EventHandler, Thread):
@@ -60,6 +60,8 @@ class TestClient(EventHandler, Thread):
         self.window = self.conn.generate_id()
         self.mapped = False
         self.managed = False
+        self.destroyed = False
+        self.reparented = False
         self.parent = self.screen.root
         self.geometry = geometry
         self.synthetic_geometry = None
@@ -111,6 +113,10 @@ class TestClient(EventHandler, Thread):
                                               geometry).check()
         return geometry
 
+    @property
+    def frame_geometry(self):
+        return window_geometry(self.conn, self.parent)
+
     def set_size_hints(self, size_hints):
         self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
                                              self.atoms["WM_NORMAL_HINTS"],
@@ -153,7 +159,7 @@ class TestClient(EventHandler, Thread):
                 if event:
                     try:
                         self.handle_event(event)
-                    except ClientUnmanaged:
+                    except ClientDestroyed:
                         self.shutdown()
                         return
                 else:
@@ -188,10 +194,6 @@ class TestClient(EventHandler, Thread):
                             [WMState.IconicState, 0, 0, 0, 0])
 
     def shutdown(self):
-        try:
-            self.destroy()
-        except BadWindow:
-            pass
         self.conn.flush()
         self.conn.disconnect()
 
@@ -212,6 +214,13 @@ class TestClient(EventHandler, Thread):
     def handle_reparent_notify(self, event):
         assert event.window == self.window
         self.parent = event.parent
+        self.reparented = (self.parent != self.screen.root)
+
+    @handler(DestroyNotifyEvent)
+    def handle_destroy_notify(self, event):
+        assert event.window == self.window
+        self.destroyed = True
+        raise ClientDestroyed
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
@@ -233,7 +242,6 @@ class TestClient(EventHandler, Thread):
                 self.managed = True
             elif event.state == Property.Delete:
                 self.managed = False
-                raise ClientUnmanaged
 
 class WMTestCase(unittest.TestCase):
     """A test fixture that establishes an X connection and starts the WM in
@@ -264,6 +272,8 @@ class WMTestCase(unittest.TestCase):
             self.wm_thread.join(100 * ms)
             assert not self.wm_thread.is_alive(), "WM thread is still alive"
         for client in self.clients:
+            if not client.destroyed:
+                client.destroy()
             client.join(100 * ms)
             assert not client.is_alive(), "client thread is still alive"
         self.conn.flush()
@@ -348,7 +358,11 @@ class TestWMStartup(WMTestCase):
         self.loop(lambda: w3.managed)
 
 class TestWMStates(WMTestCase):
-    """Test the various state transitions, as described in ICCCM §4.1.4."""
+    """Test the various state transitions, as described in ICCCM §4.1.4.
+
+    In addition to verifying that the effect on the client is correct,
+    we also peek at the manager's internal data structures to ensure that
+    they're being updated correctly."""
 
     geometry = Geometry(0, 0, 100, 100, 1)
 
@@ -360,59 +374,8 @@ class TestWMStates(WMTestCase):
         self.client.map()
         self.loop(lambda: (self.client.mapped and
                            self.client.managed and
+                           self.client.reparented and
                            self.client.wm_state == WMState.NormalState))
-
-    def iconify_client(self):
-        self.client.iconify()
-        self.loop(lambda: (not self.client.mapped and
-                           self.client.managed and
-                           self.client.wm_state == WMState.IconicState))
-
-    def withdraw_client(self):
-        self.client.unmap()
-        self.loop(lambda: (not self.client.mapped and
-                           self.client.managed and
-                           self.client.wm_state == WMState.WithdrawnState))
-
-    def destroy_client(self):
-        self.client.destroy()
-        self.loop(lambda: not self.client.mapped and not self.client.managed)
-
-    def test_withdrawn_iconic(self):
-        """Withdrawn → Iconic → Normal state transitions"""
-        self.client.wm_hints = WMHints(initial_state=WMState.IconicState)
-        self.client.map()
-        self.loop(lambda: (not self.client.mapped and
-                           self.client.managed and
-                           self.client.wm_state == WMState.IconicState))
-        self.normalize_client()
-        self.destroy_client()
-
-    def test_state_transitions(self):
-        """Test state transitions"""
-        self.client.wm_hints = WMHints(initial_state=WMState.NormalState)
-        self.normalize_client()
-        self.withdraw_client()
-        self.normalize_client()
-        self.iconify_client()
-        self.normalize_client()
-        self.destroy_client()
-
-class TestReparentingWMStates(TestWMStates):
-    """Similar to the WM state transition test case above, but with reparenting.
-
-    In addition to verifying that the effect on the client is correct, we also
-    peek at the manager's internal data structures to ensure that they're being
-    updated correctly."""
-
-    wm_class = ReparentingWindowManager
-
-    def normalize_client(self):
-        self.client.map()
-        self.loop(lambda: (self.client.mapped and
-                           self.client.managed and
-                           self.client.wm_state == WMState.NormalState and
-                           self.client.parent != self.client.screen.root))
 
         # Peek at WM bookkeeping.
         wm_client = self.wm_thread.wm.clients[self.client.window]
@@ -427,8 +390,8 @@ class TestReparentingWMStates(TestWMStates):
         self.client.iconify()
         self.loop(lambda: (not self.client.mapped and
                            self.client.managed and
-                           self.client.wm_state == WMState.IconicState and
-                           self.client.parent == frame))
+                           self.client.reparented and
+                           self.client.wm_state == WMState.IconicState))
 
         # The manager should not undecorate iconified clients, so everything
         # should be the same as for a client in the Normal state.
@@ -443,28 +406,46 @@ class TestReparentingWMStates(TestWMStates):
 
         self.client.unmap()
         self.loop(lambda: (not self.client.mapped and
-                           self.client.wm_state == WMState.WithdrawnState and
-                           self.client.parent == self.client.screen.root))
+                           self.client.parent == self.client.screen.root and
+                           self.client.wm_state == WMState.WithdrawnState))
 
-        # The manager should undecorate withdrawn clients, and so it should
-        # not have a frame entry for this client anymore.
-        wm_client = self.wm_thread.wm.clients[window]
-        self.loop(lambda: (wm_client.frame is None and
-                           wm_client.window == window and
-                           not wm_client.reparenting and
-                           frame not in self.wm_thread.wm.frames))
+        # Withdrawn clients are unmanaged by the WM.
+        self.loop(lambda: window not in self.wm_thread.wm.clients)
+        self.loop(lambda: frame not in self.wm_thread.wm.frames)
 
     def destroy_client(self):
         window = self.client.window
         frame = self.client.parent
 
         self.client.destroy()
-        self.loop(lambda: not self.client.mapped and not self.client.managed)
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.destroyed))
 
         # Once destroyed, all record of this client window should be
         # removed from the WM's books.
         self.loop(lambda: window not in self.wm_thread.wm.clients)
         self.loop(lambda: frame not in self.wm_thread.wm.frames)
+
+    def test_withdrawn_iconic(self):
+        """Withdrawn → Iconic → Normal state transitions"""
+        self.client.wm_hints = WMHints(initial_state=WMState.IconicState)
+        self.client.map()
+        self.loop(lambda: (not self.client.mapped and
+                           self.client.managed and
+                           self.client.reparented and
+                           self.client.wm_state == WMState.IconicState))
+        self.normalize_client()
+        self.destroy_client()
+
+    def test_state_transitions(self):
+        """Test state transitions"""
+        self.client.wm_hints = WMHints(initial_state=WMState.NormalState)
+        self.normalize_client()
+        self.withdraw_client()
+        self.normalize_client()
+        self.iconify_client()
+        self.normalize_client()
+        self.destroy_client()
 
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):
@@ -472,14 +453,21 @@ class TestWMClientMoveResize(WMTestCase):
         self.initial_geometry = Geometry(0, 0, 100, 100, 1)
         self.client = self.add_client(TestClient(self.initial_geometry))
         self.client.map()
-        self.loop(lambda: (self.client.managed and
-                           self.client.geometry == self.initial_geometry))
+        self.loop(lambda: (self.client.mapped and
+                           self.client.managed and
+                           self.client.reparented))
 
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
         geometry = self.initial_geometry
         self.client.configure(geometry)
-        self.loop(lambda: (self.client.synthetic_geometry == geometry))
+        self.loop(lambda: self.client.synthetic_geometry == geometry)
+
+    def test_change_border_width(self):
+        """Change the client's border width"""
+        geometry = self.initial_geometry.reborder(5)
+        self.client.configure(geometry)
+        self.loop(lambda: self.client.synthetic_geometry == geometry)
 
     def test_move(self):
         """Move a top-level window without changing its size"""
@@ -487,11 +475,12 @@ class TestWMClientMoveResize(WMTestCase):
         self.client.configure(geometry)
         self.loop(lambda: self.client.synthetic_geometry == geometry)
 
-    def test_resize(self):
-        """Resize and move a top-level window"""
-        geometry = Geometry(5, 5, 50, 50, 5)
+    def test_move_resize(self):
+        """Move and resize a top-level window"""
+        geometry = Geometry(5, 5, 50, 50, 1)
         self.client.configure(geometry)
-        self.loop(lambda: self.client.geometry == geometry)
+        self.loop(lambda: (self.client.geometry.size() == geometry.size() and
+                           self.client.frame_geometry == geometry))
 
     def test_resize_gravity(self):
         """Resize a client window with gravity"""
@@ -499,9 +488,10 @@ class TestWMClientMoveResize(WMTestCase):
         gravity = Gravity.SouthEast
         self.client.set_size_hints(WMSizeHints(win_gravity=gravity))
         self.client.resize(geometry.size(), geometry.border_width)
-        self.loop(lambda: (self.client.geometry ==
-                           self.initial_geometry.resize(geometry.size(),
-                                                        gravity=gravity)))
+        self.loop(lambda: (self.client.geometry.size() == geometry.size() and
+                           (self.client.frame_geometry ==
+                            self.initial_geometry.resize(geometry.size(),
+                                                         gravity=gravity))))
 
 class EventLoopTester(WindowManager):
     """A window manager that records the number of ConfigureNotify events
@@ -515,18 +505,22 @@ class EventLoopTester(WindowManager):
     def handle_configure_notify(self, event):
         self.events_received += 1
 
-class TestWMEventLoop(WMTestCase):
-    wm_class = EventLoopTester
-
+class EventLoopTestCase(WMTestCase):
     def jiggle_window(self, n=100):
         # Realize a client window.
         geometry = Geometry(0, 0, 100, 100, 5)
         client = self.add_client(TestClient(geometry))
         client.map()
+        self.loop(lambda: (client.mapped and
+                           client.managed and
+                           client.reparented))
 
         # Move the window around a bunch of times.
         for i in range(n):
             client.configure(geometry + (randint(1, 100), randint(1, 100)))
+
+class TestWMEventLoop(EventLoopTestCase):
+    wm_class = EventLoopTester
 
     def test_event_loop(self):
         """Test the window manager's event loop"""
@@ -540,7 +534,7 @@ class EventCompressionTester(EventLoopTester):
     def handle_configure_notify(self, event):
         return
 
-class TestWMEventLoopWithCompression(TestWMEventLoop):
+class TestWMEventLoopWithCompression(EventLoopTestCase):
     wm_class = EventCompressionTester
 
     def test_event_loop(self):

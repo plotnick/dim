@@ -9,13 +9,12 @@ from color import RGBi
 from decorator import TitlebarConfig, TitlebarDecorator
 from event import handler
 from focus import SloppyFocus, ClickToFocus
-from manager import ReparentingWindowManager, compress
 from moveresize import MoveResize
 from properties import AtomList
 from raiselower import RaiseLower
 from tags import TagManager
 
-class BaseWM(TagManager, ReparentingWindowManager, MoveResize, RaiseLower):
+class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
 
     def init_graphics(self):

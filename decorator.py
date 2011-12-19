@@ -33,29 +33,16 @@ class Decorator(object):
         self.conn = conn
         self.client = client
         self.screen = client.screen
-        self.border_window = client.window
         self.border_width = border_width
         self.log = logging.getLogger("decorator.0x%x" % self.client.window)
 
     def decorate(self):
         """Decorate the client window."""
-        self.client.offset = self.compute_client_offset()
-        self.original_border_width = self.client.geometry.border_width
-        self.conn.core.ConfigureWindow(self.border_window,
-                                       ConfigWindow.BorderWidth,
-                                       [self.border_width])
+        pass
 
     def undecorate(self):
         """Remove all decorations from the client window."""
-        self.conn.core.ConfigureWindow(self.border_window,
-                                       ConfigWindow.BorderWidth,
-                                       [self.original_border_width])
-
-        # X11 offers no way of retrieving the border color or pixmap of
-        # a window, so we'll simply assume a black border.
-        self.conn.core.ChangeWindowAttributes(self.border_window,
-                                              CW.BorderPixel,
-                                              [self.screen.black_pixel])
+        pass
 
     def configure(self, geometry):
         """Update decorations for a new client/frame geometry."""
@@ -75,11 +62,14 @@ class Decorator(object):
             self.log.info(message)
 
     def compute_client_offset(self):
-        """Compute and return a geometry whose position represents the
+        """Compute and return a geometry whose position is the required
         offset of the client window with respect to the inside corner of
-        the containing frame (which may be the client window itself), and
-        whose size is the total additional size required for the desired
-        decorations. The border_width attribute is unused."""
+        the containing frame and whose size is the total additional size
+        required for the desired decorations. The border_width attribute
+        is unused.
+
+        This method may be called prior to decoration, and so can rely only
+        on data collected or computed during initialization."""
         return Geometry(0, 0, 0, 0, None)
 
 class BorderHighlightFocus(Decorator):
@@ -104,87 +94,6 @@ class BorderHighlightFocus(Decorator):
                                               CW.BorderPixel,
                                               [self.unfocused_color])
         super(BorderHighlightFocus, self).unfocus()
-
-class FrameDecorator(Decorator):
-    """Create a frame (i.e., a new parent) for a client window. This class
-    requires a reparenting window manager."""
-
-    frame_event_mask = (EventMask.SubstructureRedirect |
-                        EventMask.SubstructureNotify |
-                        EventMask.EnterWindow |
-                        EventMask.LeaveWindow |
-                        EventMask.VisibilityChange)
-
-    def __init__(self, *args, **kwargs):
-        super(FrameDecorator, self).__init__(*args, **kwargs)
-        self.frame_border_width = self.border_width
-        self.border_width = 0
-
-    def decorate(self):
-        assert not isinstance(self.client, FramedClientWindow)
-
-        super(FrameDecorator, self).decorate()
-
-        # Determine the frame geometry based on the current client window
-        # geometry and gravity together with the offsets needed for the
-        # actual decoration.
-        offset = self.client.offset
-        gravity = self.client.properties.wm_normal_hints.win_gravity
-        geometry = self.client.absolute_geometry
-        frame_geometry = geometry.resize(geometry.size() + offset.size(),
-                                         self.frame_border_width,
-                                         gravity)
-
-        frame = self.conn.generate_id()
-        window = self.client.window
-        self.log.debug("Creating frame 0x%x.", frame)
-        self.conn.core.CreateWindow(self.screen.root_depth, frame,
-                                    self.screen.root,
-                                    frame_geometry.x, frame_geometry.y,
-                                    frame_geometry.width, frame_geometry.height,
-                                    frame_geometry.border_width,
-                                    WindowClass.InputOutput,
-                                    self.screen.root_visual,
-                                    CW.OverrideRedirect | CW.EventMask,
-                                    [True, self.frame_event_mask])
-        self.conn.core.ReparentWindow(window, frame, offset.x, offset.y)
-        self.conn.core.ChangeSaveSet(SetMode.Insert, window)
-
-        # Changes to the border should now be applied to the frame.
-        self.border_window = frame
-
-        # Change the class of the client and re-initialize.
-        self.client.__class__ = FramedClientWindow
-        self.client.shared_init(frame=frame, reparenting=True)
-
-    def undecorate(self):
-        assert isinstance(self.client, FramedClientWindow) and self.client.frame
-
-        self.conn.core.UnmapWindow(self.client.frame)
-        self.border_window = self.client.window
-
-        super(FrameDecorator, self).undecorate()
-
-        try:
-            # Determine the new window geometry based on the current frame
-            # geometry, the original border width, and the window gravity.
-            size = self.client.geometry.size()
-            bw = self.original_border_width
-            gravity = self.client.properties.wm_normal_hints.win_gravity
-            geometry = self.client.frame_geometry.resize(size, bw, gravity)
-
-            self.conn.core.ReparentWindow(self.client.window,
-                                          self.screen.root,
-                                          geometry.x,
-                                          geometry.y)
-            self.conn.core.ChangeSaveSet(SetMode.Delete, self.client.window)
-
-            # Change the class of the client and re-initialize.
-            self.client.__class__ = ClientWindow
-            self.client.shared_init(reparenting=True)
-        finally:
-            self.conn.core.DestroyWindow(self.client.frame)
-            self.client.frame = None
 
 class TitlebarConfig(object):
     def __init__(self, manager, fg_color, bg_color, font):
@@ -496,15 +405,15 @@ class InputFieldTitlebar(Titlebar):
                 else:
                     self.draw()
 
-class TitlebarDecorator(FrameDecorator):
+class TitlebarDecorator(Decorator):
     """Decorate a client with a multi-purpose titlebar."""
 
     def __init__(self, conn, client,
                  focused_config=None, unfocused_config=None,
                  button_press_handlers={},
                  **kwargs):
-        assert (isinstance(focused_config, TitlebarConfig) and
-                isinstance(unfocused_config, TitlebarConfig))
+        assert isinstance(focused_config, TitlebarConfig)
+        assert isinstance(unfocused_config, TitlebarConfig)
         self.titlebar = None
         self.titlebar_configs = (unfocused_config, focused_config)
         self.button_press_handlers = button_press_handlers
@@ -515,8 +424,7 @@ class TitlebarDecorator(FrameDecorator):
         super(TitlebarDecorator, self).decorate()
 
         config = self.titlebar_configs[0]
-        geometry = Geometry(0, 0,
-                            self.client.geometry.width, config.height, 0)
+        geometry = Geometry(0, 0, self.client.geometry.width, config.height, 0)
         self.titlebar = SimpleTitlebar(conn=self.conn,
                                        client=self.client,
                                        manager=self.client.manager,

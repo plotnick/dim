@@ -174,7 +174,7 @@ class TestMoveResize(WMTestCase):
                 self.initial_geometry.size() * ratio)
 
     def make_geometry_test(self, geometry):
-        return lambda: self.client.geometry == geometry
+        return lambda: self.client.frame_geometry == geometry
 
     def make_geometry_delta_test(self, delta):
         return self.make_geometry_test(self.initial_geometry + delta)
