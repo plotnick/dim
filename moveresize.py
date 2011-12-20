@@ -290,7 +290,7 @@ class ClientUpdate(object):
         self.client.decorator.message(None)
 
     def display_geometry(self, geometry):
-        self.client.decorator.message(geometry)
+        self.client.decorator.message(unicode(geometry))
 
     def cycle_gravity(self, pointer, time):
         pass
@@ -342,7 +342,7 @@ class ClientResize(ClientUpdate):
                   third(self.pointer.y, self.geometry.y, self.geometry.height))
         self.gravity = Position(*offset)
         self.change_cursor(self.cursors[self.gravity])
-        self.display_geometry(self.initial_geometry)
+        self.update(self.pointer)
 
     def update(self, pointer):
         delta = self.delta(pointer)
@@ -350,34 +350,19 @@ class ClientResize(ClientUpdate):
         # Treat center gravity as just a move.
         if self.gravity == (0, 0):
             position = self.frame_geometry.position() + delta
-            self.client.move(position)
-            self.display_geometry(position)
+            self.display_geometry(self.client.move(position))
             return
 
         ds = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
         size = self.client.resize(self.geometry.size() + ds,
                                   gravity=offset_gravity(-self.gravity)).size()
+        if self.size_hints.flags & WMSizeHints.PResizeInc:
+            size = self.size_hints.size_increments(size)
         self.display_geometry(size)
 
     def rollback(self, time=Time.CurrentTime):
         self.client.configure(self.initial_geometry)
         super(ClientResize, self).rollback(time)
-
-    def display_geometry(self, geometry):
-        display = super(ClientResize, self).display_geometry
-        def display_size(size):
-            display(self.size_hints.size_increments(size)
-                    if self.size_hints.flags & WMSizeHints.PResizeInc
-                    else size)
-        if isinstance(geometry, Geometry):
-            if self.gravity == (0, 0):
-                display(geometry.position())
-            else:
-                display_size(geometry.size())
-        elif isinstance(geometry, Position):
-            display(geometry)
-        elif isinstance(geometry, Rectangle):
-            display_size(geometry)
 
     def cycle_gravity(self, pointer, time,
                       gravities=sorted(offset_gravity(None),
@@ -387,8 +372,8 @@ class ClientResize(ClientUpdate):
         self.change_cursor(self.cursors[self.gravity], time)
         self.geometry = self.client.absolute_geometry
         self.frame_geometry = self.client.frame_geometry
-        self.display_geometry(self.geometry)
         self.pointer = pointer
+        self.update(pointer)
 
 class MoveResize(WindowManager):
     __grab_event_mask = (EventMask.ButtonPress |
