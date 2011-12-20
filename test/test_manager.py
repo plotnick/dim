@@ -450,12 +450,17 @@ class TestWMStates(WMTestCase):
 class TestWMClientMoveResize(WMTestCase):
     def setUp(self):
         super(TestWMClientMoveResize, self).setUp()
-        self.initial_geometry = Geometry(0, 0, 100, 100, 1)
-        self.client = self.add_client(TestClient(self.initial_geometry))
+        geometry = self.initial_geometry = Geometry(0, 0, 100, 100, 1)
+        self.client = self.add_client(TestClient(geometry))
         self.client.map()
         self.loop(lambda: (self.client.mapped and
                            self.client.managed and
-                           self.client.reparented))
+                           self.client.reparented and
+                           self.client.synthetic_geometry == geometry))
+
+        # Reset received geometries for tests.
+        self.geometry = None
+        self.client.synthetic_geometry = None
 
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""
@@ -464,9 +469,9 @@ class TestWMClientMoveResize(WMTestCase):
         self.loop(lambda: self.client.synthetic_geometry == geometry)
 
     def test_change_border_width(self):
-        """Change the client's border width"""
-        geometry = self.initial_geometry.reborder(5)
-        self.client.configure(geometry)
+        """Ignore changes to the client's border width"""
+        geometry = self.initial_geometry
+        self.client.configure(geometry.reborder(5))
         self.loop(lambda: self.client.synthetic_geometry == geometry)
 
     def test_move(self):

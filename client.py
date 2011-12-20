@@ -113,6 +113,7 @@ class Client(EventHandler):
             # Record the new window and frame geometries.
             self.geometry = geometry.reborder(0).move(offset.position())
             self.frame_geometry = frame_geometry
+            self.offset = offset
 
         # Register for events on the client window and frame.
         self.conn.core.ChangeWindowAttributes(self.window,
@@ -149,30 +150,24 @@ class Client(EventHandler):
     def absolute_geometry(self):
         """Return the client window geometry, relative to the root's origin,
         with the frame's border width."""
-        window_geometry = self.geometry
-        frame_geometry = self.frame_geometry
-        position = frame_geometry.position() + window_geometry.position()
-        bw = frame_geometry.border_width
-        return window_geometry.move(position).reborder(bw)
+        bw = self.frame_geometry.border_width
+        return self.geometry.move(self.frame_geometry.position() +
+                                  self.offset.position()).reborder(bw)
 
     def absolute_to_frame_geometry(self, geometry):
         """Convert an absolute client window geometry to a frame geometry."""
-        window_geometry = self.geometry
-        frame_geometry = self.frame_geometry
-        return (geometry -
-                window_geometry.position() +
-                (frame_geometry.size() - window_geometry.size()))
+        return (geometry.reborder(self.frame_geometry.border_width) -
+                self.offset.position() +
+                self.offset.size())
 
     def frame_to_absolute_geometry(self, geometry):
         """Convert a frame geometry to an absolute client geometry."""
-        window_geometry = self.geometry
-        frame_geometry = self.frame_geometry
-        return (geometry +
-                window_geometry.position() -
-                (frame_geometry.size() - window_geometry.size()))
+        return (geometry.reborder(0) +
+                self.offset.position() -
+                self.offset.size())
 
     def move(self, position):
-        """Move the client window and return its new position."""
+        """Move the frame and return its new position."""
         position = self.manager.constrain_position(self, position)
         self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.X | ConfigWindow.Y,
@@ -359,18 +354,6 @@ class Client(EventHandler):
 
         self.conn.core.DestroyWindow(self.frame)
         self.frame = None
-
-    @handler(ConfigureNotifyEvent)
-    def handle_configure_notify(self, event):
-        geometry = Geometry(event.x, event.y,
-                            event.width, event.height,
-                            event.border_width)
-        if event.window == self.window:
-            self.log.debug("Noting client geometry as %s.", geometry)
-            self.geometry = geometry
-        elif event.window == self.frame:
-            self.log.debug("Noting frame geometry as %s.", geometry)
-            self.frame_geometry = geometry
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
