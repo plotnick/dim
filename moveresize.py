@@ -60,52 +60,67 @@ def bsearch_ceil(item, sequence, key=identity):
             high += 1
     return matches
 
-class Resistance(object):
-    cardinal_directions = map(gravity_offset,
-                              [Gravity.North, Gravity.South,
-                               Gravity.East, Gravity.West])
-    axial_directions = [map(gravity_offset, [Gravity.East, Gravity.West]),
-                        map(gravity_offset, [Gravity.North, Gravity.South])]
+# Many resistance calculations are made in terms of the four cardinal
+# directions, which we represent as unit vectors with a single non-zero
+# component. The following routines are specialized to such directions,
+# and are not intended for general use.
 
+cardinal_directions = map(gravity_offset,
+                          [Gravity.North,
+                           Gravity.South,
+                           Gravity.East,
+                           Gravity.West])
+
+def is_positive_direction(direction):
+    return any(x > 0 for x in direction)
+
+def is_negative_direction(direction):
+    return any(x < 0 for x in direction)
+
+def cardinal_axis(direction):
+    for i, x in enumerate(direction):
+        if x:
+            return i
+
+class Resistance(object):
     def __init__(self, client, **kwargs):
         self.client = client
 
     def resist(self, geometry, gravity=Gravity.Center):
         """Given a requested geometry, apply all applicable resistance and
         return the nearest acceptable geometry."""
-        for axis in (0, 1):
-            for direction in self.axial_directions[axis]:
-                geometry = self.maybe_resist(geometry, gravity_offset(gravity),
-                                             axis, direction)
+        gravity = gravity_offset(gravity)
+        for direction in cardinal_directions:
+            geometry = self.apply_resistance(geometry, gravity, direction,
+                                             self.compute_resistance(geometry,
+                                                                     gravity,
+                                                                     direction))
         return geometry
 
-    def maybe_resist(self, geometry, gravity, axis, direction):
-        """Apply any applicable resistance in the given cardinal direction
-        and return the nearest acceptable geometry."""
-        return geometry
+    def compute_resistance(self, geometry, gravity, direction):
+        """Compute and return any applicable resistance in the given cardinal
+        direction."""
+        return 0
 
     @staticmethod
-    def apply_resistance(geometry, gravity, axis, direction, resistance):
+    def apply_resistance(geometry, gravity, direction, resistance):
         assert isinstance(geometry, Geometry)
         assert isinstance(gravity, Position)
-        assert 0 <= axis <= 1
         assert isinstance(direction, Position)
         assert isinstance(resistance, int)
 
-        if direction[axis] > 0:
-            if gravity[axis] < 0:
+        if is_positive_direction(direction):
+            if gravity[cardinal_axis(direction)] < 0:
                 return geometry - Rectangle(*direction) * resistance
             else:
                 return geometry - direction * resistance
-        elif direction[axis] < 0:
-            if gravity[axis] > 0:
+        else:
+            if gravity[cardinal_axis(direction)] > 0:
                 return (geometry +
                         direction * resistance -
                         Rectangle(*direction) * resistance)
             else:
                 return geometry + direction * resistance
-        else:
-            assert False, "invalid direction for resistance application"
 
     def cleanup(self, time):
         pass
@@ -119,24 +134,24 @@ class ScreenEdgeResistance(Resistance):
         self.screen_edge_resistance = screen_edge_resistance
         screen_geometry = client.manager.screen_geometry
         self.screen_edges = {}
-        for direction in self.cardinal_directions:
+        for direction in cardinal_directions:
             self.screen_edges[direction] = screen_geometry.edge(direction)
 
-    def maybe_resist(self, geometry, gravity, axis, direction):
+    def compute_resistance(self, geometry, gravity, direction):
         requested_edge = geometry.edge(direction)
         current_edge = self.client.frame_geometry.edge(direction)
         screen_edge = self.screen_edges[direction]
         threshold = self.screen_edge_resistance
-        if ((direction[axis] > 0 and
+        if ((is_positive_direction(direction) and
              current_edge <= screen_edge and
              screen_edge < requested_edge < screen_edge + threshold) or
-            (direction[axis] < 0 and
+            (is_negative_direction(direction) and
              current_edge >= screen_edge and
              screen_edge - threshold < requested_edge < screen_edge)):
-            return self.apply_resistance(geometry, gravity, axis, direction,
-                                         requested_edge - screen_edge)
-        return super(ScreenEdgeResistance, self).maybe_resist(geometry, gravity,
-                                                              axis, direction)
+            return requested_edge - screen_edge
+        return super(ScreenEdgeResistance, self).compute_resistance(geometry,
+                                                                    gravity,
+                                                                    direction)
 
 class WindowEdgeResistance(Resistance):
     """Classical edge resistance: visible windows' opposite external edges
@@ -152,12 +167,12 @@ class WindowEdgeResistance(Resistance):
                        client.properties.wm_state == WMState.NormalState and
                        client.visibility != Visibility.FullyObscured)]
         self.client_list = {}
-        for direction in self.cardinal_directions:
+        for direction in cardinal_directions:
             def edge(client):
                 return client.frame_geometry.edge(direction)
             self.client_list[direction] = sorted(clients, key=edge)
 
-    def maybe_resist(self, geometry, gravity, axis, direction):
+    def compute_resistance(self, geometry, gravity, direction):
         opposite = -direction
         def opposite_edge(client):
             return client.frame_geometry.edge(opposite)
@@ -174,7 +189,7 @@ class WindowEdgeResistance(Resistance):
         requested_edge = geometry.edge(direction)
         current_edge = self.client.frame_geometry.edge(direction)
         threshold = self.window_edge_resistance
-        if direction[axis] > 0:
+        if is_positive_direction(direction):
             for other in bsearch_floor(requested_edge,
                                        self.client_list[opposite],
                                        key=opposite_edge):
@@ -182,10 +197,8 @@ class WindowEdgeResistance(Resistance):
                 if (current_edge <= other_edge and
                     other_edge < requested_edge < other_edge + threshold and
                     adjacent_edges_intersect(self.client, other)):
-                    return self.apply_resistance(geometry, gravity,
-                                                 axis, direction,
-                                                 requested_edge - other_edge)
-        elif direction[axis] < 0:
+                    return requested_edge - other_edge
+        else:
             for other in bsearch_ceil(requested_edge,
                                       self.client_list[opposite],
                                       key=opposite_edge):
@@ -193,11 +206,10 @@ class WindowEdgeResistance(Resistance):
                 if (current_edge >= other_edge and
                     other_edge - threshold < requested_edge < other_edge and
                     adjacent_edges_intersect(self.client, other)):
-                    return self.apply_resistance(geometry, gravity,
-                                                 axis, direction,
-                                                 requested_edge - other_edge)
-        return super(WindowEdgeResistance, self).maybe_resist(geometry, gravity,
-                                                              axis, direction)
+                    return requested_edge - other_edge
+        return super(WindowEdgeResistance, self).compute_resistance(geometry,
+                                                                    gravity,
+                                                                    direction)
 
 class AlignWindowEdges(WindowEdgeResistance):
     def __init__(self, *args, **kwargs):
@@ -208,36 +220,33 @@ class AlignWindowEdges(WindowEdgeResistance):
         self.draw_guide(None, None)
         return super(AlignWindowEdges, self).resist(*args)
 
-    def maybe_resist(self, geometry, gravity, axis, direction):
+    def compute_resistance(self, geometry, gravity, direction):
         def edge(client):
             return client.frame_geometry.edge(direction)
         requested_edge = geometry.edge(direction)
         current_edge = edge(self.client)
         threshold = self.window_edge_resistance
-        if direction[axis] > 0:
+        if is_positive_direction(direction):
             for other in bsearch_floor(requested_edge,
                                        self.client_list[direction],
                                        key=edge):
                 other_edge = edge(other)
                 if (current_edge <= other_edge and
                     other_edge < requested_edge < other_edge + threshold):
-                    self.draw_guide(axis, other_edge)
-                    return self.apply_resistance(geometry, gravity,
-                                                 axis, direction,
-                                                 requested_edge - other_edge)
-        elif direction[axis] < 0:
+                    self.draw_guide(cardinal_axis(direction), other_edge)
+                    return requested_edge - other_edge
+        else:
             for other in bsearch_ceil(requested_edge,
                                       self.client_list[direction],
                                       key=edge):
                 other_edge = edge(other)
                 if (current_edge >= other_edge and
                     other_edge - threshold < requested_edge < other_edge):
-                    self.draw_guide(axis, other_edge - 1)
-                    return self.apply_resistance(geometry, gravity,
-                                                 axis, direction,
-                                                 requested_edge - other_edge)
-        return super(AlignWindowEdges, self).maybe_resist(geometry, gravity,
-                                                          axis, direction)
+                    self.draw_guide(cardinal_axis(direction), other_edge - 1)
+                    return requested_edge - other_edge
+        return super(AlignWindowEdges, self).compute_resistance(geometry,
+                                                                gravity,
+                                                                direction)
 
     def draw_guide(self, axis, coord):
         def draw(axis, coord):
