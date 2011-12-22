@@ -19,8 +19,6 @@ log = logging.getLogger("moveresize")
 def identity(x):
     return x
 
-# Thanks to Tim Bray for the binary search implementation:
-# <http://www.tbray.org/ongoing/When/200x/2003/03/22/Binary>
 def bsearch_floor(item, sequence, key=identity):
     """Return a set containing the largest elements of sequence ≤ item."""
     high = len(sequence); low = -1
@@ -89,38 +87,32 @@ class Resistance(object):
     def resist(self, geometry, gravity=Gravity.Center):
         """Given a requested geometry, apply all applicable resistance and
         return the nearest acceptable geometry."""
+        def apply_resistance(geometry, gravity, direction, resistance):
+            if is_positive_direction(direction):
+                if gravity[cardinal_axis(direction)] < 0:
+                    return geometry - Rectangle(*direction) * resistance
+                else:
+                    return geometry - direction * resistance
+            else:
+                if gravity[cardinal_axis(direction)] > 0:
+                    return (geometry +
+                            direction * resistance -
+                            Rectangle(*direction) * resistance)
+                else:
+                    return geometry + direction * resistance
+
         gravity = gravity_offset(gravity)
         for direction in cardinal_directions:
-            geometry = self.apply_resistance(geometry, gravity, direction,
-                                             self.compute_resistance(geometry,
-                                                                     gravity,
-                                                                     direction))
+            geometry = apply_resistance(geometry, gravity, direction,
+                                        self.compute_resistance(geometry,
+                                                                gravity,
+                                                                direction))
         return geometry
 
     def compute_resistance(self, geometry, gravity, direction):
         """Compute and return any applicable resistance in the given cardinal
         direction."""
         return 0
-
-    @staticmethod
-    def apply_resistance(geometry, gravity, direction, resistance):
-        assert isinstance(geometry, Geometry)
-        assert isinstance(gravity, Position)
-        assert isinstance(direction, Position)
-        assert isinstance(resistance, int)
-
-        if is_positive_direction(direction):
-            if gravity[cardinal_axis(direction)] < 0:
-                return geometry - Rectangle(*direction) * resistance
-            else:
-                return geometry - direction * resistance
-        else:
-            if gravity[cardinal_axis(direction)] > 0:
-                return (geometry +
-                        direction * resistance -
-                        Rectangle(*direction) * resistance)
-            else:
-                return geometry + direction * resistance
 
     def cleanup(self, time):
         pass
