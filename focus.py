@@ -103,11 +103,15 @@ class FocusPolicy(WindowManager):
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
+        if event.override_redirect:
+            return
         if not self.focus_list:
             self.ensure_focus()
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
+        if event.from_configure:
+            return
         client = self.get_client(event.window, True)
         if client and self.focus_list and client is self.focus_list[0]:
             # Losing the current focus; try to focus another window.
