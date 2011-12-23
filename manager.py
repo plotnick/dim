@@ -165,15 +165,16 @@ class WindowManager(EventHandler):
     def adopt(self, windows):
         """Adopt existing top-level windows."""
         for window in windows:
-            log.debug("Adopting window 0x%x.", window)
-            client = self.manage(window)
             try:
                 attrs = self.conn.core.GetWindowAttributes(window).reply()
             except BadWindow:
                 log.warning("Error fetching attributes for window 0x%x.",
                             window)
                 continue
-            if attrs.map_state != MapState.Unmapped:
+            if (not attrs.override_redirect and
+                attrs.map_state != MapState.Unmapped):
+                log.debug("Adopting window 0x%x.", window)
+                client = self.manage(window)
                 client.normalize()
 
     def manage(self, window):
