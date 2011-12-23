@@ -115,7 +115,7 @@ class TestClient(EventHandler, Thread):
 
     @property
     def frame_geometry(self):
-        return window_geometry(self.conn, self.parent)
+        return get_window_geometry(self.conn, self.parent)
 
     def set_size_hints(self, size_hints):
         self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,

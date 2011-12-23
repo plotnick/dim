@@ -7,7 +7,7 @@ from operator import add, sub, lt, le, eq, ne, gt, ge
 from xcb.xproto import BadWindow, Gravity
 
 __all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
-           "is_move_only", "window_geometry",
+           "is_move_only",
            "offset_gravity", "gravity_offset", "gravity_names"]
 
 def make_tuple_adder(op):
@@ -129,18 +129,6 @@ def is_move_only(old, new):
             new.width == old.width and
             new.height == old.height and
             new.border_width == old.border_width)
-
-def window_geometry(conn, window):
-    """Request a window's geometry from the X server and return it as a
-    Geometry instance."""
-    cookie = conn.core.GetGeometry(window)
-    try:
-        reply = cookie.reply()
-    except BadWindow:
-        return None
-    return Geometry(reply.x, reply.y,
-                    reply.width, reply.height,
-                    reply.border_width)
 
 # When dealing with window gravity, it's sometimes more convenient to use
 # a slightly richer representation than the simple enumeration specified

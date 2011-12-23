@@ -6,10 +6,13 @@ from struct import Struct
 
 from xcb.xproto import *
 
+from geometry import *
+
 __all__ = ["power_of_2", "popcount", "int16", "card16",
            "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
-           "configure_notify", "send_client_message", "get_input_focus",
+           "configure_notify", "send_client_message",
+           "get_input_focus", "get_window_geometry", "query_pointer",
            "select_values", "value_list", "textitem16",
            "GrabButtons", "GrabServer",
            "client_message_type", "client_message", "ClientMessage"]
@@ -140,6 +143,23 @@ def get_input_focus(connection, screen=None):
         return connection.core.QueryPointer(screen.root).reply().child
     else:
         return focus
+
+def get_window_geometry(connection, window):
+    """Request a window's geometry from the X server and return it as a
+    Geometry instance."""
+    cookie = connection.core.GetGeometry(window)
+    try:
+        reply = cookie.reply()
+    except BadWindow:
+        return None
+    return Geometry(reply.x, reply.y,
+                    reply.width, reply.height,
+                    reply.border_width)
+
+def query_pointer(connection, root):
+    """Return the current pointer position relative to the given root window."""
+    reply = connection.core.QueryPointer(root).reply()
+    return Position(reply.root_x, reply.root_y)
 
 def select_values(value_mask, values):
     """Create a value-list from the supplied possible values according to the

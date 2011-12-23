@@ -424,11 +424,6 @@ class MoveResize(WindowManager):
                                                               gravity=gravity)
         return requested
 
-    def query_pointer(self):
-        """Return the current pointer position."""
-        reply = self.conn.core.QueryPointer(self.screen.root).reply()
-        return Position(reply.root_x, reply.root_y)
-
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
         button = event.detail
@@ -468,7 +463,7 @@ class MoveResize(WindowManager):
     def handle_motion_notify(self, event):
         if not self.client_update:
             return
-        self.client_update.update(self.query_pointer()
+        self.client_update.update(query_pointer(self.conn, self.screen.root)
                                   if event.detail == Motion.Hint
                                   else Position(event.root_x, event.root_y))
 
@@ -484,4 +479,6 @@ class MoveResize(WindowManager):
             self.client_update.commit(event.time)
             self.client_update = None
         elif keysym == XK_space:
-            self.client_update.cycle_gravity(self.query_pointer(), event.time)
+            self.client_update.cycle_gravity(query_pointer(self.conn,
+                                                           self.screen.root),
+                                             event.time)

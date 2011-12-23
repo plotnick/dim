@@ -73,7 +73,7 @@ class WindowManager(EventHandler):
                               if screen is not None
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
-        self.screen_geometry = window_geometry(self.conn, self.screen.root)
+        self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
         self.grab_buttons = grab_buttons
 
         self.clients = {} # managed clients, indexed by window ID
