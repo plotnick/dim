@@ -19,14 +19,27 @@ class EnsureFocus(ClientMessage):
     pass
 
 class FocusPolicy(WindowManager):
-    """A focus policy determines how and when to assign the input focus to the
-    client windows."""
+    """A focus policy determines how and when to assign the input focus."""
 
     __log = logging.getLogger("focus")
 
     def __init__(self, *args, **kwargs):
         super(FocusPolicy, self).__init__(*args, **kwargs)
+
         self.focus_list = deque() # most-recently focused first
+
+        # Create a default focus window. This window will receive the input
+        # focus when no client window has it.
+        self.default_focus_window = self.conn.generate_id()
+        self.conn.core.CreateWindowChecked(0,
+                                           self.default_focus_window,
+                                           self.screen.root,
+                                           0, 0, 1, 1, 0,
+                                           WindowClass.InputOnly,
+                                           self.screen.root_visual,
+                                           CW.OverrideRedirect,
+                                           [True]).check()
+        self.conn.core.MapWindow(self.default_focus_window)
 
     def shutdown(self):
         if self.conn:
@@ -47,11 +60,12 @@ class FocusPolicy(WindowManager):
             pass
         return super(FocusPolicy, self).unmanage(client, **kwargs)
 
-    def focus(self, client, time):
+    def focus(self, client, time, focus_default_window=True):
         """Offer the input focus to a client. If the offer is accepted,
         returns true and moves the client to the head of the focus list;
-        otherwise, returns false."""
-        if client.focus(time):
+        otherwise, returns false and optionally reverts focus to the
+        default focus window."""
+        if client and client.focus(time):
             try:
                 self.focus_list.remove(client)
             except exceptions.ValueError:
@@ -59,7 +73,18 @@ class FocusPolicy(WindowManager):
             self.focus_list.appendleft(client)
             return True
         else:
+            if focus_default_window:
+                self.focus_default_window(time)
             return False
+
+    def focus_default_window(self, time):
+        """Set the input focus to our default focus window."""
+        if time is None:
+            time = Time.CurrentTime
+        self.__log.debug("Focusing default focus window at time %d.", time)
+        self.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                     self.default_focus_window,
+                                     time)
 
     def unfocus(self, client):
         """Note that a client no longer has the input focus."""
@@ -92,9 +117,7 @@ class FocusPolicy(WindowManager):
             return
         self.__log.debug("Window 0x%x got the focus (%s).",
                          event.event, notify_detail_name(event))
-        client = self.get_client(event.event)
-        if client:
-            self.focus(client, None)
+        self.focus(self.get_client(event.event), None)
 
     @handler(FocusOutEvent)
     def handle_focus_out(self, event):
@@ -157,10 +180,10 @@ class FocusPolicy(WindowManager):
                 yield client
 
         for client in choose_focus_client():
-            if self.focus(client, time):
+            if self.focus(client, time, focus_default_window=False):
                 break
         else:
-            self.__log.debug("Couldn't find a client to focus.")
+            self.focus_default_window(time)
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer
@@ -201,9 +224,7 @@ class SloppyFocus(FocusPolicy):
             event.detail == NotifyDetail.Inferior or
             sequence_number(event) == self.last_modify_serial):
             return
-        client = self.get_client(event.event)
-        if client:
-            self.focus(client, event.time)
+        self.focus(self.get_client(event.event), event.time)
 
     @handler((UnmapNotifyEvent,
               MapNotifyEvent,
@@ -253,8 +274,8 @@ class ClickToFocus(FocusPolicy):
                                   Window._None, Cursor._None,
                                   1, ModMask.Any)
 
-    def focus(self, client, time):
-        if super(ClickToFocus, self).focus(client, time):
+    def focus(self, client, time, **kwargs):
+        if super(ClickToFocus, self).focus(client, time, **kwargs):
             # Once a client is focused, we can release our grab. This is
             # purely an optimization: we don't want to be responsible
             # for proxying all button press events to the client. We'll
