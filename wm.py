@@ -107,5 +107,10 @@ if __name__ == "__main__":
         log.info("Interrupt caught; shutting down.")
         wm.shutdown()
     except:
+        conn = xcb.connect()
+        conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                InputFocus.PointerRoot,
+                                Time.CurrentTime)
+
         traceback.print_exc()
         pdb.post_mortem()

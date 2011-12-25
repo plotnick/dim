@@ -28,6 +28,13 @@ class FocusPolicy(WindowManager):
         super(FocusPolicy, self).__init__(*args, **kwargs)
         self.focus_list = deque() # most-recently focused first
 
+    def shutdown(self):
+        if self.conn:
+            self.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                         InputFocus.PointerRoot,
+                                         Time.CurrentTime)
+        super(FocusPolicy, self).shutdown()
+
     def adopt(self, windows):
         focus = get_input_focus(self.conn)
         super(FocusPolicy, self).adopt(windows)
