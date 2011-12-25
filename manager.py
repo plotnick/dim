@@ -171,10 +171,11 @@ class WindowManager(EventHandler):
                 log.warning("Error fetching attributes for window 0x%x.",
                             window)
                 continue
-            if (not attrs.override_redirect and
-                attrs.map_state != MapState.Unmapped):
-                log.debug("Adopting window 0x%x.", window)
-                client = self.manage(window)
+            if attrs.override_redirect:
+                continue
+            log.debug("Adopting window 0x%x.", window)
+            client = self.manage(window)
+            if attrs.map_state != MapState.Unmapped:
                 client.normalize()
 
     def manage(self, window):
@@ -191,10 +192,9 @@ class WindowManager(EventHandler):
     def unmanage(self, client, destroyed=False):
         """Unmanage the given client."""
         log.debug("Unmanaging client window 0x%x.", client.window)
-        assert client.properties.wm_state != WMState.WithdrawnState
         del self.clients[client.window]
         del self.frames[client.frame]
-        client.withdraw()
+        client.undecorate(destroyed)
         return client
 
     def place(self, client, requested_geometry, resize_only=False):
@@ -368,7 +368,7 @@ class WindowManager(EventHandler):
 
         client = self.get_client(event.window, True)
         if client:
-            self.unmanage(client)
+            self.unmanage(client, True)
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
@@ -404,6 +404,7 @@ class WindowManager(EventHandler):
         if (client.properties.wm_state != WMState.IconicState or
             is_synthetic_event(event)):
             # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
+            client.withdraw()
             self.unmanage(client)
 
     @handler(MappingNotifyEvent)

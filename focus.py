@@ -40,12 +40,12 @@ class FocusPolicy(WindowManager):
         super(FocusPolicy, self).adopt(windows)
         self.ensure_focus(focus)
 
-    def unmanage(self, client):
+    def unmanage(self, client, **kwargs):
         try:
             self.focus_list.remove(client)
         except exceptions.ValueError:
             pass
-        return super(FocusPolicy, self).unmanage(client)
+        return super(FocusPolicy, self).unmanage(client, **kwargs)
 
     def focus(self, client, time):
         """Offer the input focus to a client. If the offer is accepted,

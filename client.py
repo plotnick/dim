@@ -295,33 +295,7 @@ class Client(EventHandler):
         self.conn.core.UnmapWindow(self.frame)
         self.conn.core.UnmapWindow(self.window)
 
-    def normalize(self):
-        """Transition to the Normal state."""
-        self.log.debug("Entering Normal state.")
-        self.properties.wm_state = WMState(WMState.NormalState)
-        self.properties.request_properties()
-        if not self.decorated:
-            try:
-                self.decorator.decorate()
-            except (BadWindow, BadDrawable) as e:
-                self.log.info("Received %s (%d) while applying decoration.",
-                              e.__class__.__name__,
-                              e.args[0].major_opcode)
-            else:
-                self.decorated = True
-        self.map()
-
-    def iconify(self):
-        """Transition to the Iconic state."""
-        self.log.debug("Entering Iconic state.")
-        self.properties.wm_state = WMState(WMState.IconicState)
-        self.unmap()
-
-    def withdraw(self, destroyed=False):
-        """Transition to the Withdrawn state."""
-        self.log.debug("Entering Withdrawn state.")
-        self.properties.wm_state = WMState(WMState.WithdrawnState)
-
+    def undecorate(self, destroyed=False):
         if self.decorated:
             try:
                 self.decorator.undecorate()
@@ -354,6 +328,33 @@ class Client(EventHandler):
 
         self.conn.core.DestroyWindow(self.frame)
         self.frame = None
+
+    def normalize(self):
+        """Transition to the Normal state."""
+        self.log.debug("Entering Normal state.")
+        self.properties.wm_state = WMState(WMState.NormalState)
+        self.properties.request_properties()
+        if not self.decorated:
+            try:
+                self.decorator.decorate()
+            except (BadWindow, BadDrawable) as e:
+                self.log.info("Received %s (%d) while applying decoration.",
+                              e.__class__.__name__,
+                              e.args[0].major_opcode)
+            else:
+                self.decorated = True
+        self.map()
+
+    def iconify(self):
+        """Transition to the Iconic state."""
+        self.log.debug("Entering Iconic state.")
+        self.properties.wm_state = WMState(WMState.IconicState)
+        self.unmap()
+
+    def withdraw(self):
+        """Transition to the Withdrawn state."""
+        self.log.debug("Entering Withdrawn state.")
+        self.properties.wm_state = WMState(WMState.WithdrawnState)
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):

@@ -138,10 +138,10 @@ class TagManager(WindowManager):
                                                       self.tags_changed)
         return client
 
-    def unmanage(self, client):
+    def unmanage(self, client, **kwargs):
         client.properties.unregister_change_handler("_DIM_TAGS",
                                                     self.tags_changed)
-        super(TagManager, self).unmanage(client)
+        super(TagManager, self).unmanage(client, **kwargs)
 
     def note_tags(self, client):
         for tag in client.properties.dim_tags:
