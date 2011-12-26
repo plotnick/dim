@@ -149,6 +149,14 @@ class TagManager(WindowManager):
                       client.window, self.atoms.name(tag, "UTF-8"))
             self.tagsets[tag].add(client)
 
+        # We'll use the client's instance and class names (ICCCM §4.1.2.5)
+        # as implicit tags.
+        def atom(string):
+            return self.atoms.intern(string, "Latin-1", errors="ignore")
+        instance, cls = client.properties.wm_class.instance_and_class()
+        self.tagsets[atom(instance)].add(client)
+        self.tagsets[atom(cls)].add(client)
+
     def tags_changed(self, window, name, deleted, time):
         client = self.get_client(window, True)
         for tagset in self.tagsets.values():
