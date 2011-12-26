@@ -130,6 +130,11 @@ class TagManager(WindowManager):
         self.properties.register_change_handler("_DIM_TAGSET_UPDATE",
                                                 self.update_tagset)
 
+    def shutdown(self):
+        super(TagManager, self).shutdown()
+        for tagset in self.tagsets.values():
+            assert not tagset
+
     def manage(self, window):
         client = super(TagManager, self).manage(window)
         if client:
@@ -139,6 +144,7 @@ class TagManager(WindowManager):
         return client
 
     def unmanage(self, client, **kwargs):
+        self.forget_tags(client)
         client.properties.unregister_change_handler("_DIM_TAGS",
                                                     self.tags_changed)
         super(TagManager, self).unmanage(client, **kwargs)
@@ -157,10 +163,13 @@ class TagManager(WindowManager):
         self.tagsets[atom(instance)].add(client)
         self.tagsets[atom(cls)].add(client)
 
-    def tags_changed(self, window, name, deleted, time):
-        client = self.get_client(window, True)
+    def forget_tags(self, client):
         for tagset in self.tagsets.values():
             tagset.discard(client)
+
+    def tags_changed(self, window, name, deleted, time):
+        client = self.get_client(window, True)
+        self.forget_tags(client)
         if not deleted:
             self.note_tags(client)
 
