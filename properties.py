@@ -354,14 +354,15 @@ class WMClass(String):
     property_format = [8]
     property_type = "STRING"
 
-    def instance_and_class(self):
-        """Return a tuple of the form (client-instance, client-class)."""
+    def __iter__(self):
+        """Yield the instance name followed by the class name."""
         # The WM_CLASS property contains two consecutive null-terminated
         # strings naming the client instance and class, respectively.
-        s = str(self)
+        s = unicode(self)
         i = s.find("\0")
         j = s.find("\0", i + 1)
-        return (s[0:i], s[i + 1:j])
+        yield s[0:i]
+        yield s[i + 1:j]
 
 class WMTransientFor(PropertyValue):
     """A representation of the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)"""

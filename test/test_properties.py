@@ -85,7 +85,7 @@ class TestWMClass(unittest.TestCase):
         s = "xterm\x00XTerm\x00"
         p = WMClass.unpack(s)
         self.assertEqual(p.pack(), s)
-        self.assertEqual(p.instance_and_class(), ("xterm", "XTerm"))
+        self.assertEqual(tuple(p), ("xterm", "XTerm"))
 
 class TestWMSizeHints(unittest.TestCase):
     base_size = (4, 4)
