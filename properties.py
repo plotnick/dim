@@ -4,7 +4,6 @@
 
 from array import array
 from collections import defaultdict
-from codecs import decode
 import logging
 from struct import Struct
 
@@ -329,11 +328,16 @@ class String(PropertyValueList):
             super(String, self).__init__(elements)
 
     def __str__(self):
-        return decode(buffer(self.elements), self.encoding)
+        return self.elements.tostring()
+
+    def __unicode__(self):
+        return self.elements.tostring().decode(self.encoding)
 
     def __eq__(self, other):
-        if isinstance(other, basestring):
+        if isinstance(other, str):
             return str(self) == other
+        elif isinstance(other, unicode):
+            return unicode(self) == other
         else:
             return super(String, self).__eq__(other)
 
