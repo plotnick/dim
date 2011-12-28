@@ -69,51 +69,50 @@ class Client(EventHandler):
         self.visibility = None
         self.log = logging.getLogger("client.0x%x" % self.window)
 
-        with GrabServer(self.conn):
-            geometry = get_window_geometry(self.conn, self.window)
-            if not geometry:
-                return
+        geometry = get_window_geometry(self.conn, self.window)
+        if not geometry:
+            return
 
-            # Set the client's border width to 0, but save the current value
-            # so that we can restore it if and when we reparent the client
-            # back to the root.
-            self.original_border_width = geometry.border_width
-            self.conn.core.ConfigureWindow(self.window,
-                                           ConfigWindow.BorderWidth,
-                                           [0])
+        # Set the client's border width to 0, but save the current value
+        # so that we can restore it if and when we reparent the client
+        # back to the root.
+        self.original_border_width = geometry.border_width
+        self.conn.core.ConfigureWindow(self.window,
+                                       ConfigWindow.BorderWidth,
+                                       [0])
 
-            # Compute the frame geometry based on the current geometry
-            # and the requirements of our decorator.
-            offset = self.decorator.compute_client_offset()
-            gravity = self.properties.wm_normal_hints.win_gravity
-            frame_geometry = geometry.resize(geometry.size() + offset.size(),
-                                             self.decorator.border_width,
-                                             gravity)
+        # Compute the frame geometry based on the current geometry
+        # and the requirements of our decorator.
+        offset = self.decorator.compute_client_offset()
+        gravity = self.properties.wm_normal_hints.win_gravity
+        frame_geometry = geometry.resize(geometry.size() + offset.size(),
+                                         self.decorator.border_width,
+                                         gravity)
 
-            # Create the frame and reparent the client window.
-            self.reparenting = True
-            self.frame = self.conn.generate_id()
-            self.log.debug("Creating frame 0x%x.", self.frame)
-            self.conn.core.CreateWindow(self.screen.root_depth,
-                                        self.frame,
-                                        self.screen.root,
-                                        frame_geometry.x,
-                                        frame_geometry.y,
-                                        frame_geometry.width,
-                                        frame_geometry.height,
-                                        frame_geometry.border_width,
-                                        WindowClass.InputOutput,
-                                        self.screen.root_visual,
-                                        CW.OverrideRedirect | CW.EventMask,
-                                        [True, self.frame_event_mask])
-            self.conn.core.ChangeSaveSet(SetMode.Insert, self.window)
-            self.conn.core.ReparentWindow(self.window, self.frame,
-                                          offset.x, offset.y)
+        # Create the frame and reparent the client window.
+        self.reparenting = True
+        self.frame = self.conn.generate_id()
+        self.log.debug("Creating frame 0x%x.", self.frame)
+        self.conn.core.CreateWindow(self.screen.root_depth,
+                                    self.frame,
+                                    self.screen.root,
+                                    frame_geometry.x,
+                                    frame_geometry.y,
+                                    frame_geometry.width,
+                                    frame_geometry.height,
+                                    frame_geometry.border_width,
+                                    WindowClass.InputOutput,
+                                    self.screen.root_visual,
+                                    CW.OverrideRedirect | CW.EventMask,
+                                    [True, self.frame_event_mask])
+        self.conn.core.ChangeSaveSet(SetMode.Insert, self.window)
+        self.conn.core.ReparentWindow(self.window, self.frame,
+                                      offset.x, offset.y)
 
-            # Record the new window and frame geometries.
-            self.geometry = geometry.reborder(0).move(offset.position())
-            self.frame_geometry = frame_geometry
-            self.offset = offset
+        # Record the new window and frame geometries.
+        self.geometry = geometry.reborder(0).move(offset.position())
+        self.frame_geometry = frame_geometry
+        self.offset = offset
 
         # Register for events on the client window and frame.
         self.conn.core.ChangeWindowAttributes(self.window,
@@ -309,22 +308,22 @@ class Client(EventHandler):
         if not destroyed:
             self.log.debug("Reparenting back to root window 0x%x.",
                            self.screen.root)
-            with GrabServer(self.conn):
-                # Compute the new window geometry based on the current frame
-                # geometry, the original border width, and the window gravity.
-                bw = self.original_border_width
-                size = self.geometry.size()
-                gravity = self.properties.wm_normal_hints.win_gravity
-                geometry = self.frame_geometry.resize(size, bw, gravity)
 
-                self.conn.core.ConfigureWindow(self.window,
-                                               ConfigWindow.BorderWidth,
-                                               [bw])
-                self.conn.core.ReparentWindow(self.window,
-                                              self.screen.root,
-                                              geometry.x,
-                                              geometry.y)
-                self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
+            # Compute the new window geometry based on the current frame
+            # geometry, the original border width, and the window gravity.
+            bw = self.original_border_width
+            size = self.geometry.size()
+            gravity = self.properties.wm_normal_hints.win_gravity
+            geometry = self.frame_geometry.resize(size, bw, gravity)
+
+            self.conn.core.ConfigureWindow(self.window,
+                                           ConfigWindow.BorderWidth,
+                                           [bw])
+            self.conn.core.ReparentWindow(self.window,
+                                          self.screen.root,
+                                          geometry.x,
+                                          geometry.y)
+            self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
 
         self.conn.core.DestroyWindow(self.frame)
         self.frame = None
