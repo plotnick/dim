@@ -111,6 +111,7 @@ if __name__ == "__main__":
         conn.core.SetInputFocus(InputFocus.PointerRoot,
                                 InputFocus.PointerRoot,
                                 Time.CurrentTime)
+        conn.flush()
 
         traceback.print_exc()
         pdb.post_mortem()
