@@ -2,6 +2,7 @@
 
 from cmath import phase
 from collections import namedtuple
+from numbers import Real
 from operator import add, sub, lt, le, eq, ne, gt, ge
 
 from xcb.xproto import BadWindow, Gravity
@@ -15,7 +16,7 @@ def make_tuple_adder(op):
         """Add or subtract two named tuples or a named tuple and a scalar."""
         if isinstance(other, tuple) and len(self) == len(other):
             return self._make(map(op, self, other))
-        elif isinstance(other, (int, float)):
+        elif isinstance(other, Real):
             return self._make(op(field, other) for field in self)
         else:
             return NotImplemented
@@ -23,14 +24,14 @@ def make_tuple_adder(op):
 
 def multiply_tuple(self, other):
     """Multiply the components of a named tuple by a scalar."""
-    if isinstance(other, (int, float)):
+    if isinstance(other, Real):
         return self._make(x * other for x in self)
     else:
         return NotImplemented
 
 def floor_divide_tuple(self, other):
     """Divide the components of a named tuple by a scalar."""
-    if isinstance(other, (int, float)):
+    if isinstance(other, Real):
         return self._make(x // other for x in self)
     else:
         return NotImplemented
@@ -44,7 +45,7 @@ def make_geometry_adder(op):
                                  height=op(self.height, other.height))
         elif isinstance(other, tuple):
             return self._replace(x=op(self.x, other[0]), y=op(self.y, other[1]))
-        elif isinstance(other, (int, float)):
+        elif isinstance(other, Real):
             return self._replace(x=op(self.x, other), y=op(self.y, other))
         else:
             return NotImplemented
