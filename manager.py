@@ -368,7 +368,7 @@ class WindowManager(EventHandler):
 
         client = self.get_client(event.window, True)
         if client:
-            self.unmanage(client, True)
+            self.unmanage(client, destroyed=True)
 
     @handler(ReparentNotifyEvent)
     def handle_reparent_notify(self, event):
