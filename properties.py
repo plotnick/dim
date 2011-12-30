@@ -5,17 +5,31 @@
 from array import array
 from collections import defaultdict
 import logging
+import exceptions
+from operator import itemgetter
 from struct import Struct
 
 from xcb.xproto import *
 
 from geometry import *
 
-__all__ = ["PropertyError", "PropertyDescriptor", "PropertyManager",
+__all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
+           "PropertyError", "PropertyDescriptor", "PropertyManager",
            "PropertyValue", "PropertyValueList",
            "AtomList", "String", "UTF8String",
            "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
            "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
+
+# Translate between X property formats and Python's struct & array type codes.
+type_codes = {8: "B", 16: "H", 32: "I"}
+
+# The following type codes are not meant to be exhaustive; they're only
+# what's needed to make our property field definitions look more like the
+# specifications given in the ICCCM.
+INT32 = "i"
+CARD32 = "I"
+PIXMAP = CARD32
+WINDOW = CARD32
 
 class PropertyError(Exception):
     pass
@@ -45,9 +59,14 @@ class PropertyDescriptor(object):
         except BadWindow:
             instance.log.warning("Error fetching property %s.", self.name)
             return None
-        value = (owner.properties[self.name].unpack(reply.value.buf())
-                 if reply.type
-                 else self.default)
+        if reply.type:
+            try:
+                value = owner.properties[self.name].unpack(reply.value.buf())
+            except exceptions.ValueError:
+                instance.log.warning("Invalid %s property value.", self.name)
+                value = self.default
+        else:
+            value = self.default
         instance.values[self.name] = value
         return value
 
@@ -176,9 +195,6 @@ class PropertyManager(object):
     def unregister_change_handler(self, name, handler):
         self.change_handlers[name].discard(handler)
 
-# Translate between X property formats and Python's struct & array type codes.
-type_codes = {8: "B", 16: "H", 32: "I"}
-
 class PropertyValueClass(type):
     """Metaclass for X property values."""
 
@@ -186,18 +202,19 @@ class PropertyValueClass(type):
         cls = super(PropertyValueClass, metaclass).__new__(metaclass, name,
                                                            bases, namespace)
 
-        # Use the declared property format in conjunction with the names of
-        # the fields to produce a Struct object which can pack and unpack
-        # the property data.
         for c in cls.__mro__:
-            if hasattr(c, "__slots__") and hasattr(c, "property_format"):
-                fields = c.__slots__
+            if hasattr(c, "fields") and hasattr(c, "property_format"):
+                fields = c.fields
                 format = c.property_format
                 break
         else:
             raise TypeError("property values must specify format and fields")
-        assert format in type_codes, "invalid property format %r" % format
-        cls.formatter = Struct(type_codes[format] * len(fields))
+        assert all(len(field) == 2
+                   for field in fields), \
+            "invalid fields specification %r" % (fields,)
+        assert format in type_codes, \
+            "invalid property format %r" % format
+        cls.formatter = Struct("".join(map(itemgetter(1), fields)))
         return cls
 
 class PropertyValueListClass(PropertyValueClass):
@@ -211,8 +228,7 @@ class PropertyValueListClass(PropertyValueClass):
                 break
         else:
             raise TypeError("property value lists must specify format")
-        assert (isinstance(format, (list, tuple)) and
-                len(format) == 1 and format[0] in type_codes), \
+        assert format in type_codes, \
             "invalid property format %r" % format
         return cls
 
@@ -221,20 +237,20 @@ class PropertyValue(object):
 
     X property values are treated by the server as lists of 8-bit, 16-bit,
     or 32-bit quantities. This class provides a representation of such
-    lists as instances with named attributes (i.e., fields or slots),
-    and offers convenience methods for translating to and from the
-    binary representation.
+    lists as instances with named attributes (i.e., fields or slots), and
+    offers convenience methods for translating to and from the binary
+    representation.
 
     Subclassess should set their property_format attribute to either 8, 16,
-    or 32, and their __slots__ attribute to a sequence of attribute names
-    whose values comprise the property data."""
+    or 32, and their fields attribute to a sequence of (field-name, type-code)
+    pairs."""
 
     __metaclass__ = PropertyValueClass
-    __slots__ = ()
     property_format = 32
+    fields = ()
 
     def __init__(self, *args, **kwargs):
-        for field, value in zip(self.__slots__, args):
+        for field, value in zip(map(itemgetter(0), self.fields), args):
             setattr(self, field, value)
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -253,40 +269,41 @@ class PropertyValue(object):
     @classmethod
     def unpack(cls, data):
         """Create and return a new instance by unpacking the property data."""
+        # ICCCM §4.1.2: "If these properties are longer than expected,
+        # clients should ignore the remainder of the property." If they're
+        # shorter than expected, we'll pad them with zeros.
+        if len(data) < cls.formatter.size:
+            data = str(data) + "\x00" * (cls.formatter.size - len(data))
+
         return cls(*cls.formatter.unpack_from(data))
 
     def pack(self):
         """Return the property data as a byte string."""
-        data = self.formatter.pack(*(getattr(self, slot, 0)
-                                     for slot in self.__slots__))
-        if len(self.__slots__) != len(data) // (self.property_format // 8):
-            raise PropertyError("invalid property data")
-        return data
+        return self.formatter.pack(*(getattr(self, field[0], 0)
+                                     for field in self.fields))
 
     def change_property_args(self):
         """Return a (format, data-length, data) tuple."""
-        return (self.property_format, len(self.__slots__), self.pack())
+        return (self.property_format, len(self.fields), self.pack())
 
 class PropertyValueList(PropertyValue):
     """Base class for representations of list-like X property values."""
 
     __metaclass__ = PropertyValueListClass
-    __slots__ = ("elements")
-    property_format = [32]
+    property_format = 32
 
     def __init__(self, elements):
         self.elements = elements
 
     @classmethod
     def unpack(cls, data):
-        return cls(array(type_codes[cls.property_format[0]], str(data)))
+        return cls(array(type_codes[cls.property_format], str(data)))
 
     def pack(self):
-        return array(type_codes[self.property_format[0]],
-                     self.elements).tostring()
+        return array(type_codes[self.property_format], self.elements).tostring()
 
     def change_property_args(self):
-        format = self.property_format[0]
+        format = self.property_format
         data = self.pack()
         return (format, len(data) // (format // 8), data)
 
@@ -306,8 +323,7 @@ class PropertyValueList(PropertyValue):
         return list(self.elements) == list(other)
 
 class AtomList(PropertyValueList):
-    __slots__ = ()
-    property_format = [32]
+    property_format = 32
     property_type = "ATOM"
 
 class String(PropertyValueList):
@@ -316,8 +332,7 @@ class String(PropertyValueList):
     Note that we currently only support Latin-1 strings, and not the (obsolete)
     COMPOUND_TEXT type. If you need Unicode support, use UTF8String instead."""
 
-    __slots__ = ()
-    property_format = [8]
+    property_format = 8
     property_type = "STRING"
     encoding = "Latin-1"
 
@@ -342,16 +357,14 @@ class String(PropertyValueList):
             return super(String, self).__eq__(other)
 
 class UTF8String(String):
-    __slots__ = ()
-    property_format = [8]
+    property_format = 8
     property_type = "UTF8_STRING"
     encoding = "UTF-8"
 
 class WMClass(String):
     """A representation of the WM_STATE property (ICCCM §4.1.2.5)"""
 
-    __slots__ = ()
-    property_format = [8]
+    property_format = 8
     property_type = "STRING"
 
     def __iter__(self):
@@ -367,34 +380,31 @@ class WMClass(String):
 class WMTransientFor(PropertyValue):
     """A representation of the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)"""
 
-    __slots__ = ("window")
     property_format = 32
     property_type = "WINDOW"
+    fields = (("window", WINDOW),)
 
 class WMProtocols(AtomList):
     """A representation of the WM_PROTOCOLS property (ICCCM §4.1.2.7)"""
-    __slots__ = ()
+    pass
 
 class WMColormapWindows(PropertyValueList):
     """A representation of the WM_COLORMAP_WINDOWS property (ICCCM §4.1.2.8)"""
-
-    __slots__ = ()
-    property_format = [32]
+    property_format = 32
     property_type = "WINDOW"
 
 class WMClientMachine(String):
     """A representation of the WM_CLIENT_MACHINE property (ICCCM §4.1.2.9)"""
-
-    __slots__ = ()
-    property_format = [8]
+    property_format = 8
     property_type = "STRING"
 
 class WMState(PropertyValue):
     """A representation of the WM_STATE type (ICCCM §4.1.3.1)"""
 
-    __slots__ = ("state", "icon")
     property_format = 32
     property_type = "WM_STATE"
+    fields = (("state", CARD32),
+              ("icon", WINDOW))
 
     # State values
     WithdrawnState = 0
@@ -463,17 +473,26 @@ class PropertyField(object):
 class WMSizeHints(PropertyValue):
     """A representation of the WM_SIZE_HINTS type (ICCCM §4.1.2.3)."""
 
-    __slots__ = ("flags",
-                 "_pad1", "_pad2", "_pad3", "_pad4",
-                 "_min_width", "_min_height",
-                 "_max_width", "_max_height",
-                 "_width_inc", "_height_inc",
-                 "_min_aspect_width", "_min_aspect_height",
-                 "_max_aspect_width", "_max_aspect_height",
-                 "_base_width", "_base_height",
-                 "_win_gravity")
     property_format = 32
     property_type = "WM_SIZE_HINTS"
+    fields = (("flags", CARD32),
+              ("_pad1", CARD32),
+              ("_pad2", CARD32),
+              ("_pad3", CARD32),
+              ("_pad4", CARD32),
+              ("_min_width", INT32),
+              ("_min_height", INT32),
+              ("_max_width", INT32),
+              ("_max_height", INT32),
+              ("_width_inc", INT32),
+              ("_height_inc", INT32),
+              ("_min_aspect_width", INT32),
+              ("_min_aspect_height", INT32),
+              ("_max_aspect_width", INT32),
+              ("_max_aspect_height", INT32),
+              ("_base_width", INT32),
+              ("_base_height", INT32),
+              ("_win_gravity", INT32))
 
     # Flags
     USPosition = 1
@@ -559,16 +578,17 @@ class WMSizeHints(PropertyValue):
 class WMHints(PropertyValue):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
 
-    __slots__ = ("flags",
-                 "_input",
-                 "_initial_state",
-                 "_icon_pixmap",
-                 "_icon_window",
-                 "_icon_x", "_icon_y",
-                 "_icon_mask",
-                 "_window_group")
     property_format = 32
     property_type = "WM_HINTS"
+    fields = (("flags", CARD32),
+              ("_input", CARD32),
+              ("_initial_state", CARD32),
+              ("_icon_pixmap", PIXMAP),
+              ("_icon_window", WINDOW),
+              ("_icon_x", INT32),
+              ("_icon_y", INT32),
+              ("_icon_mask", PIXMAP),
+              ("_window_group", WINDOW))
 
     # Flags
     InputHint = 1

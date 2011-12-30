@@ -11,37 +11,51 @@ from geometry import *
 from properties import *
 
 class TestProp(PropertyValue):
-    __slots__ = ("a", "b", "c")
     property_format = 32
+    fields = (("a", INT32),
+              ("b", CARD32),
+              ("c", CARD32))
 
 class TestPropertyValue(unittest.TestCase):
     def test_unpack(self):
-        prop = TestProp.unpack(pack("III", 1, 2, 3))
-        self.assertEqual(prop.a, 1)
+        prop = TestProp.unpack(pack("iII", -1, 2, 3))
+        self.assertEqual(prop.a, -1)
+        self.assertEqual(prop.b, 2)
+        self.assertEqual(prop.c, 3)
+
+    def test_unpack_short(self):
+        prop = TestProp.unpack(pack("iI", -1, 2))
+        self.assertEqual(prop.a, -1)
+        self.assertEqual(prop.b, 2)
+        self.assertEqual(prop.c, 0)
+
+    def test_unpack_long(self):
+        prop = TestProp.unpack(pack("iIII", -1, 2, 3, 4))
+        self.assertEqual(prop.a, -1)
         self.assertEqual(prop.b, 2)
         self.assertEqual(prop.c, 3)
 
     def test_pack(self):
-        self.assertEqual(TestProp(1), pack("III", 1, 0, 0))
-        self.assertEqual(TestProp(1, c=3), pack("III", 1, 0, 3))
-        self.assertEqual(TestProp(1, 2, 3), pack("III", 1, 2, 3))
+        self.assertEqual(TestProp(-1), pack("iII", -1, 0, 0))
+        self.assertEqual(TestProp(-1, c=3), pack("iII", -1, 0, 3))
+        self.assertEqual(TestProp(-1, 2, 3), pack("iII", -1, 2, 3))
 
     def test_args(self):
-        prop = TestProp(1, c=3)
-        self.assertEqual(prop.a, 1)
+        prop = TestProp(-1, c=3)
+        self.assertEqual(prop.a, -1)
         self.assertRaises(AttributeError, lambda: prop.b)
         self.assertEqual(prop.c, 3)
 
     def test_prop_set(self):
         prop = TestProp()
         self.assertRaises(AttributeError, lambda: prop.a)
-        prop.a = 1
-        self.assertEqual(prop.a, 1)
+        prop.a = -1
+        self.assertEqual(prop.a, -1)
 
     def test_equality(self):
-        self.assertEqual(TestProp(a=1, b=2, c=3), TestProp(a=1, b=2, c=3))
-        self.assertNotEqual(TestProp(a=1), TestProp(a=1, b=2, c=3))
-        self.assertEqual(TestProp(a=1), pack("III", 1, 0, 0))
+        self.assertEqual(TestProp(a=-1, b=2, c=3), TestProp(a=-1, b=2, c=3))
+        self.assertNotEqual(TestProp(a=-1), TestProp(a=-1, b=2, c=3))
+        self.assertEqual(TestProp(a=-1), pack("iII", -1, 0, 0))
 
     def test_pack_unpack(self):
         prop = TestProp(a=1, b=2, c=3)
