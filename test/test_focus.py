@@ -212,7 +212,6 @@ class TestSloppyFocus(FocusPolicyTestCase, SharedFocusPolicyTests):
 
         # Resize A so that it contains the pointer.
         geometry = Geometry(0, 0, 150, 100, 1)
-        a.synthetic_geometry = None
         a.resize(geometry.size(), geometry.border_width)
         self.loop(lambda: (a.geometry.size() == geometry.size() and
                            self.pointer_window() == a.parent))
@@ -221,7 +220,7 @@ class TestSloppyFocus(FocusPolicyTestCase, SharedFocusPolicyTests):
         # not a result of a pointer movement.
         self.loop(self.make_focus_test(b))
 
-    def _test_leave_window_keep_focus(self):
+    def test_leave_window_keep_focus(self):
         """Keep focus when pointer leaves a window due to client configure"""
         # This is problem 3 in the AHWM sloppy focus document. It is
         # closely related to problem 2, and shares a solution.
@@ -235,7 +234,7 @@ class TestSloppyFocus(FocusPolicyTestCase, SharedFocusPolicyTests):
         # Move & resize B so that the pointer is now in A.
         geometry = Geometry(100, 25, 75, 50, 1)
         b.configure(geometry)
-        self.loop(lambda: (b.synthetic_geometry == geometry and
+        self.loop(lambda: (b.geometry.size() == geometry.size() and
                            self.pointer_window() == a.parent))
 
         # B should still have the focus.
