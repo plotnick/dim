@@ -40,6 +40,11 @@ class FocusPolicyTestCase(WMTestCase):
 
     wm_class = FocusPolicy
 
+    # We need a "safe" position to which we can warp the pointer that will
+    # not be over any of the windows that we create. There should be no
+    # other client windows at this position, either.
+    safe_position = Position(1000, 1000)
+
     def setUp(self, start_wm=True):
         super(FocusPolicyTestCase, self).setUp(start_wm=start_wm)
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
@@ -49,6 +54,10 @@ class FocusPolicyTestCase(WMTestCase):
         # Save the current pointer position.
         reply = self.conn.core.QueryPointer(self.screen.root).reply()
         self.original_pointer_position = Position(reply.root_x, reply.root_y)
+
+        # Warp the pointer out of the way.
+        self.warp_pointer(*self.safe_position)
+        self.assertPointerRoot()
 
     def tearDown(self):
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
@@ -175,11 +184,8 @@ class TestSloppyFocus(FocusPolicyTestCase, SharedFocusPolicyTests):
     def focus(self, client):
         # The only reliable way to focus a window under the sloppy focus
         # policy is to move the pointer in such a way that it generates an
-        # EnterNotify event. We therefore need a "safe" position from which
-        # we can warp the pointer into the window. There should be no other
-        # windows at the safe position.
-        self.warp_pointer(500, 0)
-        self.assertPointerRoot()
+        # EnterNotify event.
+        self.warp_pointer(*self.safe_position)
         self.warp_pointer(*center(client.geometry))
         self.loop(self.make_focus_test(client))
 
