@@ -276,9 +276,7 @@ class TestKeyboardMap(MappingTestCase):
         saved_keycodes = reply.keycodes
         try:
             # Set the modifier map to a known state. We'll assume that each
-            # of the keysyms listed below is attached to some keycode. Note
-            # that XKB seems to step in here sometimes and muck around with
-            # our values.
+            # of the keysyms listed below is attached to some keycode.
             def keycode(keysym):
                 return self.keymap.keysym_to_keycode(keysym)
             keycodes = [keycode(XK_Shift_L), # shift
@@ -298,7 +296,6 @@ class TestKeyboardMap(MappingTestCase):
             self.assertEqual(self.keymap.group, ModMask._3)
             self.assertEqual(self.keymap.numlock, ModMask._2)
             self.assertEqual(self.keymap.meta, ModMask._1)
-            self.assertEqual(self.keymap.alt, ModMask._1) # thanks, XKB!
             self.assertEqual(self.keymap.super, ModMask._4)
             self.assertEqual(self.keymap.hyper, 0)
         finally:
