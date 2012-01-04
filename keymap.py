@@ -204,12 +204,22 @@ class KeyboardMap(InputDeviceMapping):
     def __len__(self):
         return (self.max_keycode - self.min_keycode) + 1
 
-    def keysym_to_keycode(self, keysym):
-        """Return the first keycode that generates the given symbol."""
+    def keysym_to_keycodes(self, keysym):
+        """Return the set of keycodes that generate the given symbol."""
+        keycodes = set()
         for j in range(self.keysyms_per_keycode):
             for i in range(self.min_keycode, self.max_keycode + 1):
                 if self[(i, j)] == keysym:
-                    return i
+                    keycodes.add(i)
+        return keycodes
+
+    def keysym_to_keycode(self, keysym):
+        """Return an arbitrary keycode that generates the given symbol, or None
+        if there is no such keycode."""
+        try:
+            return self.keysym_to_keycodes(keysym).pop()
+        except KeyError:
+            return None
 
     def clear_modifiers(self):
         self.lock = NoSymbol # keysym, not bucky bit
