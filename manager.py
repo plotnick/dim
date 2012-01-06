@@ -199,6 +199,13 @@ class WindowManager(EventHandler):
 
     def establish_grabs(self, window):
         """Establish passive key and button grabs for the global bindings."""
+        log.debug("Establishing passive grabs on window 0x%x.", window)
+
+        # First, we'll ungrab all keys and buttons. The assumption here is
+        # that passive grabs are established only via this method.
+        self.conn.core.UngrabKey(Grab.Any, window, ModMask.Any)
+        self.conn.core.UngrabButton(ButtonIndex.Any, window, ModMask.Any)
+
         # Each grab will be repeated with all bound combinations of Caps Lock,
         # Num Lock, and Scroll Lock modifiers.
         def lock_combinations(lock_bits):
@@ -208,23 +215,20 @@ class WindowManager(EventHandler):
                 for combination in lock_combinations(lock_bits[1:]):
                     yield combination
                     yield bit | combination
-        lock_mods = list(lock_combinations(filter(bool,
-                                                  [ModMask.Lock,
-                                                   self.keymap.num_lock,
-                                                   self.keymap.scroll_lock])))
+        lock_bits = filter(bool,
+                           [ModMask.Lock,
+                            self.keymap.num_lock,
+                            self.keymap.scroll_lock])
+        lock_mods = [0] + list(lock_combinations(lock_bits))
 
+        # Establish passive key grabs.
         for modifiers, key in self.key_bindings.grabs():
-            self.conn.core.GrabKey(True, window, modifiers, key,
-                                   GrabMode.Async, GrabMode.Async)
             for locks in lock_mods:
                 self.conn.core.GrabKey(True, window, locks | modifiers, key,
                                        GrabMode.Async, GrabMode.Async)
 
+        # Establish passive button grabs.
         for modifiers, button, mask in self.button_bindings.grabs():
-            self.conn.core.GrabButton(True, window, mask,
-                                      GrabMode.Async, GrabMode.Async,
-                                      Window._None, Cursor._None,
-                                      button, modifiers)
             for locks in lock_mods:
                 self.conn.core.GrabButton(True, window, mask,
                                           GrabMode.Async, GrabMode.Async,
@@ -454,6 +458,10 @@ class WindowManager(EventHandler):
                 log.warning("Unable to refresh partial keymap: %s.", e)
                 # Do a full refresh. If that fails, just bail out.
                 self.keymap.refresh()
+
+        # Update our passive grabs for the new mapping.
+        for client in self.clients.values():
+            self.establish_grabs(client.window)
 
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):

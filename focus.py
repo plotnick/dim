@@ -186,6 +186,10 @@ class FocusPolicy(WindowManager):
         else:
             self.focus_default_window(time)
 
+    @handler(MappingNotifyEvent)
+    def handle_mapping_notify(self, event):
+        self.establish_grabs(self.default_focus_window)
+
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer
     moves into the root window or a window that refuses to take focus, the
