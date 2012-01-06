@@ -2,6 +2,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 import re
+from subprocess import Popen
 
 from xcb.xproto import *
 
@@ -9,6 +10,7 @@ from color import RGBi
 from decorator import TitlebarConfig, TitlebarDecorator
 from event import handler
 from focus import SloppyFocus, ClickToFocus
+from keysym import *
 from moveresize import MoveResize
 from properties import AtomList
 from raiselower import RaiseLower
@@ -51,6 +53,13 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                       unfocused_config=self.unfocused_config,
                                       button_press_handlers={2: change_tags})
         return decorator
+
+def terminal(event):
+    Popen("xterm")
+
+key_bindings = {
+    ("control", "meta", XK_Return): terminal
+}
 
 if __name__ == "__main__":
     from optparse import OptionParser
@@ -99,9 +108,10 @@ if __name__ == "__main__":
     log = logging.getLogger("wm")
     log.debug("Using %s focus policy.", options.focus_mode)
     try:
-        wm = type("WM",
-                  (focus_modes[options.focus_mode], BaseWM),
-                  dict(title_font=options.title_font))(options.display)
+        wm_class = type("WM",
+                        (focus_modes[options.focus_mode], BaseWM),
+                        dict(title_font=options.title_font))
+        wm = wm_class(options.display, key_bindings=key_bindings)
         wm.start()
     except KeyboardInterrupt:
         log.info("Interrupt caught; shutting down.")

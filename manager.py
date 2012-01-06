@@ -9,6 +9,7 @@ from select import select
 from xcb.xproto import *
 
 from atom import AtomCache
+from bindings import KeyBindings, ButtonBindings
 from client import Client
 from color import ColorCache
 from cursor import FontCursor
@@ -67,7 +68,10 @@ class WindowManager(EventHandler):
 
     property_class = WindowManagerProperties
 
-    def __init__(self, display=None, screen=None, grab_buttons=GrabButtons()):
+    def __init__(self, display=None, screen=None,
+                 grab_buttons=GrabButtons(),
+                 key_bindings={},
+                 button_bindings={}):
         self.conn = xcb.connect(display)
         self.screen_number = (screen
                               if screen is not None
@@ -86,6 +90,13 @@ class WindowManager(EventHandler):
         self.modmap = ModifierMap(self.conn)
         self.keymap = KeyboardMap(self.conn, modmap=self.modmap)
         self.butmap = PointerMap(self.conn)
+        self.key_bindings = KeyBindings(key_bindings,
+                                        self.keymap,
+                                        self.modmap)
+        self.button_bindings = ButtonBindings(button_bindings,
+                                              self.keymap,
+                                              self.modmap,
+                                              self.butmap)
         self.properties = self.property_class(self.conn,
                                               self.screen.root,
                                               self.atoms)
@@ -186,6 +197,7 @@ class WindowManager(EventHandler):
         log.debug("Managing client window 0x%x.", window)
         client = self.clients[window] = Client(self.conn, window, self)
         self.frames[client.frame] = client
+        self.establish_grabs(client.frame)
         self.place(client, client.absolute_geometry)
         return client
 
@@ -196,6 +208,29 @@ class WindowManager(EventHandler):
         del self.frames[client.frame]
         client.undecorate(destroyed)
         return client
+
+    def establish_grabs(self, window):
+        """Establish passive key and button grabs for the global bindings."""
+        # Each grab will be repeated with all bound combinations of Caps Lock,
+        # Num Lock, and Scroll Lock modifiers.
+        def lock_combinations(lock_bits):
+            if lock_bits:
+                bit = lock_bits[0]
+                yield bit
+                for combination in lock_combinations(lock_bits[1:]):
+                    yield combination
+                    yield bit | combination
+        lock_mods = list(lock_combinations(filter(bool,
+                                                  [ModMask.Lock,
+                                                   self.keymap.num_lock,
+                                                   self.keymap.scroll_lock])))
+
+        for modifiers, key in self.key_bindings.grabs():
+            self.conn.core.GrabKey(True, window, modifiers, key,
+                                   GrabMode.Async, GrabMode.Async)
+            for locks in lock_mods:
+                self.conn.core.GrabKey(True, window, locks | modifiers, key,
+                                       GrabMode.Async, GrabMode.Async)
 
     def place(self, client, requested_geometry, resize_only=False):
         """Determine and configure a suitable geometry for the client frame
@@ -286,7 +321,7 @@ class WindowManager(EventHandler):
         handler = self.window_handlers.get(event_window(event), None)
         if handler:
             try:
-                handler.handle_event(event)
+                return handler.handle_event(event)
             except UnhandledEvent:
                 pass
         return super(WindowManager, self).handle_event(event)
@@ -435,6 +470,22 @@ class WindowManager(EventHandler):
         properties.property_changed(self.atoms.name(event.atom),
                                     event.state == Property.Delete,
                                     event.time)
+
+    @handler(KeyPressEvent)
+    def handle_key_press(self, event):
+        try:
+            action = self.key_bindings[event]
+        except KeyError:
+            return
+        action(event)
+
+    @handler(ButtonPressEvent)
+    def handle_button_press(self, event):
+        try:
+            action = self.button_bindings[event]
+        except KeyError:
+            return
+        action(event)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):

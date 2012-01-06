@@ -6,7 +6,9 @@ from xcb.xproto import *
 
 from keysym import *
 
-__all__ = ["keypad_aliases", "KeyBindingMap", "ButtonBindingMap", "Bindings"]
+__all__ = ["keypad_aliases",
+           "KeyBindingMap", "ButtonBindingMap",
+           "KeyBindings", "ButtonBindings"]
 
 keypad_aliases = {XK_KP_Space: XK_space,
                   XK_KP_Tab: XK_Tab,
@@ -102,11 +104,11 @@ class ButtonBindingMap(BindingMap):
         return int(x)
 
 class Bindings(object):
-    """Key and button bindings are specified using keysyms, logical button
-    numbers, and symbolic modifier names. However, the detail and state
-    fields of X KeyPress/Release and ButtonPress/Release events represent
-    only the physical state of the corresponding device: keycodes, physical
-    buttons, and raw modifier bits.
+    """We'd like key and button bindings to be specified using keysyms,
+    logical button numbers, and symbolic modifier names. However, the
+    detail and state fields of X KeyPress/Release and ButtonPress/Release
+    events represent only the physical state of the corresponding device:
+    keycodes, physical buttons, and raw modifier bits.
 
     This class provides a mapping from the physical to the logical
     representation. Keysyms and logical button numbers are resolved using
@@ -116,16 +118,10 @@ class Bindings(object):
     (the symbol and the modifier set) provide a key for lookup in the
     appropriate bindings table."""
 
-    def __init__(self, key_bindings, button_bindings, keymap, modmap, butmap):
-        self.key_bindings = (key_bindings
-                             if isinstance(key_bindings, KeyBindingMap)
-                             else KeyBindingMap(key_bindings))
-        self.button_bindings = (button_bindings
-                                if isinstance(button_bindings, ButtonBindingMap)
-                                else ButtonBindingMap(button_bindings))
+    def __init__(self, bindings, keymap, modmap):
+        self.bindings = bindings
         self.keymap = keymap
         self.modmap = modmap
-        self.butmap = butmap
         self.keymap.scry_modifiers(self.modmap)
 
     def modifiers(self, bit):
@@ -139,17 +135,27 @@ class Bindings(object):
             yield None
         if bit == KeyButMask.Control:
             yield "control"
-        if bit == self.keymap.meta:
-            yield "meta"
         if bit == self.keymap.alt:
             yield "alt"
+        if bit == self.keymap.meta:
+            yield "meta"
         if bit == self.keymap.super:
             yield "super"
         if bit == self.keymap.hyper:
             yield "hyper"
 
+    def bucky_bits(self, modset):
+        """Return a bitmask that corresponds to the given modset."""
+        return ((KeyButMask.Shift if "shift" in modset else 0) |
+                (KeyButMask.Control if "control" in modset else 0) |
+                (self.keymap.alt if "alt" in modset else 0) |
+                (self.keymap.meta if "meta" in modset else 0) |
+                (self.keymap.super if "super" in modset else 0) |
+                (self.keymap.hyper if "hyper" in modset else 0))
+
     def modsets(self, state):
-        """Yield sets of modifier names that are active in the given state."""
+        """Yield sets of modifier names that are logically down in the given
+        state."""
         modlists = filter(None,
                           (tuple(self.modifiers(bit))
                            for bit in (1 << i for i in range(8))
@@ -157,29 +163,68 @@ class Bindings(object):
         for modlist in all_combinations(modlists):
             yield frozenset(filter(None, modlist))
 
-    def get_binding(self, bindings, symbol, state):
-        symbol = bindings.aliases.get(symbol, symbol)
+    def __getitem__(self, key):
+        """Return the binding associated with the key (symbol, state)."""
+        symbol, state = key
+        symbol = self.bindings.aliases.get(symbol, symbol)
         for modset in self.modsets(state):
             try:
-                return bindings[(modset, symbol)]
+                return self.bindings[(modset, symbol)]
             except KeyError:
                 continue
         raise KeyError(symbol, state)
 
-    def key_binding(self, keycode, state):
-        return self.get_binding(self.key_bindings,
-                                self.keymap.lookup_key(keycode, state),
-                                state)
+class KeyBindings(Bindings):
+    def __init__(self, bindings, keymap, modmap):
+        bindings = (bindings
+                    if isinstance(bindings, KeyBindingMap)
+                    else KeyBindingMap(bindings))
+        super(KeyBindings, self).__init__(bindings, keymap, modmap)
 
-    def button_binding(self, button, state):
-        return self.get_binding(self.button_bindings,
-                                self.butmap[button],
-                                state)
+    def __getitem__(self, key):
+        """Given a keycode and a bitmask of modifier bits (which may be
+        implicit in a KeyPress/KeyRelease event or provided as a tuple),
+        return the binding associated with the corresponding keysym and
+        set of modifier names."""
+        if isinstance(key, (KeyPressEvent, KeyReleaseEvent)):
+            key = (key.detail, key.state)
+        keycode, state = key
+        keysym = self.keymap.lookup_key(keycode, state)
+        return super(KeyBindings, self).__getitem__((keysym, state))
 
-    def __getitem__(self, event):
-        if isinstance(event, (KeyPressEvent, KeyReleaseEvent)):
-            return self.key_binding(event.detail, event.state)
-        elif isinstance(event, (ButtonPressEvent, ButtonReleaseEvent)):
-            return self.button_binding(event.detail, event.state)
-        else:
-            raise TypeError("unhandled event type")
+    def grabs(self):
+        """Yield tuples of the form (modifiers, keycode) suitable for
+        establishing passive key grabs for all of the current key bindings."""
+        for modset, symbol in self.bindings.keys():
+            modifiers = self.bucky_bits(modset)
+            for keycode in self.keymap.keysym_to_keycodes(symbol):
+                yield (modifiers, keycode)
+
+class ButtonBindings(Bindings):
+    def __init__(self, bindings, keymap, modmap, butmap):
+        bindings = (bindings
+                    if isinstance(bindings, ButtonBindingMap)
+                    else ButtonBindingMap(bindings))
+        super(ButtonBindings, self).__init__(bindings, keymap, modmap)
+        self.butmap = butmap
+
+    def __getitem__(self, key):
+        """Given a physical button number and a bitmask of modifier bits
+        (which may be implicit in a ButtonPress/ButtonRelease event or
+        provided as a tuple), return the binding associated with the
+        corresponding logical button number and set of modifier names."""
+        if isinstance(key, (ButtonPressEvent, ButtonReleaseEvent)):
+            key = (key.detail, key.state)
+        button, state = key
+        button = self.butmap[button]
+        return super(ButtonBindings, self).__getitem__((button, state))
+
+    def grabs(self):
+        """Yield tuples of the form (modifiers, button) suitable for
+        establishing passive button grabs for all of the current button
+        bindings."""
+        for modset, symbol in self.bindings.keys():
+            modifiers = self.bucky_bits(modset)
+            for i, button in enumerate(self.butmap):
+                if button == symbol:
+                    yield (modifiers, i + 1)

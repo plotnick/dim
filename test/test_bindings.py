@@ -7,7 +7,7 @@ import xcb
 from xcb.xproto import *
 
 from bindings import all_combinations, ensure_sequence, ensure_keysym, \
-    KeyBindingMap, ButtonBindingMap, Bindings
+    KeyBindingMap, ButtonBindingMap, KeyBindings, ButtonBindings
 from keymap import *
 from keysym import *
 from xutil import GrabServer
@@ -40,28 +40,28 @@ class TestBindings(unittest.TestCase):
     def tearDown(self):
         self.conn.disconnect()
 
-    def assertBinding(self, binding, symbol, state, value):
+    def assertBinding(self, detail, state, value):
         if value is not None:
-            self.assertEqual(binding(symbol, state), value)
+            self.assertEqual(self.bindings[(detail, state)], value)
         else:
-            self.assertRaises(KeyError, lambda: binding(symbol, state))
+            self.assertRaises(KeyError, lambda: self.bindings[(detail, state)])
 
     def assertKeyBinding(self, keysym, state, value):
         keycode = self.keymap.keysym_to_keycode(keysym)
         self.assertTrue(keycode)
-        self.assertBinding(self.bindings.key_binding, keycode, state, value)
+        self.assertBinding(keycode, state, value)
 
     def assertButtonBinding(self, button, state, value):
-        self.assertBinding(self.bindings.button_binding, button, state, value)
+        button = self.butmap[button]
+        self.assertTrue(button)
+        self.assertBinding(button, state, value)
 
     def test_key_bindings_no_modifiers(self):
-        self.bindings = Bindings({"a": "key-a", # keysym designator
-                                  XK_b: "key-b", # keysym
-                                  XK_C: "key-C"}, # uppercase letter (shifted)
-                                 {},
-                                 self.keymap,
-                                 self.modmap,
-                                 self.butmap)
+        self.bindings = KeyBindings({"a": "key-a", # keysym designator
+                                     XK_b: "key-b", # keysym
+                                     XK_C: "key-C"}, # uppercase letter
+                                    self.keymap,
+                                    self.modmap)
         self.assertKeyBinding(XK_a, 0, "key-a")
         self.assertKeyBinding(XK_b, 0, "key-b")
         self.assertKeyBinding(XK_c, 0, None)
@@ -70,28 +70,24 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_C, ModMask.Shift, "key-C")
 
     def test_key_bindings_aliases(self):
-        # In this test, we'll assume that numlock is bound to some modifier,
+        # In this test, we'll assume that NumLock is bound to some modifier,
         # and that the mappings for both the normal and keypad "1" key are
         # the usual ones (i.e., 1/exclam and KP_1/KP_End).
-        numlock = self.keymap.numlock
-        self.assertNotEqual(numlock, 0)
+        num_lock = self.keymap.num_lock
+        self.assertNotEqual(num_lock, 0)
 
         key_bindings = KeyBindingMap({XK_1: "1",
                                       XK_exclam: "exclamation",
                                       XK_End: "end"},
                                      aliases={XK_KP_1: XK_1,
                                               XK_KP_End: XK_End})
-        self.bindings = Bindings(key_bindings,
-                                 {},
-                                 self.keymap,
-                                 self.modmap,
-                                 self.butmap)
+        self.bindings = KeyBindings(key_bindings, self.keymap, self.modmap)
         self.assertKeyBinding(XK_1, 0, "1")
         self.assertKeyBinding(XK_1, ModMask.Shift, "exclamation")
         self.assertKeyBinding(XK_End, 0, "end")
         self.assertKeyBinding(XK_KP_1, 0, "end")
-        self.assertKeyBinding(XK_KP_1, numlock, "1")
-        self.assertKeyBinding(XK_KP_1, numlock | ModMask.Shift, "end")
+        self.assertKeyBinding(XK_KP_1, num_lock, "1")
+        self.assertKeyBinding(XK_KP_1, num_lock | ModMask.Shift, "end")
 
     def test_key_bindings_modifiers(self):
         # In this test we'll assume that alt and meta are both bound,
@@ -101,27 +97,23 @@ class TestBindings(unittest.TestCase):
         self.assertNotEqual(alt, 0)
         self.assertEqual(alt, meta)
 
-        self.bindings = Bindings({("control", "a"): "C-a",
-                                  ("meta", "a"): "M-a",
-                                  ("control", "meta", "b"): "C-M-b",
-                                  ("control", "alt", "c"): "C-A-c",
-                                  ("control", "alt", "%"): "C-A-%"}, # shifted
-                                 {},
-                                 self.keymap,
-                                 self.modmap,
-                                 self.butmap)
+        self.bindings = KeyBindings({("control", "a"): "C-a",
+                                     ("meta", "a"): "M-a",
+                                     ("meta", "%"): "C-A-%", # shifted
+                                     ("control", "meta", "b"): "C-M-b",
+                                     ("control", "alt", "c"): "C-A-c"},
+                                    self.keymap,
+                                    self.modmap)
         self.assertKeyBinding(XK_a, ModMask.Control, "C-a")
         self.assertKeyBinding(XK_a, alt, "M-a")
         self.assertKeyBinding(XK_a, meta, "M-a")
+        self.assertKeyBinding(XK_percent, ModMask.Shift | meta, "C-A-%")
         self.assertKeyBinding(XK_b, ModMask.Control, None)
         self.assertKeyBinding(XK_b, ModMask.Control | alt, "C-M-b")
         self.assertKeyBinding(XK_b, ModMask.Control | meta, "C-M-b")
         self.assertKeyBinding(XK_c, ModMask.Control | alt, "C-A-c")
         self.assertKeyBinding(XK_c, ModMask.Control | meta, "C-A-c")
         self.assertKeyBinding(XK_percent, ModMask.Control | alt, None)
-        self.assertKeyBinding(XK_percent,
-                              ModMask.Shift | ModMask.Control | alt,
-                              "C-A-%")
 
     def test_pointer_bindings(self):
         # We need a predictable pointer mapping, so we'll have to set one.
@@ -135,20 +127,19 @@ class TestBindings(unittest.TestCase):
             self.butmap.refresh()
             self.assertEqual(list(self.butmap), new)
 
-            self.bindings = Bindings({},
-                                     {1: "button-1",
-                                      ("control", 1): "C-button-1",
-                                      ("shift", 2): "S-button-2",
-                                      3: "button-3"},
-                                     self.keymap,
-                                     self.modmap,
-                                     self.butmap)
+            self.bindings = ButtonBindings({1: "button-1",
+                                            ("control", 1): "C-button-1",
+                                            ("shift", 2): "S-button-2",
+                                            3: "button-3"},
+                                           self.keymap,
+                                           self.modmap,
+                                           self.butmap)
             self.assertButtonBinding(1, 0, "button-1")
             self.assertButtonBinding(1, ModMask.Shift, "button-1")
             self.assertButtonBinding(1, ModMask.Control, "C-button-1")
-            self.assertButtonBinding(3, 0, None)
-            self.assertButtonBinding(3, ModMask.Shift, "S-button-2")
-            self.assertButtonBinding(2, ModMask.Shift, "button-3")
+            self.assertButtonBinding(2, 0, None)
+            self.assertButtonBinding(2, ModMask.Shift, "S-button-2")
+            self.assertButtonBinding(3, ModMask.Shift, "button-3")
         finally:
             # Restore the original pointer mapping.
             self.conn.core.SetPointerMapping(len(old), old).reply()

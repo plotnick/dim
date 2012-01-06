@@ -39,6 +39,7 @@ class FocusPolicy(WindowManager):
                                            self.screen.root_visual,
                                            CW.OverrideRedirect,
                                            [True]).check()
+        self.establish_grabs(self.default_focus_window)
         self.conn.core.MapWindow(self.default_focus_window)
 
     def shutdown(self):

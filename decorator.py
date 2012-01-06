@@ -316,11 +316,13 @@ class InputFieldTitlebar(Titlebar):
         self.commit = lambda: commit(unicode(self.buffer))
         self.rollback = rollback
         self.time = time
-        self.bindings = Bindings(key_bindings,
-                                 button_bindings,
-                                 self.manager.keymap,
-                                 self.manager.modmap,
-                                 self.manager.butmap)
+        self.key_bindings = KeyBindings(key_bindings,
+                                        self.manager.keymap,
+                                        self.manager.modmap)
+        self.button_bindings = ButtonBindings(button_bindings,
+                                              self.manager.keymap,
+                                              self.manager.modmap,
+                                              self.manager.butmap)
 
     def draw(self, x=5):
         super(InputFieldTitlebar, self).draw()
@@ -373,15 +375,15 @@ class InputFieldTitlebar(Titlebar):
         self.manager.ensure_focus(self.client, self.time)
 
     @handler(KeyPressEvent)
-    def handle_keypress(self, event, shift=frozenset(["shift"])):
+    def handle_key_press(self, event, shift=frozenset(["shift"])):
         self.time = event.time
         try:
-            action = self.bindings[event]
+            action = self.key_bindings[event]
         except KeyError as e:
             # No binding; assume a self-inserting character unless any
             # interesting modifiers are present.
             symbol, state = e.args
-            modset = next(self.bindings.modsets(state))
+            modset = next(self.key_bindings.modsets(state))
             if modset and modset != shift:
                 self.flash()
             else:
