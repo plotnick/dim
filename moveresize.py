@@ -4,6 +4,7 @@ import logging
 
 from xcb.xproto import *
 
+from bindings import event_mask
 from cursor import *
 from event import handler
 from geometry import *
@@ -382,23 +383,9 @@ class MoveResize(WindowManager):
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
 
-    def __init__(self, display=None, screen=None,
-                 move_resize_mods=ModMask._1, move_button=1, resize_button=3,
-                 grab_buttons=GrabButtons(),
-                 **kwargs):
-        assert move_resize_mods != 0, \
-            "Invalid modifiers for move/resize"
-        assert move_button != resize_button, \
-            "Can't have move and resize on the same button"
-        self.__modifiers = move_resize_mods
-        self.__buttons = {move_button: ClientMove, resize_button: ClientResize}
-        self.client_update = None
-        
-        kwargs.update(grab_buttons=grab_buttons.merge({
-            (move_button, move_resize_mods): self.__grab_event_mask,
-            (resize_button, move_resize_mods): self.__grab_event_mask
-        }))
+    def __init__(self, display=None, screen=None, **kwargs):
         super(MoveResize, self).__init__(display, screen, **kwargs)
+        self.client_update = None
 
     def constrain_position(self, client, position):
         position = super(MoveResize, self).constrain_position(client, position)
@@ -424,36 +411,40 @@ class MoveResize(WindowManager):
                                                               gravity=gravity)
         return requested
 
-    @handler(ButtonPressEvent)
-    def handle_button_press(self, event):
-        button = event.detail
-        modifiers = event.state & 0xff
+    def cleanup_client_update(self, time=Time.CurrentTime):
+        self.client_update.resistance.cleanup(time)
+        self.conn.core.UngrabPointer(time)
+        self.conn.core.UngrabKeyboard(time)
+
+    def change_client_update_cursor(self, cursor, time=Time.CurrentTime):
+        self.conn.core.ChangeActivePointerGrab(self.cursors[cursor], time,
+                                               self.__grab_event_mask)
+
+    @event_mask(__grab_event_mask)
+    def move_window(self, event):
+        self.move_resize_window(event, ClientMove)
+
+    @event_mask(__grab_event_mask)
+    def resize_window(self, event):
+        self.move_resize_window(event, ClientResize)
+
+    def move_resize_window(self, event, update):
+        assert isinstance(event, ButtonPressEvent)
         client = self.get_client(event.child)
-        if (not client or
-            modifiers != self.__modifiers or
-            button not in self.__buttons):
+        if not client or self.client_update:
             return
-
-        def cleanup(time=Time.CurrentTime):
-            self.client_update.resistance.cleanup(time)
-            self.conn.core.UngrabPointer(time)
-            self.conn.core.UngrabKeyboard(time)
-
-        def change_cursor(cursor, time=Time.CurrentTime):
-            self.conn.core.ChangeActivePointerGrab(self.cursors[cursor], time,
-                                                   self.__grab_event_mask)
-
-        action = self.__buttons[button]
-        self.client_update = action(client,
+        self.client_update = update(client,
                                     Position(event.root_x, event.root_y),
-                                    cleanup, change_cursor)
+                                    self.cleanup_client_update,
+                                    self.change_client_update_cursor)
         self.client_update.resistance = EdgeResistance(client)
+        self.client_update.button = event.detail
         self.conn.core.GrabKeyboard(False, self.screen.root, event.time,
                                     GrabMode.Async, GrabMode.Async)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
-        if not self.client_update:
+        if not self.client_update or event.detail != self.client_update.button:
             return
         self.client_update.commit(event.time)
         self.client_update = None

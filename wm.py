@@ -54,11 +54,18 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                       button_press_handlers={2: change_tags})
         return decorator
 
-def terminal(event):
+def terminal(*args):
     Popen("xterm")
 
 key_bindings = {
     ("control", "meta", XK_Return): terminal
+}
+
+button_bindings = {
+    ("meta", 1): MoveResize.move_window,
+    ("meta", 3): MoveResize.resize_window,
+    ("shift", "meta", 1): RaiseLower.raise_window,
+    ("shift", "meta", 3): RaiseLower.lower_window
 }
 
 if __name__ == "__main__":
@@ -111,7 +118,9 @@ if __name__ == "__main__":
         wm_class = type("WM",
                         (focus_modes[options.focus_mode], BaseWM),
                         dict(title_font=options.title_font))
-        wm = wm_class(options.display, key_bindings=key_bindings)
+        wm = wm_class(options.display,
+                      key_bindings=key_bindings,
+                      button_bindings=button_bindings)
         wm.start()
     except KeyboardInterrupt:
         log.info("Interrupt caught; shutting down.")

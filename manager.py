@@ -69,16 +69,13 @@ class WindowManager(EventHandler):
     property_class = WindowManagerProperties
 
     def __init__(self, display=None, screen=None,
-                 grab_buttons=GrabButtons(),
-                 key_bindings={},
-                 button_bindings={}):
+                 key_bindings={}, button_bindings={}):
         self.conn = xcb.connect(display)
         self.screen_number = (screen
                               if screen is not None
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
         self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
-        self.grab_buttons = grab_buttons
 
         self.clients = {} # managed clients, indexed by window ID
         self.frames = {} # client frames, indexed by window ID
@@ -146,15 +143,6 @@ class WindowManager(EventHandler):
                       "is another window manager already running?",
                       self.screen_number)
             raise
-
-        # Establish passive grabs for buttons on the root window. Subclasses
-        # will add their own entries to the grab_buttons argument.
-        for key, mask in self.grab_buttons.items():
-            button, modifiers = key
-            self.conn.core.GrabButtonChecked(False, self.screen.root, mask,
-                                             GrabMode.Async, GrabMode.Async,
-                                             self.screen.root, Cursor._None,
-                                             button, modifiers).check()
 
         # Adopt any suitable top-level windows.
         self.adopt(self.conn.core.QueryTree(self.screen.root).reply().children)
@@ -231,6 +219,17 @@ class WindowManager(EventHandler):
             for locks in lock_mods:
                 self.conn.core.GrabKey(True, window, locks | modifiers, key,
                                        GrabMode.Async, GrabMode.Async)
+
+        for modifiers, button, mask in self.button_bindings.grabs():
+            self.conn.core.GrabButton(True, window, mask,
+                                      GrabMode.Async, GrabMode.Async,
+                                      Window._None, Cursor._None,
+                                      button, modifiers)
+            for locks in lock_mods:
+                self.conn.core.GrabButton(True, window, mask,
+                                          GrabMode.Async, GrabMode.Async,
+                                          Window._None, Cursor._None,
+                                          button, locks | modifiers)
 
     def place(self, client, requested_geometry, resize_only=False):
         """Determine and configure a suitable geometry for the client frame
@@ -477,7 +476,7 @@ class WindowManager(EventHandler):
             action = self.key_bindings[event]
         except KeyError:
             return
-        action(event)
+        action(self, event)
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
@@ -485,7 +484,7 @@ class WindowManager(EventHandler):
             action = self.button_bindings[event]
         except KeyError:
             return
-        action(event)
+        action(self, event)
 
     @handler(ClientMessageEvent)
     def handle_client_message(self, event):

@@ -7,7 +7,7 @@ from xcb.xproto import *
 from keysym import *
 
 __all__ = ["keypad_aliases",
-           "KeyBindingMap", "ButtonBindingMap",
+           "KeyBindingMap", "ButtonBindingMap", "event_mask",
            "KeyBindings", "ButtonBindings"]
 
 keypad_aliases = {XK_KP_Space: XK_space,
@@ -93,15 +93,38 @@ class BindingMap(dict):
             key = ensure_sequence(key)
             modifiers = frozenset(mod.lower() for mod in key[:-1])
             symbol = self.ensure_symbol(key[-1])
-            yield ((modifiers, symbol), value)
+            yield ((modifiers, symbol), self.normalize_value(value))
 
 class KeyBindingMap(BindingMap):
     def ensure_symbol(self, x):
         return ensure_keysym(x)
 
+    def normalize_value(self, value):
+        return value
+
 class ButtonBindingMap(BindingMap):
     def ensure_symbol(self, x):
         return int(x)
+
+    def normalize_value(self, value):
+        """Values for button bindings are designators for tuples of the form
+        (event-mask, action). If a non-tuple is provided, then we'll look for
+        an "event_mask" attribute on the value; if that fails, the event-mask
+        is assumed to be just ButtonPress."""
+        if isinstance(value, tuple):
+            return value
+        elif hasattr(value, "event_mask"):
+            return (value.event_mask, value)
+        else:
+            return (EventMask.ButtonPress, value)
+
+def event_mask(mask):
+    """A factory for a decorator that sets the "event_mask" attribute on a
+    function for use as a bound button action."""
+    def set_event_mask(function):
+        function.event_mask = mask
+        return function
+    return set_event_mask
 
 class Bindings(object):
     """We'd like key and button bindings to be specified using keysyms,
@@ -217,14 +240,19 @@ class ButtonBindings(Bindings):
             key = (key.detail, key.state)
         button, state = key
         button = self.butmap[button]
-        return super(ButtonBindings, self).__getitem__((button, state))
+
+        # Return only the action, not the event mask.
+        value = super(ButtonBindings, self).__getitem__((button, state))
+        return value[1]
 
     def grabs(self):
-        """Yield tuples of the form (modifiers, button) suitable for
-        establishing passive button grabs for all of the current button
+        """Yield tuples of the form (modifiers, button, event-mask) suitable
+        for establishing passive button grabs for all of the current button
         bindings."""
-        for modset, symbol in self.bindings.keys():
+        for key, value in self.bindings.items():
+            modset, symbol = key
+            mask, action = value
             modifiers = self.bucky_bits(modset)
             for i, button in enumerate(self.butmap):
                 if button == symbol:
-                    yield (modifiers, i + 1)
+                    yield (modifiers, i + 1, mask)

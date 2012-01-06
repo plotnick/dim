@@ -30,12 +30,12 @@ class EventType(object):
     MotionNotify = 6
 
 class WindowManagerThread(Thread):
-    def __init__(self, wm_class, screen):
+    def __init__(self, wm_class, screen, **kwargs):
         assert issubclass(wm_class, WindowManager)
         assert isinstance(screen, int)
 
         super(WindowManagerThread, self).__init__(name="WM")
-        self.wm = wm_class(None, screen)
+        self.wm = wm_class(None, screen, **kwargs)
 
     def run(self):
         try:
@@ -251,7 +251,7 @@ class WMTestCase(unittest.TestCase):
     # this to test other window manager classes.
     wm_class = WindowManager
 
-    def setUp(self, screen=None, start_wm=True):
+    def setUp(self, screen=None, start_wm=True, **kwargs):
         self.conn = xcb.connect()
         self.xtest = self.conn(xcb.xtest.key)
         if screen is None:
@@ -262,7 +262,7 @@ class WMTestCase(unittest.TestCase):
         self.keymap = KeyboardMap(self.conn, None, self.modmap)
         self.buttons = PointerMap(self.conn)
         self.clients = []
-        self.wm_thread = WindowManagerThread(self.wm_class, screen)
+        self.wm_thread = WindowManagerThread(self.wm_class, screen, **kwargs)
         if start_wm:
             self.wm_thread.start()
 
