@@ -2,9 +2,7 @@
 
 """Client windows may be decorated with a frame, border, title bar, &c."""
 
-from collections import deque
 import logging
-from threading import Timer
 
 from xcb.xproto import *
 
@@ -12,8 +10,7 @@ from bindings import *
 from client import *
 from event import *
 from geometry import *
-from keysym import *
-from stringbuffer import *
+from inputfield import InputField
 from widget import FontConfig, HighlightConfig, Widget
 from xutil import textitem16
 
@@ -112,16 +109,11 @@ class Titlebar(Widget):
 
     event_mask = (EventMask.Exposure |
                   EventMask.ButtonPress)
+    override_redirect = True
 
     def __init__(self, client=None, **kwargs):
         super(Titlebar, self).__init__(**kwargs)
-
         self.client = client
-
-    def create_window(self, **kwargs):
-        kwargs["event_mask"] = self.event_mask
-        kwargs["override_redirect"] = True
-        return super(Titlebar, self).create_window(**kwargs)
 
     def draw(self):
         # Fill the titlebar with the background color.
@@ -156,6 +148,7 @@ class SimpleTitlebar(Titlebar):
 
     def draw(self, x=5):
         super(SimpleTitlebar, self).draw()
+
         if not self.title:
             self.title = self.client_name()
         text_items = list(textitem16(self.title))
@@ -184,102 +177,16 @@ class SimpleTitlebar(Titlebar):
             self.client.properties.unregister_change_handler(property_name,
                                                              self.name_changed)
 
-class AbortEdit(Exception):
-    pass
-
-class InputFieldTitlebar(Titlebar):
-    """A one-line, editable input field."""
-
+class InputFieldTitlebar(InputField, Titlebar):
     event_mask = (EventMask.StructureNotify |
                   EventMask.Exposure |
                   EventMask.ButtonPress |
                   EventMask.KeyPress |
                   EventMask.FocusChange)
 
-    key_bindings = KeyBindingMap({XK_Return: "commit",
-                                  XK_Escape: "rollback",
-                                  XK_BackSpace: "delete-backward-char",
-                                  ("meta", XK_BackSpace): "backward-kill-word",
-                                  XK_Delete: "delete-forward-char",
-                                  XK_Left: "backward-char",
-                                  XK_Right: "forward-char",
-                                  XK_Home: "beginning-of-buffer",
-                                  XK_End: "end-of-buffer",
-                                  ("control", "f"): "forward-char",
-                                  ("control", "b"): "backward-char",
-                                  ("control", "a"): "beginning-of-buffer",
-                                  ("control", "e"): "end-of-buffer",
-                                  ("meta", "f"): "forward-word",
-                                  ("meta", "b"): "backward-word",
-                                  ("control", "d"): "delete-forward-char",
-                                  ("meta", "d"): "kill-word",
-                                  ("control", "k"): "kill-line",
-                                  ("control", "u"): "kill-whole-line",
-                                  ("control", "y"): "yank",
-                                  ("meta", "y"): "yank-pop"},
-                                 aliases=keypad_aliases)
-    button_bindings = ButtonBindingMap({})
-    kill_ring = deque([], 10)
-
-    def __init__(self,
-                 prompt="",
-                 initial_value="",
-                 commit=lambda value: None,
-                 rollback=lambda: None,
-                 time=Time.CurrentTime,
-                 key_bindings=key_bindings,
-                 button_bindings=button_bindings,
-                 **kwargs):
+    def __init__(self, time=Time.CurrentTime, **kwargs):
         super(InputFieldTitlebar, self).__init__(**kwargs)
-        self.prompt = unicode(prompt)
-        self.buffer = StringBuffer(initial_value, self.kill_ring)
-        self.commit = lambda: commit(unicode(self.buffer))
-        self.rollback = rollback
         self.time = time
-        self.key_bindings = KeyBindings(key_bindings,
-                                        self.manager.keymap,
-                                        self.manager.modmap)
-        self.button_bindings = ButtonBindings(button_bindings,
-                                              self.manager.keymap,
-                                              self.manager.modmap,
-                                              self.manager.butmap)
-
-    def draw(self, x=5):
-        super(InputFieldTitlebar, self).draw()
-        y = self.config.baseline
-        def draw_string(x, string):
-            text_items = list(textitem16(string))
-            self.conn.core.PolyText16(self.window, self.config.fg_gc,
-                                      x, y,
-                                      len(text_items), "".join(text_items))
-            return self.config.text_width(string)
-        if self.prompt:
-            x += draw_string(x, self.prompt)
-        if self.buffer:
-            x += draw_string(x, self.buffer)
-
-        # Draw an xor rectangle as a cursor.
-        c = self.buffer.point
-        n = len(self.buffer)
-        x -= self.config.text_width(self.buffer[c:])
-        w = self.config.text_width(" " if c >= n else self.buffer[c])
-        a = self.config.font_info.font_ascent
-        d = self.config.font_info.font_descent
-        self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
-                                         1, [x, y - a, w, a + d])
-
-    def flash(self):
-        # Draw an xor rectangle over the non-relief portion of the titlebar.
-        w = self.geometry.width
-        h = self.geometry.height
-        self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
-                                         1, [1, 1, w - 2, h - 2])
-        def refresh():
-            self.draw()
-            self.conn.flush()
-        timer = Timer(0.15, refresh)
-        timer.daemon = True
-        timer.start()
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
@@ -295,38 +202,8 @@ class InputFieldTitlebar(Titlebar):
         self.manager.ensure_focus(self.client, self.time)
 
     @handler(KeyPressEvent)
-    def handle_key_press(self, event, shift=frozenset(["shift"])):
+    def handle_key_press(self, event):
         self.time = event.time
-        try:
-            action = self.key_bindings[event]
-        except KeyError as e:
-            # No binding; assume a self-inserting character unless any
-            # interesting modifiers are present.
-            symbol, state = e.args
-            modset = next(self.key_bindings.modsets(state))
-            if modset and modset != shift:
-                self.flash()
-            else:
-                char = keysym_to_string(symbol)
-                if char:
-                    self.buffer.insert_char(char)
-                    self.draw()
-        else:
-            # Actions are strings naming attributes of either ourself or
-            # our buffer. The values must be zero-argument functions.
-            name = action.replace("-", "_")
-            method = getattr(self, name, None)
-            if method:
-                method()
-            else:
-                method = getattr(self.buffer, name)
-                try:
-                    method()
-                except (IndexError, CommandError):
-                    self.flash()
-                else:
-                    self.draw()
-        raise StopPropagation(event)
 
 class TitlebarDecorator(Decorator):
     """Decorate a client with a multi-purpose titlebar."""
@@ -400,9 +277,9 @@ class TitlebarDecorator(Decorator):
         titlebar = self.titlebar
         self.conn.core.UnmapWindow(titlebar.window)
         def restore_titlebar():
-            self.conn.core.DestroyWindow(self.titlebar.window)
-            self.conn.core.MapWindow(titlebar.window)
+            self.titlebar.destroy()
             self.titlebar = titlebar
+            self.titlebar.map()
         def commit(value):
             restore_titlebar()
             continuation(value)

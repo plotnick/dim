@@ -11,6 +11,7 @@ from decorator import TitlebarConfig, TitlebarDecorator
 from event import handler
 from focus import SloppyFocus, ClickToFocus
 from keysym import *
+from minibuffer import *
 from moveresize import MoveResize
 from properties import AtomList
 from raiselower import RaiseLower
@@ -18,6 +19,7 @@ from tags import TagManager
 
 class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
+    minibuffer_font = "10x20"
 
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
@@ -29,6 +31,10 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                                fg_color=RGBi(0.0, 0.0, 0.0),
                                                bg_color=RGBi(0.75, 0.75, 0.75),
                                                font=self.title_font)
+        self.minibuffer_config = MinibufferConfig(self,
+                                                  fg_color=RGBi(0.0, 0.0, 0.0),
+                                                  bg_color=RGBi(1.0, 1.0, 1.0),
+                                                  font=self.minibuffer_font)
 
     def decorator(self, client):
         def tags_changed(value, sep=re.compile(r",\s*")):
@@ -54,18 +60,33 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                       button_bindings={2: change_tags})
         return decorator
 
+    def shell_command(self, event):
+        def execute(command):
+            Popen(command, shell=True)
+            dismiss()
+        def dismiss():
+            minibuffer.destroy()
+        minibuffer = Minibuffer(manager=self,
+                                parent=self.screen.root,
+                                config=self.minibuffer_config,
+                                prompt="Shell command: ",
+                                commit=execute,
+                                rollback=dismiss)
+        minibuffer.map(event.time)
+
 def terminal(*args):
     Popen("xterm")
 
 key_bindings = {
-    ("control", "meta", XK_Return): terminal
+    ("control", "meta", XK_Return): terminal,
+    ("control", "meta", XK_space): BaseWM.shell_command
 }
 
 button_bindings = {
     ("meta", 1): MoveResize.move_window,
     ("meta", 3): MoveResize.resize_window,
     ("shift", "meta", 1): RaiseLower.raise_window,
-    ("shift", "meta", 3): RaiseLower.lower_window
+    ("shift", "meta", 3): RaiseLower.lower_window,
 }
 
 if __name__ == "__main__":

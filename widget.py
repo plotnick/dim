@@ -86,10 +86,13 @@ class HighlightConfig(Config):
     @staticmethod
     def highlight(color):
         h, s, v = color.hsv()
-        return (HSVColor(h, s, (3.0 + v) / 4.0),
+        return (HSVColor(h, s, (2.8 + v) / 4.0),
                 HSVColor(h, s, (2.0 + v) / 5.0))
 
 class Widget(EventHandler):
+    event_mask = EventMask.Exposure
+    override_redirect = False
+
     def __init__(self, manager=None, config=None,
                  key_bindings={}, button_bindings={},
                  **kwargs):
@@ -109,8 +112,8 @@ class Widget(EventHandler):
     def create_window(self,
                       parent=None,
                       geometry=None,
-                      event_mask=0,
-                      override_redirect=False):
+                      event_mask=None,
+                      override_redirect=None):
         """Create a top-level window for this widget."""
         assert parent
         assert isinstance(geometry, Geometry)
@@ -126,13 +129,26 @@ class Widget(EventHandler):
                                     WindowClass.InputOutput,
                                     self.screen.root_visual,
                                     CW.OverrideRedirect | CW.EventMask,
-                                    [override_redirect, event_mask])
+                                    [(override_redirect
+                                      if override_redirect is not None
+                                      else self.override_redirect),
+                                     (event_mask
+                                      if event_mask is not None
+                                      else self.event_mask)])
         self.manager.register_window_handler(self.window, self)
         return self.window
 
     def map(self):
         """Map the widget's top-level window."""
         self.conn.core.MapWindow(self.window)
+
+    def unmap(self):
+        """Unmap the widget's top-level window."""
+        self.conn.core.UnmapWindow(self.window)
+
+    def destroy(self):
+        """Destroy the widget and all of its windows."""
+        self.conn.core.DestroyWindow(self.window)
 
     def configure(self, geometry):
         """Update the widget for a new geometry."""
