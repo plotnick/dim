@@ -10,12 +10,11 @@ from xcb.xproto import *
 
 from bindings import *
 from client import *
-from color import *
 from event import *
-from font import text_width
 from geometry import *
 from keysym import *
 from stringbuffer import *
+from widget import FontConfig, HighlightConfig, Widget
 from xutil import textitem16
 
 __all__ = ["Decorator", "BorderHighlightFocus", "FrameDecorator",
@@ -95,101 +94,34 @@ class BorderHighlightFocus(Decorator):
                                               [self.unfocused_color])
         super(BorderHighlightFocus, self).unfocus()
 
-class TitlebarConfig(object):
-    def __init__(self, manager, fg_color, bg_color, font):
-        assert isinstance(fg_color, Color)
-        assert isinstance(bg_color, Color)
-        assert isinstance(font, (str, int))
-
-        self.manager = manager
-        self.fg_color = fg_color
-        self.bg_color = bg_color
-        self.font = manager.fonts[font] if isinstance(font, str) else font
-        self.font_info = manager.fonts.info(self.font)
-
-        conn = manager.conn
-        root = manager.screen.root
+class TitlebarConfig(FontConfig, HighlightConfig):
+    def __init__(self, manager, **kwargs):
+        super(TitlebarConfig, self).__init__(manager, **kwargs)
 
         # Padding is based on the font descent, plus 2 pixels for the relief
         # edge, with a small scaling factor.
-        pad = (self.font_info.font_descent + 2) * 6 // 5
-        self.height = (2 * pad +
-                       self.font_info.font_ascent +
-                       self.font_info.font_descent)
-        self.baseline = pad + self.font_info.font_ascent
+        ascent = self.font_info.font_ascent
+        descent = self.font_info.font_descent
+        pad = (descent + 2) * 6 // 5
+        self.height = 2 * pad + ascent + descent
+        self.baseline = pad + ascent
 
-        self.black_gc = manager.black_gc
-        self.fg_gc = conn.generate_id()
-        conn.core.CreateGC(self.fg_gc, root,
-                           GC.Foreground | GC.Background | GC.Font,
-                           [manager.colors[fg_color],
-                            manager.colors[bg_color],
-                            self.font])
-        self.bg_gc = conn.generate_id()
-        conn.core.CreateGC(self.bg_gc, root,
-                           GC.Foreground | GC.Background | GC.Font,
-                           [manager.colors[bg_color],
-                            manager.colors[fg_color],
-                            self.font])
-        self.xor_gc = conn.generate_id()
-        conn.core.CreateGC(self.xor_gc, root,
-                           GC.Function | GC.Foreground | GC.Font,
-                           [GX.xor,
-                            manager.colors[fg_color] ^ manager.colors[bg_color],
-                            self.font])
-
-        high, low = self.highlight(bg_color)
-        self.highlight_gc = conn.generate_id()
-        conn.core.CreateGC(self.highlight_gc, root,
-                           GC.Foreground, [manager.colors[high]])
-        self.lowlight_gc = conn.generate_id()
-        conn.core.CreateGC(self.lowlight_gc, root,
-                           GC.Foreground, [manager.colors[low]])
-
-    @staticmethod
-    def highlight(color):
-        h, s, v = color.hsv()
-        return (HSVColor(h, s, (3.0 + v) / 4.0),
-                HSVColor(h, s, (2.0 + v) / 5.0))
-
-    def text_width(self, string):
-        return text_width(self.font_info, string)
-
-class Titlebar(EventHandler):
+class Titlebar(Widget):
     """A widget which displays a line of text. A titlebar need not display
     a window title; it can be used for other purposes."""
 
     event_mask = (EventMask.Exposure |
                   EventMask.ButtonPress)
 
-    def __init__(self,
-                 conn=None, client=None, manager=None,
-                 parent=None, geometry=None, config=None):
-        self.conn = conn
+    def __init__(self, client=None, **kwargs):
+        super(Titlebar, self).__init__(**kwargs)
+
         self.client = client
-        self.manager = manager
-        self.geometry = geometry
-        self.config = config
-        self.button_press_handlers = {}
 
-        self.window = self.conn.generate_id()
-        self.conn.core.CreateWindow(manager.screen.root_depth,
-                                    self.window, parent,
-                                    geometry.x, geometry.y,
-                                    geometry.width, geometry.height,
-                                    geometry.border_width,
-                                    WindowClass.InputOutput,
-                                    manager.screen.root_visual,
-                                    CW.OverrideRedirect | CW.EventMask,
-                                    [True, self.event_mask])
-        manager.register_window_handler(self.window, self)
-        self.conn.core.MapWindow(self.window)
-
-    def configure(self, geometry):
-        self.geometry = geometry
-        self.conn.core.ConfigureWindow(self.window,
-                                       ConfigWindow.Width,
-                                       [geometry.width])
+    def create_window(self, **kwargs):
+        kwargs["event_mask"] = self.event_mask
+        kwargs["override_redirect"] = True
+        return super(Titlebar, self).create_window(**kwargs)
 
     def draw(self):
         # Fill the titlebar with the background color.
@@ -211,18 +143,6 @@ class Titlebar(EventHandler):
                                 self.config.black_gc,
                                 2, [0, h + 1, w, h + 1])
 
-    @handler(ExposeEvent)
-    def handle_expose(self, event):
-        if event.count == 0:
-            self.draw()
-
-    @handler(ButtonPressEvent)
-    def handle_button_press(self, event):
-        self.button_press_handlers.get(event.detail, lambda event: None)(event)
-
-    def register_button_press_handler(self, button, handler):
-        self.button_press_handlers[button] = handler
-
 class SimpleTitlebar(Titlebar):
     """A titlebar that displays the window title."""
 
@@ -231,8 +151,8 @@ class SimpleTitlebar(Titlebar):
                   EventMask.ButtonPress)
 
     def __init__(self, title="", **kwargs):
-        self.title = title
         super(SimpleTitlebar, self).__init__(**kwargs)
+        self.title = title
 
     def draw(self, x=5):
         super(SimpleTitlebar, self).draw()
@@ -406,19 +326,19 @@ class InputFieldTitlebar(Titlebar):
                     self.flash()
                 else:
                     self.draw()
+        raise StopPropagation(event)
 
 class TitlebarDecorator(Decorator):
     """Decorate a client with a multi-purpose titlebar."""
 
     def __init__(self, conn, client,
-                 focused_config=None, unfocused_config=None,
-                 button_press_handlers={},
+                 focused_config=None, unfocused_config=None, button_bindings={},
                  **kwargs):
         assert isinstance(focused_config, TitlebarConfig)
         assert isinstance(unfocused_config, TitlebarConfig)
         self.titlebar = None
         self.titlebar_configs = (unfocused_config, focused_config)
-        self.button_press_handlers = button_press_handlers
+        self.button_bindings = button_bindings
         super(TitlebarDecorator, self).__init__(conn, client, **kwargs)
 
     def decorate(self):
@@ -427,14 +347,13 @@ class TitlebarDecorator(Decorator):
 
         config = self.titlebar_configs[0]
         geometry = Geometry(0, 0, self.client.geometry.width, config.height, 0)
-        self.titlebar = SimpleTitlebar(conn=self.conn,
-                                       client=self.client,
+        self.titlebar = SimpleTitlebar(client=self.client,
                                        manager=self.client.manager,
                                        parent=self.client.frame,
+                                       button_bindings=self.button_bindings,
                                        geometry=geometry,
                                        config=config)
-        for button, handler in self.button_press_handlers.items():
-            self.titlebar.register_button_press_handler(button, handler)
+        self.titlebar.map()
 
     def undecorate(self):
         assert self.titlebar is not None
@@ -487,8 +406,7 @@ class TitlebarDecorator(Decorator):
         def commit(value):
             restore_titlebar()
             continuation(value)
-        self.titlebar = InputFieldTitlebar(conn=self.conn,
-                                           client=self.client,
+        self.titlebar = InputFieldTitlebar(client=self.client,
                                            manager=self.client.manager,
                                            parent=self.client.frame,
                                            geometry=titlebar.geometry,
@@ -498,3 +416,4 @@ class TitlebarDecorator(Decorator):
                                            initial_value=initial_value,
                                            commit=commit,
                                            rollback=restore_titlebar)
+        self.titlebar.map()

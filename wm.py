@@ -22,13 +22,13 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
         self.focused_config = TitlebarConfig(self,
-                                             RGBi(1.0, 1.0, 1.0),
-                                             RGBi(0.0, 0.0, 0.0),
-                                             self.title_font)
+                                             fg_color=RGBi(1.0, 1.0, 1.0),
+                                             bg_color=RGBi(0.0, 0.0, 0.0),
+                                             font=self.title_font)
         self.unfocused_config = TitlebarConfig(self,
-                                               RGBi(0.0, 0.0, 0.0),
-                                               RGBi(0.75, 0.75, 0.75),
-                                               self.title_font)
+                                               fg_color=RGBi(0.0, 0.0, 0.0),
+                                               bg_color=RGBi(0.75, 0.75, 0.75),
+                                               font=self.title_font)
 
     def decorator(self, client):
         def tags_changed(value, sep=re.compile(r",\s*")):
@@ -40,7 +40,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                 # here and always use UTF-8 for tag names.
                 return self.atoms[name.encode("UTF-8", "replace")]
             client.properties.dim_tags = AtomList(map(atom, sep.split(value)))
-        def change_tags(event):
+        def change_tags(widget, event):
             def name(atom):
                 return self.atoms.name(atom, "UTF-8", "replace")
             tags = map(name, client.properties.dim_tags)
@@ -51,7 +51,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
         decorator = TitlebarDecorator(self.conn, client,
                                       focused_config=self.focused_config,
                                       unfocused_config=self.unfocused_config,
-                                      button_press_handlers={2: change_tags})
+                                      button_bindings={2: change_tags})
         return decorator
 
 def terminal(*args):
