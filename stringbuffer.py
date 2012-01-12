@@ -58,7 +58,7 @@ class StringBuffer(Sequence):
         if isinstance(key, int):
             self.buffer[key] = value
         elif isinstance(key, slice):
-            end = (self.point == len(self.buffer))
+            end = self.point > 0 and self.point == len(self.buffer)
             self.buffer[key] = list(value)
             self.point = (len(self.buffer)
                           if end

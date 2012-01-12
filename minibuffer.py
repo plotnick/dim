@@ -89,7 +89,13 @@ class Minibuffer(InputField):
         if not self.history:
             self.flash()
             return
-        self.history_index = incr(self.history_index) % len(self.history)
-        self.buffer[:] = self.history[self.history_index]
+        n = len(self.history)
+        if self.history_index == n:
+            self.current_entry = unicode(self.buffer)
+        self.history_index = incr(self.history_index) % (n + 1)
+        if self.history_index == n:
+            self.buffer[:] = self.current_entry
+        else:
+            self.buffer[:] = self.history[self.history_index]
         self.draw()
         
