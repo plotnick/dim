@@ -1,5 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from collections import defaultdict, deque
+
 from xcb.xproto import *
 
 from bindings import *
@@ -25,10 +27,24 @@ class Minibuffer(InputField):
                           ("meta", "n"): "next-history-element"},
                          parent=InputField.keys)
 
-    def __init__(self, history=[], **kwargs):
-        super(Minibuffer, self).__init__(**kwargs)
-        self.history = history
-        self.history_index = len(history)
+    # If no history ring is provided at initialization time, we'll use
+    # a shared history, indexed by prompt.
+    hist_size = 100
+    shared_history = defaultdict(lambda n=hist_size: deque([], n))
+
+    def __init__(self, commit=lambda value: None, history=None, **kwargs):
+        def commit_wrapper(value):
+            commit(value)
+            if (value and (not self.history or
+                           (self.history and value != self.history[-1]))):
+                self.history.append(value)
+        super(Minibuffer, self).__init__(commit=commit_wrapper, **kwargs)
+
+        if history is not None:
+            self.history = history
+        else:
+            self.history = self.shared_history[self.prompt]
+        self.history_index = len(self.history)
 
     def create_window(self, **kwargs):
         if not kwargs.get("geometry"):

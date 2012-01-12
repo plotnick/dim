@@ -22,11 +22,6 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
     minibuffer_font = "10x20"
 
-    def __init__(self, *args, **kwargs):
-        super(BaseWM, self).__init__(*args, **kwargs)
-        self.shell_command_history = deque([], 100)
-        self.tagset_spec_history = deque([], 100)
-
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
         self.focused_config = TitlebarConfig(self,
@@ -69,14 +64,12 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     def shell_command(self, event):
         def execute(command):
             Popen(command, shell=True)
-            self.shell_command_history.append(command)
             dismiss()
         def dismiss():
             minibuffer.destroy()
         minibuffer = Minibuffer(manager=self,
                                 parent=self.screen.root,
                                 config=self.minibuffer_config,
-                                history=self.shell_command_history,
                                 prompt="Shell command: ",
                                 commit=execute,
                                 rollback=dismiss)
@@ -90,14 +83,12 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                 pass
             else:
                 send_tagset_expression(self.conn, expr, atoms=self.atoms)
-                self.tagset_spec_history.append(spec)
             dismiss()
         def dismiss():
             minibuffer.destroy()
         minibuffer = Minibuffer(manager=self,
                                 parent=self.screen.root,
                                 config=self.minibuffer_config,
-                                history=self.tagset_spec_history,
                                 prompt="Tagset: ",
                                 commit=execute,
                                 rollback=dismiss)
