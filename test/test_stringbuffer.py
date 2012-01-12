@@ -35,6 +35,23 @@ class TestStringBuffer(unittest.TestCase):
             self.assertEqual(buf[i], s[i])
         self.assertEqual(buf[1:-1], s[1:-1])
 
+    def test_setitem(self):
+        """__setitem__"""
+        buf = StringBuffer("bar")
+        buf[-1] = "z"
+        self.assertBuffer(buf, "baz^")
+
+        buf[:] = "quux"
+        self.assertBuffer(buf, "quux^")
+
+        buf.point = 1
+        buf[1:1] = "u"
+        self.assertBuffer(buf, "q^uuux")
+
+        buf.end_of_buffer()
+        buf[:] = "foo"
+        self.assertBuffer(buf, "foo^")
+
     def test_insert_char(self):
         """insert-char"""
         buf = StringBuffer("abc")

@@ -51,8 +51,20 @@ class StringBuffer(Sequence):
     def __iter__(self):
         return iter(self.buffer)
 
-    def __getitem__(self, index):
-        return unicode(self)[index]
+    def __getitem__(self, key):
+        return unicode(self)[key]
+
+    def __setitem__(self, key, value):
+        if isinstance(key, int):
+            self.buffer[key] = value
+        elif isinstance(key, slice):
+            end = (self.point == len(self.buffer))
+            self.buffer[key] = list(value)
+            self.point = (len(self.buffer)
+                          if end
+                          else min(self.point, len(self.buffer)))
+        else:
+            raise TypeError("unsupported key type")
 
     @property
     def point(self):

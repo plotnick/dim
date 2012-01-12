@@ -89,6 +89,13 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_KP_1, num_lock, "1")
         self.assertKeyBinding(XK_KP_1, num_lock | ModMask.Shift, "end")
 
+    def test_bindings_parent(self):
+        base_bindings = KeyBindingMap({XK_1: "1"})
+        child_bindings = KeyBindingMap({XK_2: "2"}, parent=base_bindings)
+        self.bindings = KeyBindings(child_bindings, self.keymap, self.modmap)
+        self.assertKeyBinding(XK_1, 0, "1")
+        self.assertKeyBinding(XK_2, 0, "2")
+
     def test_key_bindings_modifiers(self):
         # In this test we'll assume that alt and meta are both bound,
         # and to the same bucky bit.

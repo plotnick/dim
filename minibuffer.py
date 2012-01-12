@@ -2,6 +2,7 @@
 
 from xcb.xproto import *
 
+from bindings import *
 from geometry import Geometry
 from inputfield import InputField
 from widget import *
@@ -20,6 +21,15 @@ class MinibufferConfig(FontConfig, HighlightConfig):
         self.baseline = pad + ascent
 
 class Minibuffer(InputField):
+    keys = KeyBindingMap({("meta", "p"): "previous-history-element",
+                          ("meta", "n"): "next-history-element"},
+                         parent=InputField.keys)
+
+    def __init__(self, history=[], **kwargs):
+        super(Minibuffer, self).__init__(**kwargs)
+        self.history = history
+        self.history_index = len(history)
+
     def create_window(self, **kwargs):
         if not kwargs.get("geometry"):
             root_geometry = get_window_geometry(self.conn, self.screen.root)
@@ -52,3 +62,18 @@ class Minibuffer(InputField):
                                 3, [w, 1, w, h, 1, h])
 
         super(Minibuffer, self).draw()
+
+    def previous_history_element(self, incr=lambda x: x - 1):
+        self.history_element(incr)
+
+    def next_history_element(self, incr=lambda x: x + 1):
+        self.history_element(incr)
+
+    def history_element(self, incr):
+        if not self.history:
+            self.flash()
+            return
+        self.history_index = incr(self.history_index) % len(self.history)
+        self.buffer[:] = self.history[self.history_index]
+        self.draw()
+        

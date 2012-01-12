@@ -21,37 +21,35 @@ class InputField(Widget):
     """A one-line, editable input field with an optional prompt."""
 
     kill_ring = deque([], 10)
-    button_bindings = ButtonBindingMap({})
-    key_bindings = KeyBindingMap({XK_Return: "commit",
-                                  XK_Escape: "rollback",
-                                  XK_BackSpace: "delete-backward-char",
-                                  ("meta", XK_BackSpace): "backward-kill-word",
-                                  XK_Delete: "delete-forward-char",
-                                  XK_Left: "backward-char",
-                                  XK_Right: "forward-char",
-                                  XK_Home: "beginning-of-buffer",
-                                  XK_End: "end-of-buffer",
-                                  ("control", "f"): "forward-char",
-                                  ("control", "b"): "backward-char",
-                                  ("control", "a"): "beginning-of-buffer",
-                                  ("control", "e"): "end-of-buffer",
-                                  ("meta", "f"): "forward-word",
-                                  ("meta", "b"): "backward-word",
-                                  ("control", "d"): "delete-forward-char",
-                                  ("meta", "d"): "kill-word",
-                                  ("control", "k"): "kill-line",
-                                  ("control", "u"): "kill-whole-line",
-                                  ("control", "y"): "yank",
-                                  ("meta", "y"): "yank-pop"},
-                                 aliases=keypad_aliases)
+    buttons = ButtonBindingMap({})
+    keys = KeyBindingMap({XK_Return: "commit",
+                          XK_Escape: "rollback",
+                          XK_BackSpace: "delete-backward-char",
+                          ("meta", XK_BackSpace): "backward-kill-word",
+                          XK_Delete: "delete-forward-char",
+                          XK_Left: "backward-char",
+                          XK_Right: "forward-char",
+                          XK_Home: "beginning-of-buffer",
+                          XK_End: "end-of-buffer",
+                          ("control", "f"): "forward-char",
+                          ("control", "b"): "backward-char",
+                          ("control", "a"): "beginning-of-buffer",
+                          ("control", "e"): "end-of-buffer",
+                          ("meta", "f"): "forward-word",
+                          ("meta", "b"): "backward-word",
+                          ("control", "d"): "delete-forward-char",
+                          ("meta", "d"): "kill-word",
+                          ("control", "k"): "kill-line",
+                          ("control", "u"): "kill-whole-line",
+                          ("control", "y"): "yank",
+                          ("meta", "y"): "yank-pop"},
+                         aliases=keypad_aliases)
 
     def __init__(self,
                  prompt="",
                  initial_value="",
                  commit=lambda value: None,
                  rollback=lambda: None,
-                 key_bindings=key_bindings,
-                 button_bindings=button_bindings,
                  **kwargs):
         super(InputField, self).__init__(**kwargs)
 
@@ -63,10 +61,10 @@ class InputField(Widget):
         self.buffer = StringBuffer(initial_value, self.kill_ring)
         self.commit = lambda: commit(unicode(self.buffer))
         self.rollback = rollback
-        self.key_bindings = KeyBindings(key_bindings,
+        self.key_bindings = KeyBindings(self.keys,
                                         self.manager.keymap,
                                         self.manager.modmap)
-        self.button_bindings = ButtonBindings(button_bindings,
+        self.button_bindings = ButtonBindings(self.buttons,
                                               self.manager.keymap,
                                               self.manager.modmap,
                                               self.manager.butmap)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- mode: Python; coding: utf-8 -*-
 
+from collections import deque
 import re
 from subprocess import Popen
 
@@ -20,6 +21,10 @@ from tags import TagManager
 class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
     minibuffer_font = "10x20"
+
+    def __init__(self, *args, **kwargs):
+        super(BaseWM, self).__init__(*args, **kwargs)
+        self.shell_command_history = deque([], 100)
 
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
@@ -62,6 +67,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
 
     def shell_command(self, event):
         def execute(command):
+            self.shell_command_history.append(command)
             Popen(command, shell=True)
             dismiss()
         def dismiss():
@@ -69,6 +75,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
         minibuffer = Minibuffer(manager=self,
                                 parent=self.screen.root,
                                 config=self.minibuffer_config,
+                                history=self.shell_command_history,
                                 prompt="Shell command: ",
                                 commit=execute,
                                 rollback=dismiss)

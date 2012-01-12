@@ -76,11 +76,12 @@ class BindingMap(dict):
     logical button number; the ensure_symbol method should accept such a
     designator and return a corresponding symbol."""
 
-    def __init__(self, mapping, aliases={}):
+    def __init__(self, mapping, parent=None, aliases={}):
+        super(BindingMap, self).__init__(self.parse_bindings(mapping))
+        self.parent = parent
         self.aliases = aliases
-        return super(BindingMap, self).__init__(self.parse_bindings(mapping))
 
-    def parse_bindings(self, bindings={}):
+    def parse_bindings(self, bindings):
         """Given either a mapping object or a sequence of (key, value)
         pairs, parse the keys as binding specifications and yield new
         (key, value) tuples, where each key is a tuple consisting of a
@@ -189,12 +190,15 @@ class Bindings(object):
     def __getitem__(self, key):
         """Return the binding associated with the key (symbol, state)."""
         symbol, state = key
-        symbol = self.bindings.aliases.get(symbol, symbol)
-        for modset in self.modsets(state):
-            try:
-                return self.bindings[(modset, symbol)]
-            except KeyError:
-                continue
+        bindings = self.bindings
+        while bindings:
+            symbol = bindings.aliases.get(symbol, symbol)
+            for modset in self.modsets(state):
+                try:
+                    return bindings[(modset, symbol)]
+                except KeyError:
+                    continue
+            bindings = bindings.parent
         raise KeyError(symbol, state)
 
 class KeyBindings(Bindings):
