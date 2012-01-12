@@ -16,7 +16,7 @@ from minibuffer import *
 from moveresize import MoveResize
 from properties import AtomList
 from raiselower import RaiseLower
-from tags import TagManager
+from tags import *
 
 class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
@@ -25,6 +25,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     def __init__(self, *args, **kwargs):
         super(BaseWM, self).__init__(*args, **kwargs)
         self.shell_command_history = deque([], 100)
+        self.tagset_spec_history = deque([], 100)
 
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
@@ -67,8 +68,8 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
 
     def shell_command(self, event):
         def execute(command):
-            self.shell_command_history.append(command)
             Popen(command, shell=True)
+            self.shell_command_history.append(command)
             dismiss()
         def dismiss():
             minibuffer.destroy()
@@ -81,11 +82,33 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                 rollback=dismiss)
         minibuffer.map(event.time)
 
+    def tagset(self, event):
+        def execute(spec):
+            try:
+                expr = parse_tagset_spec(spec)
+            except TagError:
+                pass
+            else:
+                send_tagset_expression(self.conn, expr, atoms=self.atoms)
+                self.tagset_spec_history.append(spec)
+            dismiss()
+        def dismiss():
+            minibuffer.destroy()
+        minibuffer = Minibuffer(manager=self,
+                                parent=self.screen.root,
+                                config=self.minibuffer_config,
+                                history=self.tagset_spec_history,
+                                prompt="Tagset: ",
+                                commit=execute,
+                                rollback=dismiss)
+        minibuffer.map(event.time)
+
 def terminal(*args):
     Popen("xterm")
 
 key_bindings = {
     ("control", "meta", XK_Return): terminal,
+    ("control", "meta", XK_Tab): BaseWM.tagset,
     ("control", "meta", XK_space): BaseWM.shell_command
 }
 

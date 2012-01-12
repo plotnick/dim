@@ -138,13 +138,13 @@ class TaggedClient(TestClient):
 class TestTagManager(WMTestCase):
     wm_class = TagManager
 
-    def update_tagset(self, pexpr, show=True):
+    def eval(self, pexpr, show=True):
         if show:
             pexpr += ["_DIM_TAGSET_SHOW"]
         args = AtomList(map(self.atoms.intern, pexpr)).change_property_args()
         self.conn.core.ChangePropertyChecked(PropMode.Replace,
                                              self.screen.root,
-                                             self.atoms["_DIM_TAGSET_UPDATE"],
+                                             self.atoms["_DIM_TAGSET_EXPRESSION"],
                                              self.atoms["ATOM"],
                                              *args).check()
 
@@ -170,22 +170,22 @@ class TestTagManager(WMTestCase):
                             not any(client.mapped
                                     for client in all_clients - clients))
 
-        self.update_tagset(["a"])
+        self.eval(["a"])
         self.loop(make_mapped_test(tagsets["a"]))
 
-        self.update_tagset(["a", "b", "_DIM_TAGSET_UNION"])
+        self.eval(["a", "b", "_DIM_TAGSET_UNION"])
         self.loop(make_mapped_test(tagsets["a"] | tagsets["b"]))
 
-        self.update_tagset(["b", "c", "_DIM_TAGSET_INTERSECTION"])
+        self.eval(["b", "c", "_DIM_TAGSET_INTERSECTION"])
         self.loop(make_mapped_test(tagsets["b"] & tagsets["c"]))
 
-        self.update_tagset(["a", "c", "_DIM_TAGSET_DIFFERENCE"])
+        self.eval(["a", "c", "_DIM_TAGSET_DIFFERENCE"])
         self.loop(make_mapped_test(tagsets["a"] - tagsets["c"]))
 
-        self.update_tagset(["_DIM_EMPTY_TAGSET"])
+        self.eval(["_DIM_EMPTY_TAGSET"])
         self.loop(make_mapped_test(set()))
 
-        self.update_tagset(["_DIM_EMPTY_TAGSET", "_DIM_TAGSET_COMPLEMENT"])
+        self.eval(["_DIM_EMPTY_TAGSET", "_DIM_TAGSET_COMPLEMENT"])
         self.loop(make_mapped_test(all_clients))
 
 if __name__ == "__main__":
