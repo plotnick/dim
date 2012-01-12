@@ -2,12 +2,14 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from collections import deque
+from os import fork, execv
 import re
-from subprocess import Popen
+import sys
 
 from xcb.xproto import *
 
 from color import RGBi
+from daemon import daemon
 from decorator import TitlebarConfig, TitlebarDecorator
 from event import handler
 from focus import SloppyFocus, ClickToFocus
@@ -17,6 +19,14 @@ from moveresize import MoveResize
 from properties import AtomList
 from raiselower import RaiseLower
 from tags import *
+
+def spawn(command):
+    """Execute command (a string) in the background via a shell."""
+    if fork():
+        return
+    daemon(True, True)
+    execv("/bin/sh",
+          ["/bin/sh", "-c", command.encode(sys.stdin.encoding, "ignore")])
 
 class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
@@ -63,7 +73,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
 
     def shell_command(self, event):
         def execute(command):
-            Popen(command, shell=True)
+            spawn(command)
             dismiss()
         def dismiss():
             minibuffer.destroy()
@@ -95,7 +105,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
         minibuffer.map(event.time)
 
 def terminal(*args):
-    Popen("xterm")
+    spawn("xterm")
 
 key_bindings = {
     ("control", "meta", XK_Return): terminal,
