@@ -78,14 +78,11 @@ class WindowManager(EventHandler):
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
         self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
-        log.debug("Screen %d geometry: %s.",
-                  self.screen_number, self.screen_geometry)
-
-        ext = self.conn.core.QueryExtension(len("RANDR"), "RANDR").reply()
-        self.randr = self.conn(xcb.randr.key) if ext.present else None
-        self.crtcs = dict(self.get_crtc_info(self.screen.root))
-        log.debug("Screen %d CRTC geometries: %s",
-                  self.screen_number, ", ".join(map(str, self.crtcs.values())))
+        log.debug("Screen geometry: %s.", self.screen_geometry)
+        self.crtcs = dict(self.get_crtc_info(self.screen))
+        log.debug("CRTC geometries: {%s}.",
+                  ", ".join("0x%x: %s" % (crtc, geometry)
+                            for crtc, geometry in self.crtcs.items()))
 
         self.clients = {} # managed clients, indexed by window ID
         self.frames = {} # client frames, indexed by window ID
@@ -108,6 +105,23 @@ class WindowManager(EventHandler):
         self.next_event = None
         self.window_handlers = {}
         self.init_graphics()
+
+    def get_crtc_info(self, screen):
+        """Yield pairs of the form (CRTC, Geometry) for each CRTC connected
+        to the given screen, and select for change notification if available."""
+        ext = self.conn.core.QueryExtension(len("RANDR"), "RANDR").reply()
+        if not ext.present:
+            return
+        randr = self.conn(xcb.randr.key)
+        randr.SelectInput(self.screen.root, xcb.randr.NotifyMask.CrtcChange)
+        resources = randr.GetScreenResources(screen.root).reply()
+        timestamp = resources.config_timestamp
+        for crtc, cookie in [(crtc, randr.GetCrtcInfo(crtc, timestamp))
+                             for crtc in resources.crtcs]:
+            info = cookie.reply()
+            if info.status or not info.mode:
+                continue
+            yield (crtc, Geometry(info.x, info.y, info.width, info.height, 0))
 
     def init_graphics(self):
         self.black_gc = self.conn.generate_id()
@@ -134,20 +148,6 @@ class WindowManager(EventHandler):
                                  LineStyle.OnOffDash,
                                  SubwindowMode.ClipByChildren,
                                  False])
-
-    def get_crtc_info(self, root):
-        """Yield pairs of the form (CRTC, Geometry) for each CRTC connected
-        to the given screen."""
-        if not self.randr:
-            return
-        resources = self.randr.GetScreenResources(root).reply()
-        timestamp = resources.config_timestamp
-        for crtc, cookie in [(crtc, self.randr.GetCrtcInfo(crtc, timestamp))
-                             for crtc in resources.crtcs]:
-            info = cookie.reply()
-            if info.status != 0:
-                continue
-            yield (crtc, Geometry(info.x, info.y, info.width, info.height, 0))
 
     def start(self):
         """Start the window manager. This method must only be called once."""
@@ -376,6 +376,15 @@ class WindowManager(EventHandler):
                     w = self.parents.get(w, None)
         return self.clients.get(window, None)
 
+    @handler(ConfigureNotifyEvent)
+    def handle_configure_notify(self, event):
+        if event.window == self.screen.root:
+            # The root window size may change due to RandR.
+            self.screen_geometry = Geometry(event.x, event.y,
+                                            event.width, event.height,
+                                            event.border_width)
+            log.debug("Root window geometry now %s.", self.screen_geometry)
+
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event,
                                  move_mask=ConfigWindow.X | ConfigWindow.Y):
@@ -536,3 +545,18 @@ class WindowManager(EventHandler):
     def handle_wm_exit(self, client_message):
         log.debug("Received exit message; shutting down.")
         raise ExitWindowManager
+
+    @handler(xcb.randr.NotifyEvent)
+    def handle_randr_notify(self, event):
+        if event.subCode == xcb.randr.Notify.CrtcChange:
+            cc = event.u.cc
+            if cc.window != self.screen.root:
+                return
+            if cc.mode:
+                geometry = Geometry(cc.x, cc.y, cc.width, cc.height, 0)
+                log.debug("CRTC 0x%x changed: %s.", cc.crtc, geometry)
+                self.crtcs[cc.crtc] = geometry
+            else:
+                log.debug("CRTC 0x%x disabled.", cc.crtc)
+                del self.crtcs[cc.crtc]
+            
