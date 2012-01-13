@@ -228,12 +228,11 @@ class KeyBindings(Bindings):
                 yield (modifiers, keycode)
 
 class ButtonBindings(Bindings):
-    def __init__(self, bindings, keymap, modmap, butmap):
+    def __init__(self, bindings, keymap, modmap):
         bindings = (bindings
                     if isinstance(bindings, ButtonBindingMap)
                     else ButtonBindingMap(bindings))
         super(ButtonBindings, self).__init__(bindings, keymap, modmap)
-        self.butmap = butmap
 
     def __getitem__(self, key):
         """Given a physical button number and a bitmask of modifier bits
@@ -242,11 +241,9 @@ class ButtonBindings(Bindings):
         corresponding logical button number and set of modifier names."""
         if isinstance(key, (ButtonPressEvent, ButtonReleaseEvent)):
             key = (key.detail, key.state)
-        button, state = key
-        button = self.butmap[button]
 
         # Return only the action, not the event mask.
-        value = super(ButtonBindings, self).__getitem__((button, state))
+        value = super(ButtonBindings, self).__getitem__(key)
         return value[1]
 
     def grabs(self):
@@ -254,9 +251,7 @@ class ButtonBindings(Bindings):
         for establishing passive button grabs for all of the current button
         bindings."""
         for key, value in self.bindings.items():
-            modset, symbol = key
+            modset, button = key
             mask, action = value
             modifiers = self.bucky_bits(modset)
-            for i, button in enumerate(self.butmap):
-                if button == symbol:
-                    yield (modifiers, i + 1, mask)
+            yield (modifiers, button, mask)

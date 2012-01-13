@@ -296,6 +296,15 @@ class WMTestCase(unittest.TestCase):
 
     def fake_input(self, type, detail, root_x=0, root_y=0):
         """Simulate user input."""
+        # For faked ButtonPress/ButtonRelease events, the detail field
+        # specifies a physical button. To simplify the interface, we'll
+        # accept a logical button, and grovel for the corresponding
+        # physical button.
+        if type == EventType.ButtonPress or type == EventType.ButtonRelease:
+            for i, button in enumerate(self.buttons):
+                if button == detail:
+                    detail = i + 1
+
         self.xtest.FakeInputChecked(type, detail, Time.CurrentTime,
                                     self.screen.root, root_x, root_y, 0).check()
         sleep(1 * ms) # block & yield control

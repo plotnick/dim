@@ -184,21 +184,21 @@ class TestMoveResize(WMTestCase):
 
     def test_move(self):
         with WarpedPointer(self, self.relative_position(0.5)): # center
-            with ModButtonDown(self, self.control, self.buttons[1]):
+            with ModButtonDown(self, self.control, 1):
                 delta = Position(5, 10)
                 self.fake_input(EventType.MotionNotify, True, *delta)
                 self.loop(self.make_geometry_delta_test(delta))
 
     def test_resize_southeast(self):
         with WarpedPointer(self, self.relative_position(0.85)): # southeast
-            with ModButtonDown(self, self.control, self.buttons[3]):
+            with ModButtonDown(self, self.control, 3):
                 delta = Position(5, 10)
                 self.fake_input(EventType.MotionNotify, True, *delta)
                 self.loop(self.make_geometry_delta_test(Rectangle(*delta)))
 
     def test_resize_northwest(self):
         with WarpedPointer(self, self.relative_position(0.15)): # northwest
-            with ModButtonDown(self, self.control, self.buttons[3]):
+            with ModButtonDown(self, self.control, 3):
                 # Shrink the window just a bit.
                 delta = Position(5, 10)
                 self.fake_input(EventType.MotionNotify, True, *delta)
@@ -207,7 +207,7 @@ class TestMoveResize(WMTestCase):
 
                 # Shrink the window all the way down.
                 self.fake_input(EventType.KeyPress, self.control)
-                self.fake_input(EventType.ButtonPress, self.buttons[3])
+                self.fake_input(EventType.ButtonPress, 3)
                 self.fake_input(EventType.MotionNotify, True,
                                 self.initial_geometry.width,
                                 self.initial_geometry.height)
@@ -215,7 +215,7 @@ class TestMoveResize(WMTestCase):
 
     def test_resize_abort(self):
         with WarpedPointer(self, self.relative_position(0.85)): # southeast
-            with ModButtonDown(self, self.control, self.buttons[3]):
+            with ModButtonDown(self, self.control, 3):
                 delta = (20, 30)
                 self.fake_input(EventType.MotionNotify, True, *delta)
                 self.loop(self.make_geometry_delta_test(Rectangle(*delta)))
@@ -233,7 +233,7 @@ class TestMoveResize(WMTestCase):
                                                resize_inc=inc))
 
         with WarpedPointer(self, self.relative_position(0.85)): # southeast
-            with ModButtonDown(self, self.control, self.buttons[3]):
+            with ModButtonDown(self, self.control, 3):
                 self.fake_input(EventType.MotionNotify, True, *(inc // 2))
                 self.loop(self.make_geometry_delta_test(Position(0, 0)))
                 self.fake_input(EventType.MotionNotify, True, *inc)
@@ -246,7 +246,7 @@ class TestMoveResize(WMTestCase):
 
     def test_screen_edge_resistance(self):
         with WarpedPointer(self, self.relative_position(0.5)): # center
-            with ModButtonDown(self, self.control, self.buttons[1]):
+            with ModButtonDown(self, self.control, 1):
                 r = -Position(40, 40); half_r = r // 2
                 self.fake_input(EventType.MotionNotify, True, *half_r)
                 self.loop(self.make_geometry_delta_test((0, 0))) # resist
@@ -264,7 +264,7 @@ class TestMoveResize(WMTestCase):
                            right.managed and below.managed))
 
         with WarpedPointer(self, self.relative_position(0.5)): # center
-            with ModButtonDown(self, self.control, self.buttons[1]):
+            with ModButtonDown(self, self.control, 1):
                 r = Position(20, 20); half_r = r // 2
                 self.fake_input(EventType.MotionNotify, True, *half_r)
                 self.loop(self.make_geometry_delta_test((0, 0))) # resist

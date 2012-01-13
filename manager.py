@@ -86,14 +86,12 @@ class WindowManager(EventHandler):
         self.fonts = FontCache(self.conn)
         self.modmap = ModifierMap(self.conn)
         self.keymap = KeyboardMap(self.conn, modmap=self.modmap)
-        self.butmap = PointerMap(self.conn)
         self.key_bindings = KeyBindings(key_bindings,
                                         self.keymap,
                                         self.modmap)
         self.button_bindings = ButtonBindings(button_bindings,
                                               self.keymap,
-                                              self.modmap,
-                                              self.butmap)
+                                              self.modmap)
         self.properties = self.property_class(self.conn,
                                               self.screen.root,
                                               self.atoms)

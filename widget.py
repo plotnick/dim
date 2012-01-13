@@ -105,8 +105,7 @@ class Widget(EventHandler):
                                         manager.modmap)
         self.button_bindings = ButtonBindings(button_bindings,
                                               manager.keymap,
-                                              manager.modmap,
-                                              manager.butmap)
+                                              manager.modmap)
         self.window = self.create_window(**kwargs)
 
     def create_window(self,

@@ -66,8 +66,7 @@ class InputField(Widget):
                                         self.manager.modmap)
         self.button_bindings = ButtonBindings(self.buttons,
                                               self.manager.keymap,
-                                              self.manager.modmap,
-                                              self.manager.butmap)
+                                              self.manager.modmap)
 
     def draw(self, x=5):
         super(InputField, self).draw()

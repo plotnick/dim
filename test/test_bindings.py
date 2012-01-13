@@ -10,7 +10,6 @@ from bindings import all_combinations, ensure_sequence, ensure_keysym, \
     KeyBindingMap, ButtonBindingMap, KeyBindings, ButtonBindings
 from keymap import *
 from keysym import *
-from xutil import GrabServer
 
 class TestAuxFunctions(unittest.TestCase):
     def test_all_combinations(self):
@@ -35,7 +34,6 @@ class TestBindings(unittest.TestCase):
         self.conn = xcb.connect()
         self.modmap = ModifierMap(self.conn)
         self.keymap = KeyboardMap(self.conn, modmap=self.modmap)
-        self.butmap = PointerMap(self.conn)
 
     def tearDown(self):
         self.conn.disconnect()
@@ -52,7 +50,6 @@ class TestBindings(unittest.TestCase):
         self.assertBinding(keycode, state, value)
 
     def assertButtonBinding(self, button, state, value):
-        button = self.butmap[button]
         self.assertTrue(button)
         self.assertBinding(button, state, value)
 
@@ -123,33 +120,18 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_percent, ModMask.Control | alt, None)
 
     def test_pointer_bindings(self):
-        # We need a predictable pointer mapping, so we'll have to set one.
-        # We'll only use the first three buttons, and we'll swap 2 & 3.
-        old = list(self.butmap)
-        new = [1, 3, 2] + range(4, len(old) + 1)
-        self.assertEqual(len(old), len(new))
-        try:
-            reply = self.conn.core.SetPointerMapping(len(new), new).reply()
-            self.assertEqual(reply.status, MappingStatus.Success)
-            self.butmap.refresh()
-            self.assertEqual(list(self.butmap), new)
-
-            self.bindings = ButtonBindings({1: "button-1",
-                                            ("control", 1): "C-button-1",
-                                            ("shift", 2): "S-button-2",
-                                            3: "button-3"},
-                                           self.keymap,
-                                           self.modmap,
-                                           self.butmap)
-            self.assertButtonBinding(1, 0, "button-1")
-            self.assertButtonBinding(1, ModMask.Shift, "button-1")
-            self.assertButtonBinding(1, ModMask.Control, "C-button-1")
-            self.assertButtonBinding(2, 0, None)
-            self.assertButtonBinding(2, ModMask.Shift, "S-button-2")
-            self.assertButtonBinding(3, ModMask.Shift, "button-3")
-        finally:
-            # Restore the original pointer mapping.
-            self.conn.core.SetPointerMapping(len(old), old).reply()
+        self.bindings = ButtonBindings({1: "button-1",
+                                        ("control", 1): "C-button-1",
+                                        ("shift", 2): "S-button-2",
+                                        3: "button-3"},
+                                       self.keymap,
+                                       self.modmap)
+        self.assertButtonBinding(1, 0, "button-1")
+        self.assertButtonBinding(1, ModMask.Shift, "button-1")
+        self.assertButtonBinding(1, ModMask.Control, "C-button-1")
+        self.assertButtonBinding(2, 0, None)
+        self.assertButtonBinding(2, ModMask.Shift, "S-button-2")
+        self.assertButtonBinding(3, ModMask.Shift, "button-3")
 
 if __name__ == "__main__":
     unittest.main()
