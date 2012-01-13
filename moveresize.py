@@ -126,25 +126,49 @@ class ScreenEdgeResistance(Resistance):
 
         self.screen_edge_resistance = screen_edge_resistance
         screen_geometry = client.manager.screen_geometry
-        self.screen_edges = {}
-        for direction in cardinal_directions:
-            self.screen_edges[direction] = screen_geometry.edge(direction)
+        self.screen_edges = dict((direction, screen_geometry.edge(direction))
+                                 for direction in cardinal_directions)
 
-    def compute_resistance(self, geometry, gravity, direction):
+    def edge_resistance(self, edge, geometry, gravity, direction):
         requested_edge = geometry.edge(direction)
         current_edge = self.client.frame_geometry.edge(direction)
-        screen_edge = self.screen_edges[direction]
         threshold = self.screen_edge_resistance
         if ((is_positive_direction(direction) and
-             current_edge <= screen_edge and
-             screen_edge < requested_edge < screen_edge + threshold) or
+             current_edge <= edge and
+             edge < requested_edge < edge + threshold) or
             (is_negative_direction(direction) and
-             current_edge >= screen_edge and
-             screen_edge - threshold < requested_edge < screen_edge)):
-            return requested_edge - screen_edge
+             current_edge >= edge and
+             edge - threshold < requested_edge < edge)):
+            return requested_edge - edge
+
+    def compute_resistance(self, geometry, gravity, direction):
+        resistance = self.edge_resistance(self.screen_edges[direction],
+                                          geometry, gravity, direction)
+        if resistance:
+            return resistance
         return super(ScreenEdgeResistance, self).compute_resistance(geometry,
                                                                     gravity,
                                                                     direction)
+
+class CRTCEdgeResistance(ScreenEdgeResistance):
+    """Treat CRTC edges like screen edges."""
+
+    def __init__(self, client, **kwargs):
+        super(CRTCEdgeResistance, self).__init__(client, **kwargs)
+
+        self.crtc_edges = [dict((direction, geometry.edge(direction))
+                                for direction in cardinal_directions)
+                           for geometry in client.manager.crtcs.values()]
+
+    def compute_resistance(self, geometry, gravity, direction):
+        for crtc_edges in self.crtc_edges:
+            resistance = self.edge_resistance(crtc_edges[direction],
+                                              geometry, gravity, direction)
+            if resistance:
+                return resistance
+        return super(CRTCEdgeResistance, self).compute_resistance(geometry,
+                                                                  gravity,
+                                                                  direction)
 
 class WindowEdgeResistance(Resistance):
     """Classical edge resistance: visible windows' opposite external edges
@@ -262,7 +286,7 @@ class AlignWindowEdges(WindowEdgeResistance):
     def cleanup(self, time):
         self.draw_guide(None, None)
 
-class EdgeResistance(AlignWindowEdges, ScreenEdgeResistance):
+class EdgeResistance(AlignWindowEdges, CRTCEdgeResistance):
     pass
 
 class ClientUpdate(object):

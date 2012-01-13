@@ -6,7 +6,9 @@ import logging
 from functools import wraps
 from select import select
 
+import xcb
 from xcb.xproto import *
+import xcb.randr
 
 from atom import AtomCache
 from bindings import KeyBindings, ButtonBindings
@@ -76,6 +78,14 @@ class WindowManager(EventHandler):
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
         self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
+        log.debug("Screen %d geometry: %s.",
+                  self.screen_number, self.screen_geometry)
+
+        ext = self.conn.core.QueryExtension(len("RANDR"), "RANDR").reply()
+        self.randr = self.conn(xcb.randr.key) if ext.present else None
+        self.crtcs = dict(self.get_crtc_info(self.screen.root))
+        log.debug("Screen %d CRTC geometries: %s",
+                  self.screen_number, ", ".join(map(str, self.crtcs.values())))
 
         self.clients = {} # managed clients, indexed by window ID
         self.frames = {} # client frames, indexed by window ID
@@ -124,6 +134,20 @@ class WindowManager(EventHandler):
                                  LineStyle.OnOffDash,
                                  SubwindowMode.ClipByChildren,
                                  False])
+
+    def get_crtc_info(self, root):
+        """Yield pairs of the form (CRTC, Geometry) for each CRTC connected
+        to the given screen."""
+        if not self.randr:
+            return
+        resources = self.randr.GetScreenResources(root).reply()
+        timestamp = resources.config_timestamp
+        for crtc, cookie in [(crtc, self.randr.GetCrtcInfo(crtc, timestamp))
+                             for crtc in resources.crtcs]:
+            info = cookie.reply()
+            if info.status != 0:
+                continue
+            yield (crtc, Geometry(info.x, info.y, info.width, info.height, 0))
 
     def start(self):
         """Start the window manager. This method must only be called once."""
