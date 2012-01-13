@@ -54,6 +54,15 @@ class TestGeometryClasses(unittest.TestCase):
         self.assertEqual(str(g), "3x5+100-50")
         self.assertFalse(Geometry(0, 0, 0, 0, 0))
 
+    def test_contains(self):
+        g = Geometry(x=0, y=0, width=10, height=10, border_width=0)
+        self.assertTrue(Position(0, 0) in g)
+        self.assertTrue(Position(5, 5) in g)
+        self.assertTrue(Position(10, 10) not in g)
+        self.assertFalse(g in g)
+        self.assertTrue(Geometry(1, 1, 5, 5, 0) in g)
+        self.assertTrue(Geometry(1, 1, 5, 10, 0) not in g)
+
     def test_aspect_ratio(self):
         a = AspectRatio(16, 9)
         self.assertTrue(a)
