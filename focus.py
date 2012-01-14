@@ -61,11 +61,10 @@ class FocusPolicy(WindowManager):
             pass
         return super(FocusPolicy, self).unmanage(client, **kwargs)
 
-    def focus(self, client, time, focus_default_window=True):
+    def focus(self, client, time):
         """Offer the input focus to a client. If the offer is accepted,
         returns true and moves the client to the head of the focus list;
-        otherwise, returns false and optionally reverts focus to the
-        default focus window."""
+        otherwise, returns false."""
         if client and client.focus(time):
             try:
                 self.focus_list.remove(client)
@@ -73,10 +72,7 @@ class FocusPolicy(WindowManager):
                 pass
             self.focus_list.appendleft(client)
             return True
-        else:
-            if focus_default_window:
-                self.focus_default_window(time)
-            return False
+        return False
 
     def focus_default_window(self, time):
         """Set the input focus to our default focus window."""
@@ -181,7 +177,7 @@ class FocusPolicy(WindowManager):
                 yield client
 
         for client in choose_focus_client():
-            if self.focus(client, time, focus_default_window=False):
+            if self.focus(client, time):
                 break
         else:
             self.focus_default_window(time)
