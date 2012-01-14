@@ -110,17 +110,19 @@ class PropertyManager(object):
     def request_property(self, name, type=None):
         """Request the value of a property on the window, and return a cookie
         for the request. Does not wait for a reply."""
+        try:
+            # We might already have a pending request for this property.
+            return self.cookies[name]
+        except KeyError:
+            pass
+
+        self.log.debug("Requesting property %s.", name)
+        def atom(x):
+            return self.atoms[x] if isinstance(x, basestring) else x
         if type is None:
             type = (self.properties[name].property_type
                     if name in self.properties
                     else GetPropertyType.Any)
-        try:
-            return self.cookies[name]
-        except KeyError:
-            pass
-        self.log.debug("Requesting property %s.", name)
-        def atom(x):
-            return self.atoms[x] if isinstance(x, basestring) else x
         cookie = self.conn.core.GetProperty(False, self.window,
                                             atom(name), atom(type),
                                             0, 0xffffffff)
@@ -171,14 +173,9 @@ class PropertyManager(object):
         """Handle a change or deletion of a property."""
         self.log.debug("Property %s %s.",
                        name, ("deleted" if deleted else "changed"))
-        if deleted:
-            self.invalidate_cached_property(name)
-        else:
-            # Dump our cached value and, if it's a property that we care
-            # about, request (but do not wait for) the new value.
-            self.invalidate_cached_property(name)
-            if name in self.properties:
-                self.request_property(name)
+        self.invalidate_cached_property(name)
+        if not deleted and name in self.properties:
+            self.request_property(name)
 
         # Invoke any handlers registered for this property change.
         for handler in self.change_handlers.get(name, []):
