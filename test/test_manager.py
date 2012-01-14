@@ -178,7 +178,7 @@ class TestClient(EventHandler, Thread):
         self.unmap()
         self.conn.core.SendEvent(False, self.screen.root,
                                  (EventMask.SubstructureRedirect |
-                                  EventMask.StructureNotify),
+                                  EventMask.SubstructureNotify),
                                  pack("bx2xIIB19x",
                                       18, # code (UnmapNotify)
                                       self.screen.root, # event
@@ -189,7 +189,7 @@ class TestClient(EventHandler, Thread):
         # See ICCCM §4.1.4.
         send_client_message(self.conn, self.screen.root, self.window,
                             (EventMask.SubstructureRedirect |
-                             EventMask.StructureNotify),
+                             EventMask.SubstructureNotify),
                             32, self.atoms["WM_CHANGE_STATE"],
                             [WMState.IconicState, 0, 0, 0, 0])
 
@@ -388,8 +388,7 @@ class TestWMStates(WMTestCase):
 
         # Peek at WM bookkeeping.
         wm_client = self.wm_thread.wm.clients[self.client.window]
-        self.loop(lambda: (not wm_client.reparenting and
-                           wm_client.window == self.client.window and
+        self.loop(lambda: (wm_client.window == self.client.window and
                            wm_client.frame == self.client.parent))
 
     def iconify_client(self):
@@ -405,15 +404,14 @@ class TestWMStates(WMTestCase):
         # The manager should not undecorate iconified clients, so everything
         # should be the same as for a client in the Normal state.
         wm_client = self.wm_thread.wm.clients[window]
-        self.loop(lambda: (not wm_client.reparenting and
-                           wm_client.window == window and
+        self.loop(lambda: (wm_client.window == window and
                            wm_client.frame == frame))
 
     def withdraw_client(self):
         window = self.client.window
         frame = self.client.parent
 
-        self.client.unmap()
+        self.client.withdraw()
         self.loop(lambda: (not self.client.mapped and
                            self.client.parent == self.client.screen.root and
                            self.client.wm_state == WMState.WithdrawnState))

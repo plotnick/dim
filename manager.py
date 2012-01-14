@@ -468,10 +468,8 @@ class WindowManager(EventHandler):
             return
         log.debug("Window 0x%x unmapped.", event.window)
         client = self.get_client(event.window, True)
-        if not client or client.reparenting:
-            return
-        if (client.properties.wm_state != WMState.IconicState or
-            is_synthetic_event(event)):
+        if (client and
+            (client.window == event.event or is_synthetic_event(event))):
             # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
             client.withdraw()
             self.unmanage(client)

@@ -114,7 +114,9 @@ class FocusPolicy(WindowManager):
             return
         self.__log.debug("Window 0x%x got the focus (%s).",
                          event.event, notify_detail_name(event))
-        self.focus(self.get_client(event.event), None)
+        client = self.get_client(event.event)
+        if client:
+            self.focus(client, None)
 
     @handler(FocusOutEvent)
     def handle_focus_out(self, event):
@@ -140,7 +142,9 @@ class FocusPolicy(WindowManager):
         if event.from_configure:
             return
         client = self.get_client(event.window, True)
-        if client and self.focus_list and client is self.focus_list[0]:
+        if (client and
+            client.window == event.event and
+            self.focus_list and client is self.focus_list[0]):
             # Losing the current focus; try to focus another window.
             self.ensure_focus()
 

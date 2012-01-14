@@ -3,6 +3,7 @@
 """The clients of a window manager are top-level windows. This module provides
 classes and routines for dealing with those as such."""
 
+from contextlib import contextmanager
 import logging
 
 from xcb.xproto import *
@@ -44,7 +45,8 @@ class Client(EventHandler):
 
     client_event_mask = (EventMask.EnterWindow |
                          EventMask.FocusChange |
-                         EventMask.PropertyChange)
+                         EventMask.PropertyChange |
+                         EventMask.StructureNotify)
 
     frame_event_mask = (EventMask.SubstructureRedirect |
                         EventMask.SubstructureNotify |
@@ -90,7 +92,6 @@ class Client(EventHandler):
                                          gravity)
 
         # Create the frame and reparent the client window.
-        self.reparenting = True
         self.frame = self.conn.generate_id()
         self.log.debug("Creating frame 0x%x.", self.frame)
         self.conn.core.CreateWindow(self.screen.root_depth,
@@ -106,8 +107,9 @@ class Client(EventHandler):
                                     CW.OverrideRedirect | CW.EventMask,
                                     [True, self.frame_event_mask])
         self.conn.core.ChangeSaveSet(SetMode.Insert, self.window)
-        self.conn.core.ReparentWindow(self.window, self.frame,
-                                      offset.x, offset.y)
+        with self.disable_structure_notify():
+            self.conn.core.ReparentWindow(self.window, self.frame,
+                                          offset.x, offset.y)
 
         # Record the new window and frame geometries.
         self.geometry = geometry.reborder(0).move(offset.position())
@@ -120,6 +122,23 @@ class Client(EventHandler):
                                               [self.client_event_mask])
         self.manager.register_window_handler(self.window, self)
         self.manager.register_window_handler(self.frame, self)
+
+    @contextmanager
+    def disable_structure_notify(self):
+        """A context manager that de-selectes StructureNotify on this client
+        for the duration of its body."""
+        # We must operate with the server grabbed to avoid race conditions.
+        with grab_server(self.conn):
+            self.conn.core.ChangeWindowAttributes(self.window,
+                                                  CW.EventMask,
+                                                  [self.client_event_mask &
+                                                   ~EventMask.StructureNotify])
+            try:
+                yield
+            finally:
+                self.conn.core.ChangeWindowAttributes(self.window,
+                                                      CW.EventMask,
+                                                      [self.client_event_mask])
 
     @property
     def geometry(self):
@@ -292,7 +311,8 @@ class Client(EventHandler):
 
     def unmap(self):
         self.conn.core.UnmapWindow(self.frame)
-        self.conn.core.UnmapWindow(self.window)
+        with self.disable_structure_notify():
+            self.conn.core.UnmapWindow(self.window)
 
     def undecorate(self, destroyed=False):
         if self.decorated:
@@ -319,10 +339,11 @@ class Client(EventHandler):
             self.conn.core.ConfigureWindow(self.window,
                                            ConfigWindow.BorderWidth,
                                            [bw])
-            self.conn.core.ReparentWindow(self.window,
-                                          self.screen.root,
-                                          geometry.x,
-                                          geometry.y)
+            with self.disable_structure_notify():
+                self.conn.core.ReparentWindow(self.window,
+                                              self.screen.root,
+                                              geometry.x,
+                                              geometry.y)
             self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
 
         self.conn.core.DestroyWindow(self.frame)
@@ -354,11 +375,6 @@ class Client(EventHandler):
         """Transition to the Withdrawn state."""
         self.log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
-
-    @handler(ReparentNotifyEvent)
-    def handle_reparent_notify(self, event):
-        self.log.debug("Done reparenting.")
-        self.reparenting = False
 
     @handler(VisibilityNotifyEvent)
     def handle_visibility_notify(self, event):

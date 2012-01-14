@@ -1,6 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from collections import namedtuple
+from contextlib import contextmanager
 import operator
 from struct import Struct
 
@@ -11,10 +12,9 @@ from geometry import *
 __all__ = ["power_of_2", "popcount", "int16", "card16",
            "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
-           "configure_notify", "send_client_message",
+           "configure_notify", "send_client_message", "grab_server",
            "get_input_focus", "get_window_geometry", "query_pointer",
-           "select_values", "value_list", "textitem16",
-           "GrabButtons", "GrabServer",
+           "select_values", "value_list", "textitem16", "GrabButtons",
            "client_message_type", "client_message", "ClientMessage"]
 
 def power_of_2(x):
@@ -130,6 +130,15 @@ def send_client_message(connection, destination, window, event_mask,
                                                     type,
                                                     *data))
 
+@contextmanager
+def grab_server(connection):
+    """A context manager that executes its body with the server grabbed."""
+    connection.core.GrabServer()
+    try:
+        yield
+    finally:
+        connection.core.UngrabServer()
+
 def get_input_focus(connection, screen=None):
     """Return the window that has the input focus."""
     focus = connection.core.GetInputFocus().reply().focus
@@ -211,18 +220,6 @@ class GrabButtons(dict):
             else:
                 self[key] = mask
         return self
-
-class GrabServer(object):
-    def __init__(self, conn):
-        self.conn = conn
-
-    def __enter__(self):
-        self.conn.core.GrabServer()
-        self.conn.flush()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.conn.core.UngrabServer()
-        self.conn.flush()
 
 client_message_types = {}
 
