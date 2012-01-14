@@ -144,7 +144,7 @@ class WindowManager(EventHandler):
                                  GC.SubwindowMode |
                                  GC.GraphicsExposures),
                                 [GX.xor,
-                                 self.colors["#E0E0E0"],
+                                 self.colors["#808080"],
                                  LineStyle.OnOffDash,
                                  SubwindowMode.ClipByChildren,
                                  False])
