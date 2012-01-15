@@ -71,7 +71,8 @@ class WindowManager(EventHandler):
     property_class = WindowManagerProperties
 
     def __init__(self, display=None, screen=None,
-                 key_bindings={}, button_bindings={}):
+                 key_bindings={}, button_bindings={},
+                 focus_new_windows=True):
         self.conn = xcb.connect(display)
         self.screen_number = (screen
                               if screen is not None
@@ -102,6 +103,7 @@ class WindowManager(EventHandler):
         self.properties = self.property_class(self.conn,
                                               self.screen.root,
                                               self.atoms)
+        self.focus_new_windows = focus_new_windows
         self.next_event = None
         self.window_handlers = {}
         self.init_graphics()
@@ -460,6 +462,8 @@ class WindowManager(EventHandler):
         else:
             # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
             client.normalize()
+            if self.focus_new_windows:
+                self.ensure_focus(client)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
