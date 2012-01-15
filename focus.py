@@ -106,35 +106,30 @@ class FocusPolicy(WindowManager):
                             32, self.atoms["_DIM_ENSURE_FOCUS"],
                             [time, window, 0, 0, 0])
 
-    @handler(FocusInEvent)
-    def handle_focus_in(self, event):
-        if (event.mode != NotifyMode.Normal or
+    @handler((FocusInEvent, FocusOutEvent))
+    def handle_focus_event(self, event):
+        if (event.mode == NotifyMode.Grab or
+            event.mode == NotifyMode.Ungrab or
             event.detail == NotifyDetail.Inferior or
             event.detail == NotifyDetail.Pointer):
             return
-        self.__log.debug("Window 0x%x got the focus (%s).",
-                         event.event, notify_detail_name(event))
         client = self.get_client(event.event)
         if client:
-            self.focus(client, None)
-
-    @handler(FocusOutEvent)
-    def handle_focus_out(self, event):
-        if (event.mode != NotifyMode.Normal or
-            event.detail == NotifyDetail.Inferior or
-            event.detail == NotifyDetail.Pointer):
-            return
-        self.__log.debug("Window 0x%x lost the focus (%s).",
-                         event.event, notify_detail_name(event))
-        client = self.get_client(event.event)
-        if client:
-            self.unfocus(client)
+            self.__log.debug("Client window 0x%x got %s (%s).",
+                             client.window,
+                             event.__class__.__name__,
+                             notify_detail_name(event))
+            if isinstance(event, FocusInEvent):
+                self.focus(client, None)
+            else:
+                self.unfocus(client)
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         if event.override_redirect:
             return
-        if not self.focus_list:
+        if event.window == event.event:
+            self.__log.debug("Ensuring focus due to MapNotify event.")
             self.ensure_focus()
 
     @handler(UnmapNotifyEvent)
@@ -146,6 +141,7 @@ class FocusPolicy(WindowManager):
             client.window == event.event and
             self.focus_list and client is self.focus_list[0]):
             # Losing the current focus; try to focus another window.
+            self.__log.debug("Ensuring focus due to UnmapNotify event.")
             self.ensure_focus()
 
     @handler(EnsureFocus)
