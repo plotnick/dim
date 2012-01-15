@@ -7,6 +7,7 @@ from xcb.xproto import *
 from bindings import *
 from geometry import Geometry
 from inputfield import InputField
+from keysym import *
 from widget import *
 from xutil import query_pointer
 
@@ -23,7 +24,9 @@ class MinibufferConfig(FontConfig, HighlightConfig):
         self.baseline = pad + ascent
 
 class Minibuffer(InputField):
-    keys = KeyBindingMap({("meta", "p"): "previous-history-element",
+    keys = KeyBindingMap({XK_Up: "previous-history-element",
+                          XK_Down: "next-history-element",
+                          ("meta", "p"): "previous-history-element",
                           ("meta", "n"): "next-history-element"},
                          parent=InputField.keys)
 
