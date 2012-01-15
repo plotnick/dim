@@ -27,12 +27,13 @@ class TagMachine(object):
     """A small virtual stack machine for updating the set of visible clients
     via operations on tagsets."""
 
-    def __init__(self, clients, tagsets, opcodes={}, stack=[]):
+    def __init__(self, clients, tagsets, opcodes={}, stack=[], wild=None):
         self.clients = clients
         self.tagsets = tagsets
         self.opcodes = dict((code, getattr(self, name))
                             for code, name in opcodes.items())
         self.stack = stack
+        self.wild = wild
 
     def run(self, instructions):
         for x in instructions:
@@ -89,6 +90,9 @@ class TagMachine(object):
         return self.difference()
 
     def show(self):
+        if self.wild:
+            self.push(self.tagsets.get(self.wild, set()))
+            self.union()
         self.dup()
         self.complement()
         for client in self.pop():
@@ -382,10 +386,11 @@ class TagManager(WindowManager):
                    "_DIM_CURRENT_TAGSET": "current_set",
                    "_DIM_EMPTY_TAGSET": "empty_set",
                    None: "nop"}
-        self.atoms.prime_cache(opcodes.keys())
+        self.atoms.prime_cache(list(opcodes.keys()) + ["*"])
         self.tag_machine = TagMachine(self.clients, self.tagsets,
                                       dict((self.atoms[code], name)
-                                           for code, name in opcodes.items()))
+                                           for code, name in opcodes.items()),
+                                      wild=self.atoms["*"])
         self.properties.register_change_handler("_DIM_TAGSET_EXPRESSION",
                                                 self.tagset_expression_changed)
 
