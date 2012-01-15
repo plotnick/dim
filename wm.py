@@ -89,10 +89,13 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
         def execute(spec):
             try:
                 expr = parse_tagset_spec(spec)
-            except TagError:
-                pass
+            except SpecSyntaxError as err:
+                log.warning("Syntax error in tagset specification '%s': %s.",
+                            spec, err.args[0])
             else:
-                send_tagset_expression(self.conn, expr, atoms=self.atoms)
+                send_tagset_expr(self.conn, expr,
+                                 screen=self.screen_number,
+                                 atoms=self.atoms)
             dismiss()
         def dismiss():
             minibuffer.destroy()

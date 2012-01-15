@@ -1,5 +1,12 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+"""Client windows may be assigned zero or more "tags" via a list of X atoms
+stored in a property on that window. Each tag thus implicitly defines a set
+of clients, called a "tagset". By combining tagsets in various ways, the
+user may specify exactly the set of clients they wish to see at any given
+time. Tags thus serve a purpose similar to virtual desktops, but with a
+great deal more flexibility."""
+
 from __future__ import unicode_literals
 
 from collections import defaultdict
@@ -8,61 +15,54 @@ import re
 
 from xcb.xproto import *
 
-from atom import *
+from atom import AtomCache
 from manager import WindowManager, WindowManagerProperties
 from properties import PropertyDescriptor, AtomList, WMState
 
-__all__ = ["TagError", "TagManager",
-           "parse_tagset_spec", "send_tagset_expression"]
+__all__ = ["SpecSyntaxError", "parse_tagset_spec", "send_tagset_expr",
+           "TagManager"]
 
 log = logging.getLogger("tags")
 
-class TagError(Exception):
-    pass
-
-class StackUnderflow(TagError):
-    pass
-
 class TagMachine(object):
-    """A small virtual stack machine for updating the set of visible clients
-    via operations on tagsets."""
+    """A small virtual stack machine for operating on tagsets.
 
-    def __init__(self, clients, tagsets, opcodes={}, stack=[], wild=None):
+    The operations of the machine are simply its one-argument methods.
+    For flexibility and ease of testing, the format of the instruction
+    stream is configurable at machine-initialization time; e.g., a window
+    manger might use atoms, whereas a test might use simple strings.
+    Objects in the instruction stream that are not registered as opcodes
+    are taken to be tagset names, the contents of which are implicitly
+    pushed onto the stack."""
+
+    def __init__(self, clients, tagsets, opcodes={}, wild=None):
         self.clients = clients
         self.tagsets = tagsets
         self.opcodes = dict((code, getattr(self, name))
                             for code, name in opcodes.items())
-        self.stack = stack
         self.wild = wild
 
+        self.stack = []
+        self.push = self.stack.append
+        self.pop = self.stack.pop
+
     def run(self, instructions):
+        def tagset(tag):
+            self.push(self.tagsets.get(tag, set()))
         for x in instructions:
             op = self.opcodes.get(x, None)
             if op:
                 op()
             else:
-                self.tag(x)
+                tagset(x)
         if self.stack:
             log.debug("Tagset stack: %r.", self.stack)
 
     def nop(self):
         pass
 
-    def push(self, x):
-        self.stack.append(x)
-        return x
-
-    def pop(self):
-        if not self.stack:
-            raise StackUnderflow
-        top = self.stack[-1]
-        del self.stack[-1]
-        return top
-
     def dup(self):
-        if not self.stack:
-            raise StackUnderflow
-        return self.push(self.stack[-1])
+        self.push(self.stack[-1])
 
     def swap(self):
         x, y = self.pop(), self.pop()
@@ -75,19 +75,19 @@ class TagMachine(object):
             del self.stack[:]
 
     def union(self):
-        return self.push(self.pop() | self.pop())
+        self.push(self.pop() | self.pop())
 
     def intersection(self):
-        return self.push(self.pop() & self.pop())
+        self.push(self.pop() & self.pop())
 
     def difference(self):
         x, y = self.pop(), self.pop()
-        return self.push(y - x)
+        self.push(y - x)
 
     def complement(self):
         self.all_clients()
         self.swap()
-        return self.difference()
+        self.difference()
 
     def show(self):
         if self.wild:
@@ -101,40 +101,38 @@ class TagMachine(object):
             client.normalize()
         self.clear()
 
-    def tag(self, tag):
-        return self.push(self.tagsets.get(tag, set()))
-
     def all_tags(self):
-        return self.push(reduce(set.union, self.tagsets.values(), set()))
+        self.push(reduce(set.union, self.tagsets.values(), set()))
 
     def all_clients(self):
-        return self.push(set(self.clients.values()))
-
-    def current_set(self):
-        return self.push(set(client
-                             for client in self.clients.values()
-                             if client.properties.wm_state == WMState.NormalState))
+        self.push(set(self.clients.values()))
 
     def empty_set(self):
-        return self.push(set())
+        self.push(set())
+
+    def current_set(self):
+        self.push(set(client
+                      for client in self.clients.values()
+                      if client.properties.wm_state == WMState.NormalState))
 
 # Sequences of tag machine instructions will generally be provided by the
 # user in the form of infix expressions which we call tagset specifications.
 # Such expressions are tokenized, parsed, converted to postfix, and then
 # encoded as operations for the tag machine.
 
-class TokenizationError(TagError):
+class SpecSyntaxError(Exception):
     pass
 
-class SpecSyntaxError(TagError):
-    pass
+operator_tokens = {}
 
-operators = {}
-def operator(cls):
-    """Register a class as an operator token."""
-    operators[cls.str_symbol] = cls
-    operators[cls.unicode_symbol] = cls
-    return cls
+class OpTokenClass(type):
+    def __new__(metaclass, name, bases, namespace):
+        cls = super(OpTokenClass, metaclass).__new__(metaclass, name,
+                                                     bases, namespace)
+        if "str_symbol" in namespace and "unicode_symbol" in namespace:
+            operator_tokens[namespace["str_symbol"]] = cls
+            operator_tokens[namespace["unicode_symbol"]] = cls
+        return cls
 
 class OpToken(object):
     """For convenience and aesthetic reasons, all operators have both an
@@ -143,6 +141,8 @@ class OpToken(object):
 
     They also each have a representation as an atom. The atom names must
     correspond with the opcodes established for the virtual tag machine."""
+
+    __metaclass__ = OpTokenClass
 
     def __str__(self):
         return self.str_symbol
@@ -156,25 +156,21 @@ class OpToken(object):
                 type(self) == type(other) if isinstance(other, OpToken) else
                 False)
 
-@operator
 class Union(OpToken):
     str_symbol = "|"
     unicode_symbol = "∪"
     atom = "_DIM_TAGSET_UNION"
 
-@operator
 class Intersection(OpToken):
     str_symbol = "&"
     unicode_symbol = "∩"
     atom = "_DIM_TAGSET_INTERSECTION"
 
-@operator
 class Difference(OpToken):
     str_symbol = "\\"
     unicode_symbol = "∖"
     atom = "_DIM_TAGSET_DIFFERENCE"
 
-@operator
 class Complement(OpToken):
     str_symbol = "~"
     unicode_symbol = "∁"
@@ -204,22 +200,22 @@ def tokenize(string,
             yield ")"
             level -= 1
             i += 1
-        elif string[i] in operators:
-            yield operators[string[i]]()
+        elif string[i] in operator_tokens:
+            yield operator_tokens[string[i]]()
             i += 1
         else:
-            raise TokenizationError("invalid token\n  %s\n  %*c" %
-                                    (string, i+1, "^"))
+            raise SpecSyntaxError("invalid token\n  %s\n  %*c" %
+                                  (string, i + 1, "^"))
     if level != 0:
         raise SpecSyntaxError("unmatched parenthesis")
 
-class Expression(object):
-    """Base class for infix tagset specification expressions."""
+class Expr(object):
+    """Base class for tagset specification expressions."""
 
     def postfix(self):
         return []
 
-class Tag(Expression, unicode):
+class Tag(Expr, unicode):
     """A Unicode string representing a tag (a terminal expression)."""
 
     def __repr__(self):
@@ -228,7 +224,7 @@ class Tag(Expression, unicode):
     def postfix(self):
         return [self]
 
-class UnaryOp(Expression):
+class UnaryOp(Expr):
     """A prefix unary operator."""
 
     def __init__(self, op, arg):
@@ -244,7 +240,7 @@ class UnaryOp(Expression):
     def postfix(self):
         return self.arg.postfix() + [self.op]
 
-class BinOp(Expression):
+class BinOp(Expr):
     """An infix binary operator."""
 
     def __init__(self, op, lhs, rhs):
@@ -259,11 +255,11 @@ class BinOp(Expression):
         return "%s(%r, %r, %r)" % (self.__class__.__name__,
                                    self.op, self.lhs, self.rhs)
     def postfix(self):
-        pexpr = []
-        pexpr.extend(self.lhs.postfix())
-        pexpr.extend(self.rhs.postfix())
-        pexpr.append(self.op)
-        return pexpr
+        expr = []
+        expr.extend(self.lhs.postfix())
+        expr.extend(self.rhs.postfix())
+        expr.append(self.op)
+        return expr
 
 class SpecParser(object):
     """A recursive-descent parser for tagset specifications. Adapted from
@@ -277,7 +273,7 @@ class SpecParser(object):
         self.advance()
         spec = self.spec()
         if self.token:
-            raise SpecSyntaxError("trailing garbage: %s" % self.token)
+            raise SpecSyntaxError("trailing garbage: '%s'" % self.token)
         return spec
 
     def advance(self):
@@ -291,7 +287,8 @@ class SpecParser(object):
     def eat(self, token):
         """Check that the current token matches the given one, and advance."""
         if self.token != token:
-            raise SpecSyntaxError("expected %s, got %s" % (token, self.token))
+            raise SpecSyntaxError("expected '%s', got '%s'" %
+                                  (token, self.token))
         self.advance()
 
     def spec(self):
@@ -335,40 +332,40 @@ class SpecParser(object):
             finally:
                 self.advance()
         else:
-            raise SpecSyntaxError("unexpected token %s" % self.token)
+            raise SpecSyntaxError("unexpected token '%s'" % self.token)
 
 def parse_tagset_spec(spec):
-    """Tokenize and parse a tagset specification, returning a list of tag
-    machine instructions."""
+    """Tokenize and parse a tagset specification."""
     return SpecParser().parse(tokenize(spec)).postfix()
 
-def send_tagset_expression(conn, pexpr, show=True, atoms=None):
+def send_tagset_expr(conn, expr, show=True, screen=None, atoms=None):
     """Given a tag machine expression, encode it as a list of atoms and
     send it to the window manager via a property on the root window."""
     def atom(x,
              atoms=atoms if atoms else AtomCache(conn),
              aliases={"*": "_DIM_ALL_TAGS",
-                      ".": "_DIM_CURRENT_TAGSET",
-                      "∅": "_DIM_EMPTY_TAGSET",
-                      "0": "_DIM_EMPTY_TAGSET"}):
+                      ".": "_DIM_CURRENT_SET",
+                      "∅": "_DIM_EMPTY_SET",
+                      "0": "_DIM_EMPTY_SET"}):
         if isinstance(x, OpToken):
             x = x.atom
         else:
             x = aliases.get(x, x)
         return atoms.intern(x, "UTF-8")
     if show:
-        pexpr += ["_DIM_TAGSET_SHOW"]
-    root = conn.get_setup().roots[conn.pref_screen].root
+        expr += ["_DIM_TAGSET_SHOW"]
+    screen = conn.pref_screen if screen is None else screen
+    root = conn.get_setup().roots[screen].root
     conn.core.ChangeProperty(PropMode.Replace,
                              root,
-                             atom("_DIM_TAGSET_EXPRESSION"),
+                             atom("_DIM_TAGSET_EXPR"),
                              atom("ATOM"),
-                             *AtomList(map(atom, pexpr)).change_property_args())
+                             *AtomList(map(atom, expr)).change_property_args())
 
 # Finally, we have a manager class that maintains the tagsets and tag machine.
 
 class TagManagerProperties(WindowManagerProperties):
-    tagset_expr = PropertyDescriptor("_DIM_TAGSET_EXPRESSION", AtomList, [])
+    tagset_expr = PropertyDescriptor("_DIM_TAGSET_EXPR", AtomList, [])
 
 class TagManager(WindowManager):
     property_class = TagManagerProperties
@@ -377,22 +374,22 @@ class TagManager(WindowManager):
         super(TagManager, self).__init__(*args, **kwargs)
 
         self.tagsets = defaultdict(set) # sets of clients, indexed by tag
-        opcodes = {"_DIM_TAGSET_UNION": "union",
+        opcodes = {None: "nop",
+                   "_DIM_TAGSET_UNION": "union",
                    "_DIM_TAGSET_INTERSECTION": "intersection",
                    "_DIM_TAGSET_DIFFERENCE": "difference",
                    "_DIM_TAGSET_COMPLEMENT": "complement",
                    "_DIM_TAGSET_SHOW": "show",
                    "_DIM_ALL_TAGS": "all_tags",
-                   "_DIM_CURRENT_TAGSET": "current_set",
-                   "_DIM_EMPTY_TAGSET": "empty_set",
-                   None: "nop"}
+                   "_DIM_EMPTY_SET": "empty_set",
+                   "_DIM_CURRENT_SET": "current_set"}
         self.atoms.prime_cache(list(opcodes.keys()) + ["*"])
         self.tag_machine = TagMachine(self.clients, self.tagsets,
                                       dict((self.atoms[code], name)
                                            for code, name in opcodes.items()),
                                       wild=self.atoms["*"])
-        self.properties.register_change_handler("_DIM_TAGSET_EXPRESSION",
-                                                self.tagset_expression_changed)
+        self.properties.register_change_handler("_DIM_TAGSET_EXPR",
+                                                self.tagset_expr_changed)
 
     def shutdown(self):
         super(TagManager, self).shutdown()
@@ -439,12 +436,12 @@ class TagManager(WindowManager):
         if not deleted:
             self.note_tags(client)
 
-    def tagset_expression_changed(self, window, name, deleted, time):
+    def tagset_expr_changed(self, window, name, deleted, time):
         assert window == self.screen.root
         if deleted:
             return
         try:
             self.tag_machine.run(self.properties.tagset_expr)
-        except StackUnderflow:
+        except IndexError:
             log.warning("Stack underflow while evaluating tagset expression.")
         self.ensure_focus(time=time)
