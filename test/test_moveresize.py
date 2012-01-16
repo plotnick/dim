@@ -16,6 +16,14 @@ from xutil import int16
 
 from test_manager import EventType, TestClient, WMTestCase, WarpedPointer
 
+class MockManager(object):
+    def constrain_position(self, client, position):
+        return position
+
+    def constrain_size(self, client, geometry, size=None, border_width=None,
+                       gravity=None):
+        return geometry.resize(size, border_width, gravity)
+
 class MockDecorator(object):
     def message(self, message):
         pass
@@ -30,6 +38,7 @@ class MockClient(object):
         self.absolute_geometry = self.frame_geometry = self.geometry = geometry
         self.screen = None
         self.window = 0
+        self.manager = MockManager()
         self.decorator = MockDecorator()
         self.properties = MockProperties(size_hints)
 

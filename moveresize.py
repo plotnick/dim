@@ -321,6 +321,17 @@ class ClientUpdate(object):
     def cycle_gravity(self, pointer, time):
         pass
 
+    def move(self, position):
+        client = self.client
+        return client.move(client.manager.constrain_position(client, position))
+
+    def resize(self, size, gravity):
+        client = self.client
+        return client.configure(client.manager.constrain_size(client,
+                                                              self.geometry,
+                                                              size,
+                                                              gravity=gravity))
+
 class ClientMove(ClientUpdate):
     cursor = XC_fleur
 
@@ -332,10 +343,10 @@ class ClientMove(ClientUpdate):
 
     def update(self, pointer):
         delta = self.delta(pointer)
-        self.display_geometry(self.client.move(self.position + delta))
+        self.display_geometry(self.move(self.position + delta))
 
     def rollback(self, time=Time.CurrentTime):
-        self.client.move(self.position)
+        self.move(self.position)
         super(ClientMove, self).rollback(time)
 
 class ClientResize(ClientUpdate):
@@ -376,12 +387,12 @@ class ClientResize(ClientUpdate):
         # Treat center gravity as just a move.
         if self.gravity == (0, 0):
             position = self.frame_geometry.position() + delta
-            self.display_geometry(self.client.move(position))
+            self.display_geometry(self.move(position))
             return
 
         ds = Rectangle(delta.x * self.gravity.x, delta.y * self.gravity.y)
-        size = self.client.resize(self.geometry.size() + ds,
-                                  gravity=offset_gravity(-self.gravity)).size()
+        size = self.resize(self.geometry.size() + ds,
+                           offset_gravity(-self.gravity)).size()
         if self.size_hints.flags & WMSizeHints.PResizeInc:
             size = self.size_hints.size_increments(size)
         self.display_geometry(size)

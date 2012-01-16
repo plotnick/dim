@@ -197,7 +197,6 @@ class Client(EventHandler):
 
     def move(self, position):
         """Move the frame and return its new position."""
-        position = self.manager.constrain_position(self, position)
         self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
@@ -206,17 +205,12 @@ class Client(EventHandler):
 
     def resize(self, size, border_width=None, gravity=None):
         """Resize the client window and return the new geometry, which may
-        differ in both size and position due to size constraints and gravity."""
-        geometry = self.manager.constrain_size(self, self.absolute_geometry,
-                                               size, border_width, gravity)
-        return self.configure(geometry)
-
-    def moveresize(self, geometry, gravity=None):
-        """Change the client window geometry, respecting size hints and using
-        the specified gravity. Returns the new geometry."""
-        return self.configure(self.manager.constrain_size(self,
-                                                          geometry,
-                                                          gravity=gravity))
+        differ in both size and position due to window gravity."""
+        if gravity is None:
+            gravity = self.properties.wm_normal_hints.win_gravity
+        return self.configure(self.absolute_geometry.resize(size,
+                                                            border_width,
+                                                            gravity))
 
     def configure(self, geometry):
         """Given a requested client geometry in the root coordinate system,
