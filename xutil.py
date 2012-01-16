@@ -6,6 +6,7 @@ import operator
 from struct import Struct
 
 from xcb.xproto import *
+import xcb.shape
 
 from geometry import *
 
@@ -13,7 +14,8 @@ __all__ = ["power_of_2", "popcount", "int16", "card16",
            "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
            "configure_notify", "send_client_message", "grab_server",
-           "get_input_focus", "get_window_geometry", "query_pointer",
+           "get_input_focus", "get_window_geometry",
+           "query_extension", "query_pointer",
            "select_values", "value_list", "textitem16", "GrabButtons",
            "client_message_type", "client_message", "ClientMessage"]
 
@@ -49,39 +51,45 @@ def is_synthetic_event(event):
     # most-significant bit of this code set.
     return (ord(event[0]) & 0x80) != 0
 
-event_window_types = {ButtonPressEvent: lambda e: e.event,
-                      ButtonReleaseEvent: lambda e: e.event,
-                      CirculateNotifyEvent: lambda e: e.event,
-                      CirculateRequestEvent: lambda e: e.event,
-                      ClientMessageEvent: lambda e: e.window,
-                      ColormapNotifyEvent: lambda e: e.window,
-                      ConfigureNotifyEvent: lambda e: e.event,
-                      ConfigureRequestEvent: lambda e: e.parent,
-                      CreateNotifyEvent: lambda e: e.parent,
-                      DestroyNotifyEvent: lambda e: e.event,
-                      EnterNotifyEvent: lambda e: e.event,
-                      ExposeEvent: lambda e: e.window,
-                      FocusInEvent: lambda e: e.event,
-                      FocusOutEvent: lambda e: e.event,
-                      GraphicsExposureEvent: lambda e: e.drawable,
-                      GravityNotifyEvent: lambda e: e.event,
-                      KeymapNotifyEvent: lambda e: None,
-                      KeyPressEvent: lambda e: e.event,
-                      KeyReleaseEvent: lambda e: e.event,
-                      LeaveNotifyEvent: lambda e: e.event,
-                      MapNotifyEvent: lambda e: e.event,
-                      MappingNotifyEvent: lambda e: None,
-                      MapRequestEvent: lambda e: e.parent,
-                      MotionNotifyEvent: lambda e: e.event,
-                      NoExposureEvent: lambda e: None,
-                      PropertyNotifyEvent: lambda e: e.window,
-                      ReparentNotifyEvent: lambda e: e.event,
-                      ResizeRequestEvent: lambda e: e.window,
-                      SelectionClearEvent: lambda e: e.owner,
-                      SelectionNotifyEvent: lambda e: None,
-                      SelectionRequestEvent: lambda e: e.owner,
-                      UnmapNotifyEvent: lambda e: e.event,
-                      VisibilityNotifyEvent: lambda e: e.window}
+event_window_types = {
+    # Core events (complete).
+    ButtonPressEvent: lambda e: e.event,
+    ButtonReleaseEvent: lambda e: e.event,
+    CirculateNotifyEvent: lambda e: e.event,
+    CirculateRequestEvent: lambda e: e.event,
+    ClientMessageEvent: lambda e: e.window,
+    ColormapNotifyEvent: lambda e: e.window,
+    ConfigureNotifyEvent: lambda e: e.event,
+    ConfigureRequestEvent: lambda e: e.parent,
+    CreateNotifyEvent: lambda e: e.parent,
+    DestroyNotifyEvent: lambda e: e.event,
+    EnterNotifyEvent: lambda e: e.event,
+    ExposeEvent: lambda e: e.window,
+    FocusInEvent: lambda e: e.event,
+    FocusOutEvent: lambda e: e.event,
+    GraphicsExposureEvent: lambda e: e.drawable,
+    GravityNotifyEvent: lambda e: e.event,
+    KeymapNotifyEvent: lambda e: None,
+    KeyPressEvent: lambda e: e.event,
+    KeyReleaseEvent: lambda e: e.event,
+    LeaveNotifyEvent: lambda e: e.event,
+    MapNotifyEvent: lambda e: e.event,
+    MappingNotifyEvent: lambda e: None,
+    MapRequestEvent: lambda e: e.parent,
+    MotionNotifyEvent: lambda e: e.event,
+    NoExposureEvent: lambda e: None,
+    PropertyNotifyEvent: lambda e: e.window,
+    ReparentNotifyEvent: lambda e: e.event,
+    ResizeRequestEvent: lambda e: e.window,
+    SelectionClearEvent: lambda e: e.owner,
+    SelectionNotifyEvent: lambda e: None,
+    SelectionRequestEvent: lambda e: e.owner,
+    UnmapNotifyEvent: lambda e: e.event,
+    VisibilityNotifyEvent: lambda e: e.window,
+
+    # Extension events (only as needed).
+    xcb.shape.NotifyEvent: lambda e: e.affected_window
+}
 
 def event_window(event):
     """Return the window on which the given event was generated."""
@@ -164,6 +172,12 @@ def get_window_geometry(connection, window):
     return Geometry(reply.x, reply.y,
                     reply.width, reply.height,
                     reply.border_width)
+
+def query_extension(connection, name, key):
+    """Query the server for the extension with the given name, and, if present,
+    return the corresponding extension handle."""
+    ext = connection.core.QueryExtension(len(name), name).reply()
+    return connection(key) if ext.present else None
 
 def query_pointer(connection, root):
     """Return the current pointer position relative to the given root window."""

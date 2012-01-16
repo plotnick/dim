@@ -5,6 +5,7 @@
 import logging
 
 from xcb.xproto import *
+import xcb.shape
 
 from bindings import *
 from client import *
@@ -42,6 +43,10 @@ class Decorator(object):
 
     def configure(self, geometry):
         """Update decorations for a new client/frame geometry."""
+        pass
+
+    def update_frame_shape(self):
+        """Update the shape of a non-rectangular frame for decorations."""
         pass
 
     def focus(self):
@@ -230,6 +235,8 @@ class TitlebarDecorator(Decorator):
                                        button_bindings=self.button_bindings,
                                        geometry=geometry,
                                        config=config)
+        if self.client.shaped:
+            self.update_frame_shape()
         self.titlebar.map()
 
     def undecorate(self):
@@ -243,6 +250,20 @@ class TitlebarDecorator(Decorator):
             self.titlebar.configure(Geometry(0, 0,
                                              geometry.width,
                                              self.titlebar.config.height, 0))
+
+    def update_frame_shape(self):
+        if self.titlebar:
+            bw = self.border_width
+            rectangles = [-bw, -bw,
+                          self.titlebar.geometry.width + 2 * bw,
+                          self.titlebar.geometry.height + bw]
+            self.client.manager.shape.Rectangles(xcb.shape.SO.Union,
+                                                 xcb.shape.SK.Bounding,
+                                                 ClipOrdering.YXBanded,
+                                                 self.client.frame,
+                                                 0, 0,
+                                                 len(rectangles),
+                                                 rectangles)
 
     def compute_client_offset(self):
         config = (self.titlebar.config if self.titlebar else

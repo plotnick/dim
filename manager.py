@@ -80,10 +80,19 @@ class WindowManager(EventHandler):
         self.screen = self.conn.get_setup().roots[self.screen_number]
         self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
         log.debug("Screen geometry: %s.", self.screen_geometry)
-        self.crtcs = dict(self.get_crtc_info(self.screen))
-        log.debug("CRTC geometries: {%s}.",
-                  ", ".join("0x%x: %s" % (crtc, geometry)
-                            for crtc, geometry in self.crtcs.items()))
+
+        self.randr = query_extension(self.conn, "RANDR", xcb.randr.key)
+        if self.randr:
+            self.randr.SelectInput(self.screen.root,
+                                   xcb.randr.NotifyMask.CrtcChange)
+            self.crtcs = dict(self.get_crtc_info(self.screen))
+            log.debug("CRTC geometries: {%s}.",
+                      ", ".join("0x%x: %s" % (crtc, geometry)
+                                for crtc, geometry in self.crtcs.items()))
+        else:
+            self.crtcs = {}
+
+        self.shape = query_extension(self.conn, "SHAPE", xcb.shape.key)
 
         self.clients = {} # managed clients, indexed by window ID
         self.frames = {} # client frames, indexed by window ID
@@ -111,14 +120,9 @@ class WindowManager(EventHandler):
     def get_crtc_info(self, screen):
         """Yield pairs of the form (CRTC, Geometry) for each CRTC connected
         to the given screen, and select for change notification if available."""
-        ext = self.conn.core.QueryExtension(len("RANDR"), "RANDR").reply()
-        if not ext.present:
-            return
-        randr = self.conn(xcb.randr.key)
-        randr.SelectInput(self.screen.root, xcb.randr.NotifyMask.CrtcChange)
-        resources = randr.GetScreenResources(screen.root).reply()
+        resources = self.randr.GetScreenResources(screen.root).reply()
         timestamp = resources.config_timestamp
-        for crtc, cookie in [(crtc, randr.GetCrtcInfo(crtc, timestamp))
+        for crtc, cookie in [(crtc, self.randr.GetCrtcInfo(crtc, timestamp))
                              for crtc in resources.crtcs]:
             info = cookie.reply()
             if info.status or not info.mode:
@@ -358,8 +362,10 @@ class WindowManager(EventHandler):
         self.window_handlers[window] = handler
 
     def unhandled_event(self, event):
-        log.debug("Ignoring unhandled %s on window 0x%x.",
-                  event.__class__.__name__, event_window(event))
+        window = event_window(event)
+        log.debug("Ignoring unhandled %s%s.",
+                  event.__class__.__name__,
+                  (" on window 0x%x" % window) if window else "")
 
     def get_client(self, window, client_window_only=False):
         """Retrieve the client with the given top-level window, or None if

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import logging
 
 from xcb.xproto import *
+import xcb.shape
 
 from event import *
 from geometry import *
@@ -66,6 +67,7 @@ class Client(EventHandler):
         self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.decorator = manager.decorator(self)
         self.decorated = False
+        self.shaped = False
         self.focus_time = None
         self.focus_override = None
         self.visibility = None
@@ -115,6 +117,15 @@ class Client(EventHandler):
         self.geometry = geometry.reborder(0).move(offset.position())
         self.frame_geometry = frame_geometry
         self.offset = offset
+
+        # Register for shape change notifications, and, if the client
+        # window is shaped, adapt the frame to its shape.
+        if self.manager.shape:
+            self.manager.shape.SelectInput(self.window, True)
+            extents = self.manager.shape.QueryExtents(self.window).reply()
+            self.shaped = extents.bounding_shaped
+            if self.shaped:
+                self.set_frame_shape()
 
         # Register for events on the client window and frame.
         self.conn.core.ChangeWindowAttributes(self.window,
@@ -242,6 +253,28 @@ class Client(EventHandler):
         self.conn.core.ConfigureWindow(self.frame,
                                        ConfigWindow.StackMode,
                                        [stack_mode])
+
+    def set_frame_shape(self):
+        self.manager.shape.Combine(xcb.shape.SO.Set,
+                                   xcb.shape.SK.Bounding,
+                                   xcb.shape.SK.Bounding,
+                                   self.frame,
+                                   self.offset.x,
+                                   self.offset.y,
+                                   self.window)
+        self.decorator.update_frame_shape()
+
+    def reset_frame_shape(self):
+        self.manager.shape.Mask(xcb.shape.SO.Set,
+                                xcb.shape.SK.Bounding,
+                                self.frame,
+                                0, 0,
+                                Pixmap._None)
+        self.manager.shape.Mask(xcb.shape.SO.Set,
+                                xcb.shape.SK.Clip,
+                                self.frame,
+                                0, 0,
+                                Pixmap._None)
 
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. Returns true if the client
@@ -389,3 +422,14 @@ class Client(EventHandler):
         self.log.debug("Received change-state message (%d).", state)
         if state == WMState.IconicState:
             self.iconify()
+
+    @handler(xcb.shape.NotifyEvent)
+    def handle_shape_notify(self, event):
+        if (event.affected_window != self.window or
+            event.shape_kind != xcb.shape.SK.Bounding):
+            return
+        if self.shaped and not event.shaped:
+            self.reset_frame_shape()
+        elif event.shaped:
+            self.set_frame_shape()
+        self.shaped = event.shaped
