@@ -168,7 +168,7 @@ class TestClient(EventHandler, Thread):
             self.conn.flush()
 
             # Wait for more events, but only for a few milliseconds.
-            r, w, x = select(rlist, wlist, xlist, 10 * ms)
+            r, w, x = select(rlist, wlist, xlist, randint(1, 10) * ms)
             if not r and not w and not x:
                 timeouts += 1
         assert False, "client timed out"
@@ -321,7 +321,8 @@ class WMTestCase(unittest.TestCase):
         while timeouts < max_timeouts:
             if test():
                 return True
-            sleep(10 * ms)
+            self.conn.flush()
+            sleep(randint(1, 10) * ms)
             timeouts += 1
         self.fail("test loop timed out")
 
