@@ -23,20 +23,21 @@ class WMChangeState(ClientMessage):
 
 class ClientProperties(PropertyManager):
     # ICCCM properties
-    wm_name = PropertyDescriptor("WM_NAME", String, "")
-    wm_icon_name = PropertyDescriptor("WM_ICON_NAME", String, "")
+    wm_name = PropertyDescriptor("WM_NAME", StringProperty, "")
+    wm_icon_name = PropertyDescriptor("WM_ICON_NAME", StringProperty, "")
     wm_normal_hints = PropertyDescriptor("WM_NORMAL_HINTS",
-                                         WMSizeHints,
-                                         WMSizeHints())
+                                         WMSizeHints, WMSizeHints())
     wm_hints = PropertyDescriptor("WM_HINTS", WMHints, WMHints())
     wm_class = PropertyDescriptor("WM_CLASS", WMClass, (None, None))
-    wm_transient_for = PropertyDescriptor("WM_TRANSIENT_FOR", WMTransientFor)
+    wm_transient_for = PropertyDescriptor("WM_TRANSIENT_FOR", WindowProperty)
     wm_protocols = PropertyDescriptor("WM_PROTOCOLS", WMProtocols, [])
     wm_state = PropertyDescriptor("WM_STATE", WMState, WMState())
 
     # EWMH properties
-    net_wm_name = PropertyDescriptor("_NET_WM_NAME", UTF8String, "")
-    net_wm_icon_name = PropertyDescriptor("_NET_WM_ICON_NAME", UTF8String, "")
+    net_wm_name = PropertyDescriptor("_NET_WM_NAME",
+                                     UTF8StringProperty, "")
+    net_wm_icon_name = PropertyDescriptor("_NET_WM_ICON_NAME",
+                                          UTF8StringProperty, "")
 
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])

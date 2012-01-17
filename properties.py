@@ -15,8 +15,9 @@ from geometry import *
 
 __all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
            "PropertyError", "PropertyDescriptor", "PropertyManager",
-           "PropertyValue", "PropertyValueList",
-           "AtomList", "String", "UTF8String",
+           "ScalarPropertyValue", "PropertyValueStruct", "PropertyValueList",
+           "WindowProperty", "AtomProperty", "AtomList",
+           "StringProperty", "UTF8StringProperty",
            "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
            "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
 
@@ -192,12 +193,34 @@ class PropertyManager(object):
     def unregister_change_handler(self, name, handler):
         self.change_handlers[name].discard(handler)
 
-class PropertyValueClass(type):
-    """Metaclass for X property values."""
+class ScalarPropertyValueClass(type):
+    """Metaclass for scalar X property values."""
 
     def __new__(metaclass, name, bases, namespace):
-        cls = super(PropertyValueClass, metaclass).__new__(metaclass, name,
-                                                           bases, namespace)
+        cls = super(ScalarPropertyValueClass, metaclass).__new__(metaclass,
+                                                                 name,
+                                                                 bases,
+                                                                 namespace)
+
+        for c in cls.__mro__:
+            if hasattr(c, "property_format"):
+                format = c.property_format
+                break
+        else:
+            raise TypeError("scalar property values must specify format")
+        assert format in type_codes, \
+            "invalid property format %r" % format
+        cls.formatter = Struct(type_codes[format])
+        return cls
+
+class PropertyValueStructClass(type):
+    """Metaclass for struct-like X property values."""
+
+    def __new__(metaclass, name, bases, namespace):
+        cls = super(PropertyValueStructClass, metaclass).__new__(metaclass,
+                                                                 name,
+                                                                 bases,
+                                                                 namespace)
 
         for c in cls.__mro__:
             if hasattr(c, "fields") and hasattr(c, "property_format"):
@@ -214,11 +237,14 @@ class PropertyValueClass(type):
         cls.formatter = Struct("".join(map(itemgetter(1), fields)))
         return cls
 
-class PropertyValueListClass(PropertyValueClass):
+class PropertyValueListClass(type):
     """Metaclass for list-like X property values."""
 
     def __new__(metaclass, name, bases, namespace):
-        cls = type.__new__(metaclass, name, bases, namespace)
+        cls = super(PropertyValueListClass, metaclass).__new__(metaclass,
+                                                               name,
+                                                               bases,
+                                                               namespace)
         for c in cls.__mro__:
             if hasattr(c, "property_format"):
                 format = c.property_format
@@ -230,27 +256,20 @@ class PropertyValueListClass(PropertyValueClass):
         return cls
 
 class PropertyValue(object):
-    """Base class for representations of X property values.
+    """Base class for X property values."""
 
-    X property values are treated by the server as lists of 8-bit, 16-bit,
-    or 32-bit quantities. This class provides a representation of such
-    lists as instances with named attributes (i.e., fields or slots), and
-    offers convenience methods for translating to and from the binary
-    representation.
+    @classmethod
+    def unpack(cls, data):
+        """Create and return a new instance by unpacking the property data."""
+        pass
 
-    Subclassess should set their property_format attribute to either 8, 16,
-    or 32, and their fields attribute to a sequence of (field-name, type-code)
-    pairs."""
+    def pack(self):
+        """Return the property data as a byte string."""
+        return ""
 
-    __metaclass__ = PropertyValueClass
-    property_format = 32
-    fields = ()
-
-    def __init__(self, *args, **kwargs):
-        for field, value in zip(map(itemgetter(0), self.fields), args):
-            setattr(self, field, value)
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+    def change_property_args(self):
+        """Return a (format, data-length, data) tuple."""
+        return (self.property_format, 1, self.pack())
 
     def __eq__(self, other):
         if isinstance(other, PropertyValue):
@@ -263,9 +282,44 @@ class PropertyValue(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+class ScalarPropertyValue(PropertyValue):
+    """Base class for scalar X property values."""
+
+    __metaclass__ = ScalarPropertyValueClass
+    property_format = 32
+
     @classmethod
     def unpack(cls, data):
-        """Create and return a new instance by unpacking the property data."""
+        return cls(*cls.formatter.unpack_from(data))
+
+    def pack(self):
+        return self.formatter.pack(str(self))
+
+class PropertyValueStruct(PropertyValue):
+    """Base class for representations of struct-like X property values.
+
+    X property values are treated by the server as lists of 8-bit, 16-bit,
+    or 32-bit quantities. This class provides a representation of such
+    lists as instances with named attributes (i.e., fields or slots), and
+    offers convenience methods for translating to and from the binary
+    representation.
+
+    Subclassess should set their property_format attribute to either 8, 16,
+    or 32, and their fields attribute to a sequence of (field-name, type-code)
+    pairs."""
+
+    __metaclass__ = PropertyValueStructClass
+    property_format = 32
+    fields = ()
+
+    def __init__(self, *args, **kwargs):
+        for field, value in zip(map(itemgetter(0), self.fields), args):
+            setattr(self, field, value)
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    @classmethod
+    def unpack(cls, data):
         # ICCCM §4.1.2: "If these properties are longer than expected,
         # clients should ignore the remainder of the property." If they're
         # shorter than expected, we'll pad them with zeros.
@@ -275,12 +329,10 @@ class PropertyValue(object):
         return cls(*cls.formatter.unpack_from(data))
 
     def pack(self):
-        """Return the property data as a byte string."""
         return self.formatter.pack(*(getattr(self, field[0], 0)
                                      for field in self.fields))
 
     def change_property_args(self):
-        """Return a (format, data-length, data) tuple."""
         return (self.property_format, len(self.fields), self.pack())
 
 class PropertyValueList(PropertyValue):
@@ -319,15 +371,34 @@ class PropertyValueList(PropertyValue):
     def __eq__(self, other):
         return list(self.elements) == list(other)
 
+class IntPropertyValue(ScalarPropertyValue, int):
+    def pack(self):
+        return self.formatter.pack(int(self))
+
+    def __eq__(self, other):
+        if isinstance(other, int):
+            return int(self) == other
+        else:
+            return super(IntPropertyValue, self).__eq__(other)
+
+class WindowProperty(IntPropertyValue):
+    property_format = 32
+    property_type = "WINDOW"
+
+class AtomProperty(IntPropertyValue):
+    property_format = 32
+    property_type = "ATOM"
+
 class AtomList(PropertyValueList):
     property_format = 32
     property_type = "ATOM"
 
-class String(PropertyValueList):
+class StringProperty(PropertyValueList):
     """A representation of property values of type STRING.
 
-    Note that we currently only support Latin-1 strings, and not the (obsolete)
-    COMPOUND_TEXT type. If you need Unicode support, use UTF8String instead."""
+    Note that we currently only support Latin-1 strings, and not the
+    (obsolete) COMPOUND_TEXT type. If you need Unicode support, use
+    UTF8StringProperty instead."""
 
     property_format = 8
     property_type = "STRING"
@@ -337,7 +408,7 @@ class String(PropertyValueList):
         if isinstance(elements, basestring):
             self.elements = array("B", elements.encode(self.encoding))
         else:
-            super(String, self).__init__(elements)
+            super(StringProperty, self).__init__(elements)
 
     def __str__(self):
         return self.elements.tostring()
@@ -351,14 +422,14 @@ class String(PropertyValueList):
         elif isinstance(other, unicode):
             return unicode(self) == other
         else:
-            return super(String, self).__eq__(other)
+            return super(StringProperty, self).__eq__(other)
 
-class UTF8String(String):
+class UTF8StringProperty(StringProperty):
     property_format = 8
     property_type = "UTF8_STRING"
     encoding = "UTF-8"
 
-class WMClass(String):
+class WMClass(StringProperty):
     """A representation of the WM_STATE property (ICCCM §4.1.2.5)"""
 
     property_format = 8
@@ -374,7 +445,7 @@ class WMClass(String):
         yield s[0:i]
         yield s[i + 1:j]
 
-class WMTransientFor(PropertyValue):
+class WMTransientFor(PropertyValueStruct):
     """A representation of the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)"""
 
     property_format = 32
@@ -390,12 +461,12 @@ class WMColormapWindows(PropertyValueList):
     property_format = 32
     property_type = "WINDOW"
 
-class WMClientMachine(String):
+class WMClientMachine(StringProperty):
     """A representation of the WM_CLIENT_MACHINE property (ICCCM §4.1.2.9)"""
     property_format = 8
     property_type = "STRING"
 
-class WMState(PropertyValue):
+class WMState(PropertyValueStruct):
     """A representation of the WM_STATE type (ICCCM §4.1.3.1)"""
 
     property_format = 32
@@ -467,7 +538,7 @@ class PropertyField(object):
             delattr(instance, slot)
         instance.flags &= ~self.flag
 
-class WMSizeHints(PropertyValue):
+class WMSizeHints(PropertyValueStruct):
     """A representation of the WM_SIZE_HINTS type (ICCCM §4.1.2.3)."""
 
     property_format = 32
@@ -572,7 +643,7 @@ class WMSizeHints(PropertyValue):
         return Rectangle((size.width - base.width) // inc.width,
                          (size.height - base.height) // inc.height)
 
-class WMHints(PropertyValue):
+class WMHints(PropertyValueStruct):
     """A representation of the WM_HINTS type (ICCCM §4.1.2.4)."""
 
     property_format = 32

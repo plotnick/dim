@@ -10,55 +10,77 @@ from xcb.xproto import *
 from geometry import *
 from properties import *
 
-class TestProp(PropertyValue):
+class TestScalarPropertyValue(unittest.TestCase):
+    def test_unpack(self):
+        prop = WindowProperty.unpack(pack("I", 0x1234))
+        self.assertEqual(int(prop), 0x1234)
+
+    def test_pack(self):
+        self.assertEqual(WindowProperty(0x1234).pack(), pack("I", 0x1234))
+
+    def test_pack_unpack(self):
+        prop = WindowProperty(0x1234)
+        self.assertEqual(prop, prop.unpack(prop.pack()))
+
+    def test_change_property_args(self):
+        data = pack("I", 0x1234)
+        prop = WindowProperty.unpack(data)
+        self.assertEqual(prop.change_property_args(), (32, 1, data))
+
+class TestPropStruct(PropertyValueStruct):
     property_format = 32
     fields = (("a", INT32),
               ("b", CARD32),
               ("c", CARD32))
 
-class TestPropertyValue(unittest.TestCase):
+class TestPropertyValueStruct(unittest.TestCase):
     def test_unpack(self):
-        prop = TestProp.unpack(pack("iII", -1, 2, 3))
+        prop = TestPropStruct.unpack(pack("iII", -1, 2, 3))
         self.assertEqual(prop.a, -1)
         self.assertEqual(prop.b, 2)
         self.assertEqual(prop.c, 3)
 
     def test_unpack_short(self):
-        prop = TestProp.unpack(pack("iI", -1, 2))
+        prop = TestPropStruct.unpack(pack("iI", -1, 2))
         self.assertEqual(prop.a, -1)
         self.assertEqual(prop.b, 2)
         self.assertEqual(prop.c, 0)
 
     def test_unpack_long(self):
-        prop = TestProp.unpack(pack("iIII", -1, 2, 3, 4))
+        prop = TestPropStruct.unpack(pack("iIII", -1, 2, 3, 4))
         self.assertEqual(prop.a, -1)
         self.assertEqual(prop.b, 2)
         self.assertEqual(prop.c, 3)
 
     def test_pack(self):
-        self.assertEqual(TestProp(-1), pack("iII", -1, 0, 0))
-        self.assertEqual(TestProp(-1, c=3), pack("iII", -1, 0, 3))
-        self.assertEqual(TestProp(-1, 2, 3), pack("iII", -1, 2, 3))
+        self.assertEqual(TestPropStruct(-1).pack(),
+                         pack("iII", -1, 0, 0))
+        self.assertEqual(TestPropStruct(-1, c=3).pack(),
+                         pack("iII", -1, 0, 3))
+        self.assertEqual(TestPropStruct(-1, 2, 3).pack(),
+                         pack("iII", -1, 2, 3))
 
     def test_args(self):
-        prop = TestProp(-1, c=3)
+        prop = TestPropStruct(-1, c=3)
         self.assertEqual(prop.a, -1)
         self.assertRaises(AttributeError, lambda: prop.b)
         self.assertEqual(prop.c, 3)
 
     def test_prop_set(self):
-        prop = TestProp()
+        prop = TestPropStruct()
         self.assertRaises(AttributeError, lambda: prop.a)
         prop.a = -1
         self.assertEqual(prop.a, -1)
 
     def test_equality(self):
-        self.assertEqual(TestProp(a=-1, b=2, c=3), TestProp(a=-1, b=2, c=3))
-        self.assertNotEqual(TestProp(a=-1), TestProp(a=-1, b=2, c=3))
-        self.assertEqual(TestProp(a=-1), pack("iII", -1, 0, 0))
+        self.assertEqual(TestPropStruct(a=-1, b=2, c=3),
+                         TestPropStruct(a=-1, b=2, c=3))
+        self.assertNotEqual(TestPropStruct(a=-1),
+                            TestPropStruct(a=-1, b=2, c=3))
+        self.assertEqual(TestPropStruct(a=-1), pack("iII", -1, 0, 0))
 
     def test_pack_unpack(self):
-        prop = TestProp(a=1, b=2, c=3)
+        prop = TestPropStruct(a=1, b=2, c=3)
         self.assertEqual(prop, prop.unpack(prop.pack()))
 
 class TestPropertyVaueList(unittest.TestCase):
@@ -80,17 +102,17 @@ class TestPropertyVaueList(unittest.TestCase):
         p[0] = 0x4321
         self.assertEqual(p[0], 0x4321)
 
-    def test_string(self):
+    def test_string_property(self):
         s = u"foö"
-        p = String(s)
-        self.assertEqual(p, String.unpack(s.encode("Latin-1")))
+        p = StringProperty(s)
+        self.assertEqual(p, StringProperty.unpack(s.encode("Latin-1")))
         self.assertEqual(p.pack(), s.encode("Latin-1"))
         self.assertEqual(unicode(p), s)
 
-    def test_utf8_string(self):
+    def test_utf8_string_property(self):
         s = u"foö"
-        p = UTF8String(s)
-        self.assertEqual(p, String.unpack(s.encode("UTF-8")))
+        p = UTF8StringProperty(s)
+        self.assertEqual(p, StringProperty.unpack(s.encode("UTF-8")))
         self.assertEqual(p.pack(), s.encode("UTF-8"))
         self.assertEqual(unicode(p), s)
 
