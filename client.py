@@ -4,6 +4,7 @@
 classes and routines for dealing with those as such."""
 
 from contextlib import contextmanager
+import exceptions
 import logging
 
 from xcb.xproto import *
@@ -66,6 +67,7 @@ class Client(EventHandler):
         self.fonts = manager.fonts
         self.keymap = manager.keymap
         self.properties = ClientProperties(self.conn, self.window, self.atoms)
+        self.transients = []
         self.decorator = manager.decorator(self)
         self.decorated = False
         self.shaped = False
@@ -134,6 +136,14 @@ class Client(EventHandler):
                                               [self.client_event_mask])
         self.manager.register_window_handler(self.window, self)
         self.manager.register_window_handler(self.frame, self)
+
+        # If this window is a transient for another, establish a link
+        # between them.
+        transient_for = self.properties.wm_transient_for
+        if transient_for:
+            other = self.manager.get_client(transient_for, True)
+            if other:
+                other.transients.append(self.window)
 
     @contextmanager
     def disable_structure_notify(self):
@@ -393,16 +403,45 @@ class Client(EventHandler):
                 self.decorated = True
         self.map()
 
+        # Map any windows that are transient for this one.
+        for transient in list(self.transients):
+            client = self.manager.get_client(transient, True)
+            if client:
+                client.normalize()
+            else:
+                self.log.warning("Lost transient 0x%x.", transient)
+                self.transients.remove(transient)
+
     def iconify(self):
         """Transition to the Iconic state."""
         self.log.debug("Entering Iconic state.")
         self.properties.wm_state = WMState(WMState.IconicState)
         self.unmap()
 
+        # Iconify any windows that are transient for this one.
+        for transient in self.transients:
+            client = self.manager.get_client(transient, True)
+            if client:
+                client.iconify()
+
     def withdraw(self):
         """Transition to the Withdrawn state."""
         self.log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
+
+    @handler(DestroyNotifyEvent)
+    def handle_destroy_notify(self, event):
+        if event.window != self.window:
+            raise UnhandledEvent(event)
+        transient_for = self.properties.wm_transient_for
+        if transient_for:
+            other = self.manager.get_client(transient_for, True)
+            if other:
+                try:
+                    other.transients.remove(self.window)
+                except exceptions.ValueError:
+                    pass
+        raise UnhandledEvent(event)
 
     @handler(VisibilityNotifyEvent)
     def handle_visibility_notify(self, event):

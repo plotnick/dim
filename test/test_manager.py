@@ -16,7 +16,7 @@ from event import *
 from geometry import *
 from keymap import *
 from manager import *
-from properties import WMState, WMSizeHints, WMHints
+from properties import WindowProperty, WMState, WMSizeHints, WMHints
 from xutil import *
 
 ms = 1e-3 # one millisecond; useful for sleep times
@@ -504,6 +504,63 @@ class TestWMClientMoveResize(WMTestCase):
                            (self.client.frame_geometry ==
                             self.initial_geometry.resize(geometry.size(),
                                                          gravity=gravity))))
+
+class TransientTestClient(TestClient):
+    def __init__(self, geometry, transient_for, **kwargs):
+        super(TransientTestClient, self).__init__(geometry, **kwargs)
+
+        assert isinstance(transient_for, TestClient)
+        self.transient_for = transient_for.window
+
+    @property
+    def transient_for(self):
+        reply = self.conn.core.GetProperty(False, self.window,
+                                           self.atoms["WM_TRANSIENT_FOR"],
+                                           self.atoms["WINDOW"],
+                                           0, 1)
+        return WindowProperty.unpack(reply.value.buf())
+
+    @transient_for.setter
+    def transient_for(self, window):
+        window = WindowProperty(window)
+        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
+                                             self.atoms["WM_TRANSIENT_FOR"],
+                                             self.atoms["WINDOW"],
+                                             *window.change_property_args()).check()
+
+class TestWMTransient(WMTestCase):
+    def setUp(self):
+        super(TestWMTransient, self).setUp()
+
+        self.client = TestClient(Geometry(0, 0, 100, 100, 1))
+        self.transient = TransientTestClient(Geometry(50, 50, 10, 10, 0),
+                                             self.client)
+        self.add_client(self.client)
+        self.add_client(self.transient)
+
+        self.client.map()
+        self.transient.map()
+        self.loop(lambda: (self.client.mapped and
+                           self.client.managed and
+                           self.transient.mapped and
+                           self.transient.managed))
+
+    def test_iconfify_with_transient(self):
+        """Iconify client with transient"""
+        self.client.iconify()
+        self.loop(lambda: (not self.client.mapped and
+                           not self.transient.mapped))
+
+    def test_normalize_with_transient(self):
+        """Normalize client with transient"""
+        self.client.iconify()
+        self.transient.iconify()
+        self.loop(lambda: (not self.client.mapped and
+                           not self.transient.mapped))
+
+        self.client.map()
+        self.loop(lambda: (self.client.mapped and
+                           self.transient.mapped))
 
 class EventLoopTester(WindowManager):
     """A window manager that records the number of ConfigureNotify events
