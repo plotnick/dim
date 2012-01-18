@@ -352,7 +352,9 @@ class Client(EventHandler):
         with self.disable_structure_notify():
             self.conn.core.UnmapWindow(self.window)
 
-    def undecorate(self, destroyed=False):
+    def undecorate(self, destroyed=False, reparented=False):
+        """Remove all decorations from the client window, and (maybe)
+        reparent it back to the root window."""
         if self.decorated:
             try:
                 self.decorator.undecorate()
@@ -364,25 +366,22 @@ class Client(EventHandler):
                 self.decorated = False
 
         if not destroyed:
-            self.log.debug("Reparenting back to root window 0x%x.",
-                           self.screen.root)
-
-            # Compute the new window geometry based on the current frame
-            # geometry, the original border width, and the window gravity.
             bw = self.original_border_width
-            size = self.geometry.size()
-            gravity = self.properties.wm_normal_hints.win_gravity
-            geometry = self.frame_geometry.resize(size, bw, gravity)
-
             self.conn.core.ConfigureWindow(self.window,
                                            ConfigWindow.BorderWidth,
                                            [bw])
-            with self.disable_structure_notify():
-                self.conn.core.ReparentWindow(self.window,
-                                              self.screen.root,
-                                              geometry.x,
-                                              geometry.y)
-            self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
+            if not reparented:
+                self.log.debug("Reparenting back to root window 0x%x.",
+                               self.screen.root)
+                size = self.geometry.size()
+                gravity = self.properties.wm_normal_hints.win_gravity
+                geometry = self.frame_geometry.resize(size, bw, gravity)
+                with self.disable_structure_notify():
+                    self.conn.core.ReparentWindow(self.window,
+                                                  self.screen.root,
+                                                  geometry.x,
+                                                  geometry.y)
+                    self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
 
         self.conn.core.DestroyWindow(self.frame)
         self.frame = None

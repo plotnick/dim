@@ -2,6 +2,7 @@
 
 """A window manager manages the children of the root window of a screen."""
 
+from collections import deque
 import logging
 from functools import wraps
 from select import select
@@ -44,14 +45,14 @@ class WindowManagerProperties(PropertyManager):
 
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.
-    That is, if the next event is available and of the same type as the current
-    event, it is handled by simply returning and waiting for the next event.
-    Otherwise, the normal handler is invoked as usual.
+    That is, if another event of the same type is available on the same
+    window, the current event is ignored. Otherwise, the normal handler
+    is invoked as usual.
 
     Depends on the event interface defined used by the WindowManager class."""
     @wraps(handler)
     def compressed_handler(self, event):
-        if isinstance(self.peek_next_event(), type(event)):
+        if self.check_typed_window_event(event_window(event), type(event)):
             raise StopPropagation(event)
         return handler(self, event)
     return compressed_handler
@@ -113,7 +114,7 @@ class WindowManager(EventHandler):
                                               self.screen.root,
                                               self.atoms)
         self.focus_new_windows = focus_new_windows
-        self.next_event = None
+        self.events = deque([])
         self.window_handlers = {}
         self.init_graphics()
 
@@ -217,12 +218,12 @@ class WindowManager(EventHandler):
         self.place(client, client.absolute_geometry)
         return client
 
-    def unmanage(self, client, destroyed=False):
+    def unmanage(self, client, **kwargs):
         """Unmanage the given client."""
         log.debug("Unmanaging client window 0x%x.", client.window)
         del self.clients[client.window]
         del self.frames[client.frame]
-        client.undecorate(destroyed)
+        client.undecorate(**kwargs)
         return client
 
     def establish_grabs(self, window):
@@ -321,32 +322,46 @@ class WindowManager(EventHandler):
         wlist = []
         xlist = []
         while True:
-            while True:
-                event = self.get_next_event()
-                if event:
-                    try:
-                        self.handle_event(event)
-                    except ExitWindowManager:
-                        self.shutdown()
-                        return
-                else:
-                    break
-            self.conn.flush()
+            while self.get_pending_events():
+                try:
+                    self.handle_event(self.events.popleft())
+                except ExitWindowManager:
+                    self.shutdown()
+                    return
             select(rlist, wlist, xlist)
 
-    def peek_next_event(self):
-        if self.next_event is None:
-            self.next_event = self.get_next_event()
-        return self.next_event
+    def get_pending_events(self):
+        while True:
+            event = self.conn.poll_for_event()
+            if event:
+                self.events.append(event)
+            else:
+                break
+        self.conn.flush()
+        return self.events
 
-    def get_next_event(self):
-        if self.next_event:
-            try:
-                return self.next_event
-            finally:
-                self.next_event = None
-        else:
-            return self.conn.poll_for_event()
+    def put_back_event(self, event):
+        """Push an event back onto the head of the event queue."""
+        self.events.appendleft(event)
+
+    def check_event(self, test):
+        """Search the event queue for an event that satisfies the given test,
+        which must be a function of one argument. If a match is found, it
+        is removed from the queue and returned."""
+        for i, event in enumerate(self.get_pending_events()):
+            if test(event):
+                del self.events[i]
+                return event
+
+    def check_typed_event(self, event_type):
+        """Search the event queue for an event of the given type."""
+        return self.check_event(lambda event: type(event) == event_type)
+
+    def check_typed_window_event(self, window, event_type):
+        """Search the event queue for an event on the given window and
+        of the given type."""
+        return self.check_event(lambda event: (type(event) == event_type and
+                                               event_window(event) == window))
 
     def handle_event(self, event):
         handler = self.window_handlers.get(event_window(event), None)
@@ -477,12 +492,18 @@ class WindowManager(EventHandler):
         if event.from_configure:
             return
         log.debug("Window 0x%x unmapped.", event.window)
-        client = self.get_client(event.window, True)
-        if (client and
-            (client.window == event.event or is_synthetic_event(event))):
-            # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
-            client.withdraw()
-            self.unmanage(client)
+        e = self.check_typed_window_event(event.window, DestroyNotifyEvent)
+        if e:
+            self.handle_event(e)
+        else:
+            client = self.get_client(event.window, True)
+            if (client and
+                (client.window == event.event or is_synthetic_event(event))):
+                # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
+                client.withdraw()
+                reparented = self.check_typed_window_event(event.window,
+                                                           ReparentNotifyEvent)
+                self.unmanage(client, destroyed=False, reparented=reparented)
 
     @handler(MappingNotifyEvent)
     def handle_mapping_notify(self, event):
