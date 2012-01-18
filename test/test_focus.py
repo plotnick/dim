@@ -25,9 +25,11 @@ def center(geometry):
     return geometry.position() + geometry.size() // 2 + Position(bw, bw)
 
 class FocusTestClient(TestClient):
-    def __init__(self, geometry, screen=None, event_mask=EventMask.FocusChange,
+    def __init__(self, geometry, screen=None,
+                 event_mask=EventMask.FocusChange,
                  input_hint=None):
-        super(FocusTestClient, self).__init__(geometry, screen, event_mask)
+        super(FocusTestClient, self).__init__(geometry, screen,
+                                              event_mask=event_mask)
         self.focused = False
         if input_hint is not None:
             self.wm_hints = WMHints(input=input_hint)
@@ -112,8 +114,11 @@ class FocusPolicyTestCase(WMTestCase):
         client = FocusTestClient(geometry, **kwargs)
         self.add_client(client)
         client.map()
-        test = ((lambda: client.mapped and client.managed) if managed else
-                (lambda: client.mapped))
+        test = ((lambda: (client.mapped and
+                          client.managed and
+                          client.reparented))
+                if managed
+                else lambda: client.mapped)
         self.loop(test)
         return client
 
@@ -144,9 +149,7 @@ class SharedFocusPolicyTests(object):
         """Ensure that we can focus the window under the pointer"""
         geometry = Geometry(0, 0, 100, 100, 1)
         self.warp_pointer(*center(geometry))
-        client = self.make_client(geometry)
-        client.map()
-        self.focus(client)
+        self.focus(self.make_client(geometry))
 
     def test_steal_focus(self):
         """Focus stealing"""
