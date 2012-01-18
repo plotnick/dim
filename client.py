@@ -52,6 +52,7 @@ class Client(EventHandler):
                          EventMask.StructureNotify)
 
     frame_event_mask = (EventMask.SubstructureRedirect |
+                        EventMask.SubstructureNotify |
                         EventMask.EnterWindow |
                         EventMask.VisibilityChange)
 
