@@ -265,9 +265,8 @@ class WindowManager(EventHandler):
                                           button, locks | modifiers)
 
     def place(self, client, requested_geometry, resize_only=False):
-        """Determine and configure a suitable geometry for the client frame
-        (or top-level window, if there is no frame). This may, but need not,
-        utilize the geometry the client requested."""
+        """Determine and configure a suitable geometry for the client's frame.
+        This may, but need not, utilize the geometry the client requested."""
         if resize_only:
             client.resize(requested_geometry.size(),
                           requested_geometry.border_width)
