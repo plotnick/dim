@@ -490,21 +490,22 @@ class WindowManager(EventHandler):
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         """Note the unmapping of a top-level window."""
-        if event.from_configure:
+        if event.from_configure or event.window != event.event:
             return
-        log.debug("Window 0x%x unmapped.", event.window)
+        client = self.get_client(event.window, True)
+        if not client:
+            return
+        log.debug("Client window 0x%x unmapped.", event.window)
         e = self.check_typed_window_event(event.window, DestroyNotifyEvent)
         if e:
+            # Ignore the UnmapNotify.
             self.handle_event(e)
         else:
-            client = self.get_client(event.window, True)
-            if (client and
-                (client.window == event.event or is_synthetic_event(event))):
-                # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
-                client.withdraw()
-                reparented = self.check_typed_window_event(event.window,
-                                                           ReparentNotifyEvent)
-                self.unmanage(client, destroyed=False, reparented=reparented)
+            # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
+            client.withdraw()
+            reparented = self.check_typed_window_event(event.window,
+                                                       ReparentNotifyEvent)
+            self.unmanage(client, destroyed=False, reparented=reparented)
 
     @handler(MappingNotifyEvent)
     def handle_mapping_notify(self, event):
