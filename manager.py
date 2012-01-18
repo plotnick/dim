@@ -484,6 +484,7 @@ class WindowManager(EventHandler):
             # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
             client.normalize()
             if self.focus_new_windows:
+                log.debug("Ensuring focus of new window 0x%x.", client.window)
                 self.ensure_focus(client)
 
     @handler(UnmapNotifyEvent)

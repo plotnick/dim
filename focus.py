@@ -124,14 +124,6 @@ class FocusPolicy(WindowManager):
             else:
                 self.unfocus(client)
 
-    @handler(MapNotifyEvent)
-    def handle_map_notify(self, event):
-        if event.override_redirect:
-            return
-        if event.window == event.event:
-            self.__log.debug("Ensuring focus due to MapNotify event.")
-            self.ensure_focus()
-
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         if event.from_configure:
