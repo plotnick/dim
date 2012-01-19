@@ -107,6 +107,12 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                 rollback=dismiss)
         minibuffer.map(event.time)
 
+    def debug(self, event):
+        self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
+                                            InputFocus.PointerRoot,
+                                            event.time).check()
+        pdb.set_trace()
+
     def activate_screen_saver(self, event):
         # This function must be bound to a release event, since otherwise,
         # the corresponding release event will immediately wake up the
@@ -121,6 +127,7 @@ key_bindings = {
     ("control", "meta", XK_Return): terminal,
     ("control", "meta", XK_Tab): BaseWM.tagset,
     ("control", "meta", XK_space): BaseWM.shell_command,
+    ("control", XK_Pause): BaseWM.debug,
     -XK_Pause: BaseWM.activate_screen_saver
 }
 
