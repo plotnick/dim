@@ -56,7 +56,7 @@ class Minibuffer(InputField):
                 that currently contains the pointer. Otherwise, return the
                 geometry of the root window."""
                 if self.manager.crtcs:
-                    pointer = query_pointer(self.conn, self.manager.screen.root)
+                    pointer = query_pointer(self.conn, self.manager.screen)
                     for geometry in self.manager.crtcs.values():
                         if pointer in geometry:
                             return geometry

@@ -489,7 +489,7 @@ class MoveResize(WindowManager):
     def handle_motion_notify(self, event):
         if not self.client_update:
             return
-        self.client_update.update(query_pointer(self.conn, self.screen.root)
+        self.client_update.update(query_pointer(self.conn, self.screen)
                                   if event.detail == Motion.Hint
                                   else Position(event.root_x, event.root_y))
 
@@ -506,5 +506,5 @@ class MoveResize(WindowManager):
             self.client_update = None
         elif keysym == XK_space:
             self.client_update.cycle_gravity(query_pointer(self.conn,
-                                                           self.screen.root),
+                                                           self.screen),
                                              event.time)

@@ -179,9 +179,11 @@ def query_extension(connection, name, key):
     ext = connection.core.QueryExtension(len(name), name).reply()
     return connection(key) if ext.present else None
 
-def query_pointer(connection, root):
-    """Return the current pointer position relative to the given root window."""
-    reply = connection.core.QueryPointer(root).reply()
+def query_pointer(connection, screen):
+    """Return the current pointer position."""
+    if isinstance(screen, int):
+        screen = connection.get_setup().roots[screen]
+    reply = connection.core.QueryPointer(screen.root).reply()
     return Position(reply.root_x, reply.root_y)
 
 def select_values(value_mask, values):
