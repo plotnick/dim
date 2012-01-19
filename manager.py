@@ -45,15 +45,20 @@ class WindowManagerProperties(PropertyManager):
 
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.
-    That is, if another event of the same type is available on the same
-    window, the current event is ignored. Otherwise, the normal handler
-    is invoked as usual.
+    That is, it ignores all but the last available event of the same type and
+    on the same window as the original event.
 
-    Depends on the event interface defined used by the WindowManager class."""
+    Depends on the event interface defined by the WindowManager class."""
     @wraps(handler)
     def compressed_handler(self, event):
-        if self.check_typed_window_event(event_window(event), type(event)):
-            raise StopPropagation(event)
+        window = event_window(event)
+        event_type = type(event)
+        while True:
+            next_event = self.check_typed_window_event(window, event_type)
+            if next_event:
+                event = next_event
+            else:
+                break
         return handler(self, event)
     return compressed_handler
 
