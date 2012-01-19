@@ -87,6 +87,13 @@ class FocusPolicy(WindowManager):
         """Note that a client no longer has the input focus."""
         client.unfocus()
 
+    @property
+    def current_focus(self):
+        try:
+            return self.focus_list[0]
+        except IndexError:
+            return super(FocusPolicy, self).current_focus
+
     def ensure_focus(self, client=None, time=Time.CurrentTime):
         """Send a message to ourselves requesting that some client receive
         the input focus. If the client argument is provided, it must be
@@ -126,12 +133,10 @@ class FocusPolicy(WindowManager):
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        if event.from_configure:
+        if event.from_configure or event.window != event.event:
             return
         client = self.get_client(event.window, True)
-        if (client and
-            client.window == event.event and
-            self.focus_list and client is self.focus_list[0]):
+        if client and client == self.current_focus:
             # Losing the current focus; try to focus another window.
             self.__log.debug("Ensuring focus due to UnmapNotify event.")
             self.ensure_focus()

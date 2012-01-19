@@ -297,6 +297,16 @@ class WindowManager(EventHandler):
                                border_width,
                                gravity)
 
+    @property
+    def current_focus(self):
+        """Return the client that currently has the input focus."""
+        window = get_input_focus(self.conn, self.screen_number)
+        while window:
+            client = self.get_client(window)
+            if client:
+                return client
+            window = self.conn.core.QueryTree(window).reply().parent
+
     def ensure_focus(self, client=None, time=Time.CurrentTime):
         """Make a best-effort attempt to ensure that some client has the
         input focus."""
