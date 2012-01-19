@@ -108,13 +108,24 @@ class InputField(Widget):
         timer.start()
 
     @handler(KeyPressEvent)
-    def handle_key_press(self, event, shift=frozenset(["shift"])):
+    def handle_key_press(self, event,
+                         shift=frozenset(["shift"]),
+                         modifiers=(XK_Shift_L, XK_Shift_R,
+                                    XK_Control_L, XK_Control_R,
+                                    XK_Caps_Lock, XK_Shift_Lock,
+                                    XK_Meta_L, XK_Meta_R,
+                                    XK_Alt_L, XK_Alt_R,
+                                    XK_Super_L, XK_Super_R,
+                                    XK_Hyper_L, XK_Hyper_R)):
         try:
             action = self.key_bindings[event]
         except KeyError as e:
             # No binding; assume a self-inserting character unless any
-            # interesting modifiers are present.
+            # interesting modifiers are active or the key is itself a
+            # modifier.
             symbol, state, press = e.args
+            if symbol in modifiers:
+                return
             modset = next(self.key_bindings.modsets(state))
             if modset and modset != shift:
                 self.flash()
