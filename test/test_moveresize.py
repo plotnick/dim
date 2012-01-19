@@ -16,7 +16,15 @@ from xutil import int16
 
 from test_manager import EventType, TestClient, WMTestCase, WarpedPointer
 
+class MockKeyboardMap(object):
+    def scry_modifiers(self, modmap):
+        pass
+
 class MockManager(object):
+    def __init__(self):
+        self.keymap = MockKeyboardMap()
+        self.modmap = {}
+
     def constrain_position(self, client, position):
         return position
 

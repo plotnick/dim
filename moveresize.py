@@ -4,7 +4,7 @@ import logging
 
 from xcb.xproto import *
 
-from bindings import event_mask
+from bindings import *
 from cursor import *
 from event import handler
 from geometry import *
@@ -292,6 +292,11 @@ class EdgeResistance(AlignWindowEdges, CRTCEdgeResistance):
 class ClientUpdate(object):
     """A transactional client configuration change."""
 
+    key_binding_map = KeyBindingMap({
+        XK_Escape: lambda self, event: self.rollback(event.time),
+        XK_Return: lambda self, event: self.commit(event.time)
+    })
+
     def __init__(self, client, pointer, cleanup, change_cursor):
         self.client = client
         self.pointer = pointer
@@ -299,6 +304,9 @@ class ClientUpdate(object):
         self.change_cursor = change_cursor
         self.geometry = client.absolute_geometry
         self.frame_geometry = client.frame_geometry
+        self.key_bindings = KeyBindings(self.key_binding_map,
+                                        self.client.manager.keymap,
+                                        self.client.manager.modmap)
 
     def delta(self, pointer):
         return pointer - self.pointer
@@ -318,7 +326,7 @@ class ClientUpdate(object):
     def display_geometry(self, geometry):
         self.client.decorator.message(unicode(geometry))
 
-    def cycle_gravity(self, pointer, time):
+    def cycle_gravity(self, time):
         pass
 
     def move(self, position):
@@ -361,6 +369,10 @@ class ClientResize(ClientUpdate):
                (+0, +1): XC_bottom_side,
                (+1, +1): XC_bottom_right_corner}
 
+    key_binding_map = KeyBindingMap({
+        XK_space: lambda self, event: self.cycle_gravity(event.time)
+    }, parent=ClientUpdate.key_binding_map)
+
     def __init__(self, *args):
         super(ClientResize, self).__init__(*args)
         self.initial_geometry = self.geometry
@@ -401,7 +413,7 @@ class ClientResize(ClientUpdate):
         self.client.configure(self.initial_geometry)
         super(ClientResize, self).rollback(time)
 
-    def cycle_gravity(self, pointer, time,
+    def cycle_gravity(self, time,
                       gravities=sorted(offset_gravity(None),
                                        key=lambda x: x.phase())):
         i = gravities.index(self.gravity)
@@ -409,8 +421,8 @@ class ClientResize(ClientUpdate):
         self.change_cursor(self.cursors[self.gravity], time)
         self.geometry = self.client.absolute_geometry
         self.frame_geometry = self.client.frame_geometry
-        self.pointer = pointer
-        self.update(pointer)
+        self.pointer = query_pointer(self.client.conn, self.client.screen)
+        self.update(self.pointer)
 
 class MoveResize(WindowManager):
     __grab_event_mask = (EventMask.ButtonPress |
@@ -446,10 +458,11 @@ class MoveResize(WindowManager):
                                                               gravity=gravity)
         return requested
 
-    def cleanup_client_update(self, time=Time.CurrentTime):
+    def end_client_update(self, time=Time.CurrentTime):
         self.client_update.resistance.cleanup(time)
         self.conn.core.UngrabPointer(time)
         self.conn.core.UngrabKeyboard(time)
+        self.client_update = None
 
     def change_client_update_cursor(self, cursor, time=Time.CurrentTime):
         self.conn.core.ChangeActivePointerGrab(self.cursors[cursor], time,
@@ -470,7 +483,7 @@ class MoveResize(WindowManager):
             return
         self.client_update = update(client,
                                     Position(event.root_x, event.root_y),
-                                    self.cleanup_client_update,
+                                    self.end_client_update,
                                     self.change_client_update_cursor)
         self.client_update.resistance = EdgeResistance(client)
         self.client_update.button = event.detail
@@ -482,7 +495,6 @@ class MoveResize(WindowManager):
         if not self.client_update or event.detail != self.client_update.button:
             return
         self.client_update.commit(event.time)
-        self.client_update = None
 
     @handler(MotionNotifyEvent)
     @compress
@@ -497,14 +509,8 @@ class MoveResize(WindowManager):
     def handle_key_press(self, event):
         if not self.client_update:
             return
-        keysym = self.keymap.lookup_key(event.detail, event.state)
-        if keysym == XK_Escape:
-            self.client_update.rollback(event.time)
-            self.client_update = None
-        elif keysym == XK_Return:
-            self.client_update.commit(event.time)
-            self.client_update = None
-        elif keysym == XK_space:
-            self.client_update.cycle_gravity(query_pointer(self.conn,
-                                                           self.screen),
-                                             event.time)
+        try:
+            action = self.client_update.key_bindings[event]
+        except KeyError:
+            return
+        action(self.client_update, event)
