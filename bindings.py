@@ -75,12 +75,22 @@ class BindingMap(dict):
     Symbols are either keysyms or logical button numbers; the ensure_symbol
     method should accept a symbol designator and return the corresponding
     symbol. If the symbol is positive, the binding is for a press event; if
-    negative, for the release of the symbol's absolute value."""
+    negative, for the release of the symbol's absolute value.
+
+    A simple (single-inheritance) hierarchy of bindings is supported. If a
+    binding is not found in a binding map, it will be recursively looked up
+    in the parent map if there is one.
+
+    Finally, symbols may be aliased to other symbols. This is convenient
+    for, e.g., symbols on the numeric keypad (see keypad_aliases, above).
+    Aliases are also inherited from the parent map, if there is one, with
+    the child's aliases overriding those of the parent."""
 
     def __init__(self, mapping, parent=None, aliases={}):
         super(BindingMap, self).__init__(self.parse_bindings(mapping))
         self.parent = parent
-        self.aliases = aliases
+        self.aliases = dict(parent.aliases if parent else [])
+        self.aliases.update(aliases)
 
     def parse_bindings(self, bindings):
         """Given either a mapping object or a sequence of (key, value)
@@ -195,9 +205,9 @@ class Bindings(object):
     def __getitem__(self, key):
         """Return the binding associated with the key (symbol, state, press)."""
         symbol, state, press = key
+        symbol = self.bindings.aliases.get(symbol, symbol)
         bindings = self.bindings
         while bindings:
-            symbol = bindings.aliases.get(symbol, symbol)
             for modset in self.modsets(state):
                 try:
                     return bindings[(modset, symbol, press)]

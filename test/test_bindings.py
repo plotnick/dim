@@ -96,12 +96,21 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_KP_1, num_lock, "1")
         self.assertKeyBinding(XK_KP_1, num_lock | ModMask.Shift, "end")
 
-    def test_bindings_parent(self):
-        base_bindings = KeyBindingMap({XK_1: "1"})
-        child_bindings = KeyBindingMap({XK_2: "2"}, parent=base_bindings)
+    def test_binding_inheritance(self):
+        # We'll need a NumLock modifier for this test, too.
+        num_lock = self.keymap.num_lock
+        self.assertNotEqual(num_lock, 0)
+
+        base_bindings = KeyBindingMap({XK_1: "1"},
+                                      aliases={XK_KP_1: XK_1})
+        child_bindings = KeyBindingMap({XK_2: "2"},
+                                       parent=base_bindings,
+                                       aliases={XK_KP_2: XK_2})
         self.bindings = KeyBindings(child_bindings, self.keymap, self.modmap)
         self.assertKeyBinding(XK_1, 0, "1")
+        self.assertKeyBinding(XK_KP_1, num_lock, "1")
         self.assertKeyBinding(XK_2, 0, "2")
+        self.assertKeyBinding(XK_KP_2, num_lock, "2")
 
     def test_key_bindings_modifiers(self):
         # In this test we'll assume that alt and meta are both bound,
