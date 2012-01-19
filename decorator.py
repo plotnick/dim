@@ -122,8 +122,8 @@ class Titlebar(Widget):
 
     def draw(self):
         # Fill the titlebar with the background color.
-        w = self.geometry.width - 1
-        h = self.geometry.height - 2
+        w = max(self.geometry.width - 1, 0)
+        h = max(self.geometry.height - 2, 0)
         self.conn.core.PolyFillRectangle(self.window, self.config.bg_gc,
                                          1, [0, 0, w, h])
 
