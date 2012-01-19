@@ -107,6 +107,13 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                 rollback=dismiss)
         minibuffer.map(event.time)
 
+    def delete_window(self, event):
+        client = self.current_focus
+        if client:
+            client.delete(event.time)
+        else:
+            log.warning("Can't get current input focus.")
+
     def debug(self, event):
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
                                             InputFocus.PointerRoot,
@@ -126,6 +133,7 @@ def terminal(*args):
 key_bindings = {
     ("control", "meta", XK_Return): terminal,
     ("control", "meta", XK_Tab): BaseWM.tagset,
+    ("control", "meta", XK_Escape): BaseWM.delete_window,
     ("control", "meta", XK_space): BaseWM.shell_command,
     ("control", XK_Pause): BaseWM.debug,
     -XK_Pause: BaseWM.activate_screen_saver

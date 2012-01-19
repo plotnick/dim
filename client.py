@@ -162,6 +162,15 @@ class Client(EventHandler):
                                                       CW.EventMask,
                                                       [self.client_event_mask])
 
+    def send_client_message(self, message, time):
+        """Send a protocol message to the client."""
+        if message in self.properties.wm_protocols:
+            send_client_message(self.conn, self.window, self.window, 0,
+                                32, self.atoms["WM_PROTOCOLS"],
+                                [message, time, 0, 0, 0])
+            return True
+        return False
+
     @property
     def geometry(self):
         """Return the client window geometry relative to its parent's origin."""
@@ -330,12 +339,8 @@ class Client(EventHandler):
             if (self.properties.wm_hints.flags & WMHints.InputHint == 0 or
                 self.properties.wm_hints.input):
                 self.focus_time = set_input_focus(self.window, time)
-            if self.atoms["WM_TAKE_FOCUS"] in self.properties.wm_protocols:
+            if self.send_client_message(self.atoms["WM_TAKE_FOCUS"], time):
                 self.log.debug("Taking input focus at time %d.", time)
-                send_client_message(self.conn, self.window, self.window, 0,
-                                    32, self.atoms["WM_PROTOCOLS"],
-                                    [self.atoms["WM_TAKE_FOCUS"], time,
-                                     0, 0, 0])
                 self.focus_time = time
         return self.focus_time is not None
 
@@ -427,6 +432,10 @@ class Client(EventHandler):
         """Transition to the Withdrawn state."""
         self.log.debug("Entering Withdrawn state.")
         self.properties.wm_state = WMState(WMState.WithdrawnState)
+
+    def delete(self, time=Time.CurrentTime):
+        """Ask the client to delete its top-level window."""
+        self.send_client_message(self.atoms["WM_DELETE_WINDOW"], time)
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
