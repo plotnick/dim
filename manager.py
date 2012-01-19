@@ -539,7 +539,7 @@ class WindowManager(EventHandler):
                                     event.state == Property.Delete,
                                     event.time)
 
-    @handler(KeyPressEvent)
+    @handler((KeyPressEvent, KeyReleaseEvent))
     def handle_key_press(self, event):
         try:
             action = self.key_bindings[event]
@@ -547,7 +547,7 @@ class WindowManager(EventHandler):
             return
         action(self, event)
 
-    @handler(ButtonPressEvent)
+    @handler((ButtonPressEvent, ButtonReleaseEvent))
     def handle_button_press(self, event):
         try:
             action = self.button_bindings[event]

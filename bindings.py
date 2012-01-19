@@ -69,12 +69,13 @@ def ensure_keysym(x):
 class BindingMap(dict):
     """A dictionary of bindings which is parsed at initialization time.
 
-    A binding maps a symbol together with a set of modifiers to some value.
-    The former is represented by a designator for a sequence whose last
-    element is a designator for a symbol and whose other elements are
-    modifier names. The symbol is either a designator for a keysym or a
-    logical button number; the ensure_symbol method should accept such a
-    designator and return a corresponding symbol."""
+    A binding maps keys of the form (modset, symbol, press) to opaque
+    values. Such keys are designated by sequences whose last element is a
+    designator for a symbol and whose other elements are modifier names.
+    Symbols are either keysyms or logical button numbers; the ensure_symbol
+    method should accept a symbol designator and return the corresponding
+    symbol. If the symbol is positive, the binding is for a press event; if
+    negative, for the release of the symbol's absolute value."""
 
     def __init__(self, mapping, parent=None, aliases={}):
         super(BindingMap, self).__init__(self.parse_bindings(mapping))
@@ -85,7 +86,9 @@ class BindingMap(dict):
         """Given either a mapping object or a sequence of (key, value)
         pairs, parse the keys as binding specifications and yield new
         (key, value) tuples, where each key is a tuple consisting of a
-        (possibly empty) frozen set of modifiers and a symbol."""
+        (possibly empty) frozen set of modifiers, a symbol, and a boolean
+        indicating whether the binding is for a press (true) or a release
+        (false)."""
         try:
             iterable = bindings.iteritems()
         except AttributeError:
@@ -94,7 +97,8 @@ class BindingMap(dict):
             key = ensure_sequence(key)
             modifiers = frozenset(mod.lower() for mod in key[:-1])
             symbol = self.ensure_symbol(key[-1])
-            yield ((modifiers, symbol), self.normalize_value(value))
+            yield ((modifiers, abs(symbol), symbol > 0),
+                   self.normalize_value(value))
 
 class KeyBindingMap(BindingMap):
     def ensure_symbol(self, x):
@@ -139,8 +143,9 @@ class Bindings(object):
     the current keyboard, modifier, and pointer button maps. Modifiers are
     handled by generating all of the possible sets of symbolic modifiers
     that correspond to a given physical state. Together, those two objects
-    (the symbol and the modifier set) provide a key for lookup in the
-    appropriate bindings table."""
+    (the symbol and the modifier set) together with a boolean representing
+    whether the event is a press or release (press=True, release=False)
+    provide a key for lookup in the appropriate bindings table."""
 
     def __init__(self, bindings, keymap, modmap):
         self.bindings = bindings
@@ -188,18 +193,18 @@ class Bindings(object):
             yield frozenset(filter(None, modlist))
 
     def __getitem__(self, key):
-        """Return the binding associated with the key (symbol, state)."""
-        symbol, state = key
+        """Return the binding associated with the key (symbol, state, press)."""
+        symbol, state, press = key
         bindings = self.bindings
         while bindings:
             symbol = bindings.aliases.get(symbol, symbol)
             for modset in self.modsets(state):
                 try:
-                    return bindings[(modset, symbol)]
+                    return bindings[(modset, symbol, press)]
                 except KeyError:
                     continue
             bindings = bindings.parent
-        raise KeyError(symbol, state)
+        raise KeyError(symbol, state, press)
 
 class KeyBindings(Bindings):
     def __init__(self, bindings, keymap, modmap):
@@ -209,20 +214,18 @@ class KeyBindings(Bindings):
         super(KeyBindings, self).__init__(bindings, keymap, modmap)
 
     def __getitem__(self, key):
-        """Given a keycode and a bitmask of modifier bits (which may be
-        implicit in a KeyPress/KeyRelease event or provided as a tuple),
-        return the binding associated with the corresponding keysym and
-        set of modifier names."""
-        if isinstance(key, (KeyPressEvent, KeyReleaseEvent)):
-            key = (key.detail, key.state)
-        keycode, state = key
+        if isinstance(key, KeyPressEvent):
+            key = (key.detail, key.state, True)
+        elif isinstance(key, KeyReleaseEvent):
+            key = (key.detail, key.state, False)
+        keycode, state, press = key
         keysym = self.keymap.lookup_key(keycode, state)
-        return super(KeyBindings, self).__getitem__((keysym, state))
+        return super(KeyBindings, self).__getitem__((keysym, state, press))
 
     def grabs(self):
         """Yield tuples of the form (modifiers, keycode) suitable for
         establishing passive key grabs for all of the current key bindings."""
-        for modset, symbol in self.bindings.keys():
+        for modset, symbol, press in self.bindings.keys():
             modifiers = self.bucky_bits(modset)
             for keycode in self.keymap.keysym_to_keycodes(symbol):
                 yield (modifiers, keycode)
@@ -235,15 +238,13 @@ class ButtonBindings(Bindings):
         super(ButtonBindings, self).__init__(bindings, keymap, modmap)
 
     def __getitem__(self, key):
-        """Given a physical button number and a bitmask of modifier bits
-        (which may be implicit in a ButtonPress/ButtonRelease event or
-        provided as a tuple), return the binding associated with the
-        corresponding logical button number and set of modifier names."""
-        if isinstance(key, (ButtonPressEvent, ButtonReleaseEvent)):
-            key = (key.detail, key.state)
-
+        if isinstance(key, ButtonPressEvent):
+            key = (key.detail, key.state, True)
+        elif isinstance(key, ButtonReleaseEvent):
+            key = (key.detail, key.state, False)
+        button, state, press = key
+        value = super(ButtonBindings, self).__getitem__((button, state, press))
         # Return only the action, not the event mask.
-        value = super(ButtonBindings, self).__getitem__(key)
         return value[1]
 
     def grabs(self):
@@ -251,7 +252,7 @@ class ButtonBindings(Bindings):
         for establishing passive button grabs for all of the current button
         bindings."""
         for key, value in self.bindings.items():
-            modset, button = key
+            modset, button, press = key
             mask, action = value
             modifiers = self.bucky_bits(modset)
             yield (modifiers, button, mask)

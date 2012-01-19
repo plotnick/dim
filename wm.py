@@ -107,13 +107,21 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                 rollback=dismiss)
         minibuffer.map(event.time)
 
+    def activate_screen_saver(self, event):
+        # This function must be bound to a release event, since otherwise,
+        # the corresponding release event will immediately wake up the
+        # server.
+        assert isinstance(event, (KeyReleaseEvent, ButtonReleaseEvent))
+        self.conn.core.ForceScreenSaverChecked(ScreenSaver.Active).check()
+
 def terminal(*args):
     spawn("xterm")
 
 key_bindings = {
     ("control", "meta", XK_Return): terminal,
     ("control", "meta", XK_Tab): BaseWM.tagset,
-    ("control", "meta", XK_space): BaseWM.shell_command
+    ("control", "meta", XK_space): BaseWM.shell_command,
+    -XK_Pause: BaseWM.activate_screen_saver
 }
 
 button_bindings = {

@@ -114,7 +114,7 @@ class InputField(Widget):
         except KeyError as e:
             # No binding; assume a self-inserting character unless any
             # interesting modifiers are present.
-            symbol, state = e.args
+            symbol, state, press = e.args
             modset = next(self.key_bindings.modsets(state))
             if modset and modset != shift:
                 self.flash()

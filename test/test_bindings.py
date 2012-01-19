@@ -38,20 +38,20 @@ class TestBindings(unittest.TestCase):
     def tearDown(self):
         self.conn.disconnect()
 
-    def assertBinding(self, detail, state, value):
+    def assertBinding(self, key, value):
         if value is not None:
-            self.assertEqual(self.bindings[(detail, state)], value)
+            self.assertEqual(self.bindings[key], value)
         else:
-            self.assertRaises(KeyError, lambda: self.bindings[(detail, state)])
+            self.assertRaises(KeyError, lambda: self.bindings[key])
 
-    def assertKeyBinding(self, keysym, state, value):
+    def assertKeyBinding(self, keysym, state, value, press=True):
         keycode = self.keymap.keysym_to_keycode(keysym)
         self.assertTrue(keycode)
-        self.assertBinding(keycode, state, value)
+        self.assertBinding((keycode, state, press), value)
 
-    def assertButtonBinding(self, button, state, value):
+    def assertButtonBinding(self, button, state, value, press=True):
         self.assertTrue(button)
-        self.assertBinding(button, state, value)
+        self.assertBinding((button, state, press), value)
 
     def test_key_bindings_no_modifiers(self):
         self.bindings = KeyBindings({"a": "key-a", # keysym designator
@@ -65,6 +65,16 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_C, 0, None)
         self.assertKeyBinding(XK_c, ModMask.Shift, "key-C")
         self.assertKeyBinding(XK_C, ModMask.Shift, "key-C")
+
+    def test_key_press_release_bindings(self):
+        self.bindings = KeyBindings({XK_a: "press-a",
+                                     -XK_a: "release-a",
+                                     ("control", -XK_a): "release-C-a"},
+                                     self.keymap,
+                                     self.modmap)
+        self.assertKeyBinding(XK_a, 0, "press-a", press=True)
+        self.assertKeyBinding(XK_a, 0, "release-a", press=False)
+        self.assertKeyBinding(XK_a, ModMask.Control, "release-C-a", press=False)
 
     def test_key_bindings_aliases(self):
         # In this test, we'll assume that NumLock is bound to some modifier,
@@ -119,10 +129,11 @@ class TestBindings(unittest.TestCase):
         self.assertKeyBinding(XK_c, ModMask.Control | meta, "C-A-c")
         self.assertKeyBinding(XK_percent, ModMask.Control | alt, None)
 
-    def test_pointer_bindings(self):
+    def test_button_bindings(self):
         self.bindings = ButtonBindings({1: "button-1",
                                         ("control", 1): "C-button-1",
                                         ("shift", 2): "S-button-2",
+                                        -2: "release-2",
                                         3: "button-3"},
                                        self.keymap,
                                        self.modmap)
@@ -130,6 +141,7 @@ class TestBindings(unittest.TestCase):
         self.assertButtonBinding(1, ModMask.Shift, "button-1")
         self.assertButtonBinding(1, ModMask.Control, "C-button-1")
         self.assertButtonBinding(2, 0, None)
+        self.assertButtonBinding(2, 0, "release-2", press=False)
         self.assertButtonBinding(2, ModMask.Shift, "S-button-2")
         self.assertButtonBinding(3, ModMask.Shift, "button-3")
 
