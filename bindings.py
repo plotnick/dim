@@ -72,10 +72,9 @@ class BindingMap(dict):
     A binding maps keys of the form (modset, symbol, press) to opaque
     values. Such keys are designated by sequences whose last element is a
     designator for a symbol and whose other elements are modifier names.
-    Symbols are either keysyms or logical button numbers; the ensure_symbol
-    method should accept a symbol designator and return the corresponding
-    symbol. If the symbol is positive, the binding is for a press event; if
-    negative, for the release of the symbol's absolute value.
+    Symbols are either keysyms or logical button numbers. If the symbol
+    is positive, the binding is for a press event; if negative, for the
+    release of the symbol's absolute value.
 
     A simple (single-inheritance) hierarchy of bindings is supported. If a
     binding is not found in a binding map, it will be recursively looked up
@@ -110,12 +109,17 @@ class BindingMap(dict):
             yield ((modifiers, abs(symbol), symbol > 0),
                    self.normalize_value(value))
 
+    def ensure_symbol(self, x):
+        """Given a symbol designator, return the designated symbol."""
+        return x
+
+    def normalize_value(self, value):
+        """Perform any necessary value canonicalization."""
+        return value
+
 class KeyBindingMap(BindingMap):
     def ensure_symbol(self, x):
         return ensure_keysym(x)
-
-    def normalize_value(self, value):
-        return value
 
 class ButtonBindingMap(BindingMap):
     def ensure_symbol(self, x):
@@ -142,20 +146,19 @@ def event_mask(mask):
     return set_event_mask
 
 class Bindings(object):
-    """We'd like key and button bindings to be specified using keysyms,
-    logical button numbers, and symbolic modifier names. However, the
-    detail and state fields of X KeyPress/Release and ButtonPress/Release
-    events represent only the physical state of the corresponding device:
-    keycodes, physical buttons, and raw modifier bits.
+    """We'd like key and button bindings to be specified using keysyms
+    and symbolic modifier names. However, the detail and state fields of
+    X KeyPress/Release and ButtonPress/Release events represent only the
+    physical state of the corresponding device: keycodes and modifier bits.
 
     This class provides a mapping from the physical to the logical
-    representation. Keysyms and logical button numbers are resolved using
-    the current keyboard, modifier, and pointer button maps. Modifiers are
-    handled by generating all of the possible sets of symbolic modifiers
-    that correspond to a given physical state. Together, those two objects
-    (the symbol and the modifier set) together with a boolean representing
-    whether the event is a press or release (press=True, release=False)
-    provide a key for lookup in the appropriate bindings table."""
+    representation. Keysyms are resolved using the current keyboard and
+    modifier maps. Modifiers are handled by generating all of the possible
+    sets of symbolic modifiers that correspond to a given physical state.
+    Those two objects (the symbol and the modifier set), together with a
+    boolean representing whether a given event is a press or release
+    (press=True, release=False) provide a key for lookup in the actual
+    bindings map."""
 
     def __init__(self, bindings, keymap, modmap):
         self.bindings = bindings
@@ -164,7 +167,8 @@ class Bindings(object):
         self.keymap.scry_modifiers(self.modmap)
 
     def modifiers(self, bit):
-        """Yield each of the modifiers bound to the given bucky bit."""
+        """Yield the names of each of the modifiers currently bound to the
+        given bucky bit."""
         if bit == KeyButMask.Shift:
             # Shift is special, inasmuch as we allow bindings that explicitly
             # include it as a modifier and ones that implicitly assume it by
@@ -215,6 +219,10 @@ class Bindings(object):
                     continue
             bindings = bindings.parent
         raise KeyError(symbol, state, press)
+
+    def grabs(self):
+        """Yield tuples of values suitable for establishing passive grabs."""
+        pass
 
 class KeyBindings(Bindings):
     def __init__(self, bindings, keymap, modmap):
