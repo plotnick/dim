@@ -573,7 +573,8 @@ class EventLoopTester(WindowManager):
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
-        self.events_received += 1
+        if is_synthetic_event(event):
+            self.events_received += 1
 
 class EventLoopTestCase(WMTestCase):
     def jiggle_window(self, n=100):
