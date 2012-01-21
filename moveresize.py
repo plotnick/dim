@@ -481,14 +481,6 @@ class MoveResize(WindowManager):
         client = self.get_client(event.event)
         if not client or self.client_update:
             return
-        self.conn.core.GrabPointer(False,
-                                   self.screen.root,
-                                   self.__grab_event_mask,
-                                   GrabMode.Async,
-                                   GrabMode.Async,
-                                   Window._None,
-                                   Cursor._None,
-                                   event.time)
         self.conn.core.GrabKeyboard(False,
                                     self.screen.root,
                                     event.time,

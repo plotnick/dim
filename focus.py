@@ -39,7 +39,7 @@ class FocusPolicy(WindowManager):
                                            self.screen.root_visual,
                                            CW.OverrideRedirect,
                                            [True]).check()
-        self.establish_grabs(self.default_focus_window)
+        self.key_bindings.establish_grabs(self.default_focus_window)
         self.conn.core.MapWindow(self.default_focus_window)
 
     def shutdown(self):
@@ -181,7 +181,7 @@ class FocusPolicy(WindowManager):
 
     @handler(MappingNotifyEvent)
     def handle_mapping_notify(self, event):
-        self.establish_grabs(self.default_focus_window)
+        self.key_bindings.establish_grabs(self.default_focus_window)
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer

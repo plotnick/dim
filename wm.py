@@ -8,6 +8,7 @@ import sys
 
 from xcb.xproto import *
 
+from bindings import *
 from color import RGBi
 from daemon import daemon
 from decorator import TitlebarConfig, TitlebarDecorator
@@ -62,6 +63,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                  unfocused_config=self.unfocused_config)
 
     @staticmethod
+    @event_mask(MoveResize.move_window.event_mask)
     def raise_and_move(widget, event):
         manager = widget.manager
         manager.raise_window(event)

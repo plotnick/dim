@@ -1,5 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from operator import or_
 import exceptions
 
 from xcb.xproto import *
@@ -165,6 +166,7 @@ class Bindings(object):
         self.keymap = keymap
         self.modmap = modmap
         self.keymap.scry_modifiers(self.modmap)
+        self.conn = self.keymap.conn
 
     def modifiers(self, bit):
         """Yield the names of each of the modifiers currently bound to the
@@ -220,8 +222,17 @@ class Bindings(object):
             bindings = bindings.parent
         raise KeyError(symbol, state, press)
 
-    def grabs(self):
-        """Yield tuples of values suitable for establishing passive grabs."""
+    def lock_modifiers(self):
+        """Yield combinations of locking modifiers.
+
+        When we establish a passive grab, we'll repeat the grab with all
+        bound combinations of Caps Lock, Num Lock, and Scroll Lock."""
+        locks = [ModMask.Lock, self.keymap.num_lock, self.keymap.scroll_lock]
+        for mods in all_combinations([[0, lock] for lock in locks if lock]):
+            yield reduce(or_, mods)
+
+    def establish_grabs(self, window):
+        """Establish passive grabs for each binding."""
         pass
 
 class KeyBindings(Bindings):
@@ -240,13 +251,17 @@ class KeyBindings(Bindings):
         keysym = self.keymap.lookup_key(keycode, state)
         return super(KeyBindings, self).__getitem__((keysym, state, press))
 
-    def grabs(self):
-        """Yield tuples of the form (modifiers, keycode) suitable for
-        establishing passive key grabs for all of the current key bindings."""
-        for modset, symbol, press in self.bindings.keys():
-            modifiers = self.bucky_bits(modset)
-            for keycode in self.keymap.keysym_to_keycodes(symbol):
-                yield (modifiers, keycode)
+    def establish_grabs(self, window):
+        def grabs():
+            for modset, symbol, press in self.bindings.keys():
+                modifiers = self.bucky_bits(modset)
+                for keycode in self.keymap.keysym_to_keycodes(symbol):
+                    yield (modifiers, keycode)
+        self.conn.core.UngrabKey(Grab.Any, window, ModMask.Any)
+        for modifiers, key in grabs():
+            for locks in self.lock_modifiers():
+                self.conn.core.GrabKey(True, window, locks | modifiers, key,
+                                       GrabMode.Async, GrabMode.Async)
 
 class ButtonBindings(Bindings):
     def __init__(self, bindings, keymap, modmap):
@@ -265,12 +280,18 @@ class ButtonBindings(Bindings):
         # Return only the action, not the event mask.
         return value[1]
 
-    def grabs(self):
-        """Yield tuples of the form (modifiers, button, event-mask) suitable
-        for establishing passive button grabs for all of the current button
-        bindings."""
-        for key, value in self.bindings.items():
-            modset, button, press = key
-            mask, action = value
-            modifiers = self.bucky_bits(modset)
-            yield (modifiers, button, mask)
+    def establish_grabs(self, window):
+        def grabs():
+            for key, value in self.bindings.items():
+                modset, button, press = key
+                mask, action = value
+                modifiers = self.bucky_bits(modset)
+                yield (modifiers, button, mask)
+        self.conn.core.UngrabButton(ButtonIndex.Any, window, ModMask.Any)
+        for modifiers, button, mask in grabs():
+            for locks in self.lock_modifiers():
+                self.conn.core.GrabButton(True, window, mask,
+                                          GrabMode.Async, GrabMode.Async,
+                                          Window._None, Cursor._None,
+                                          button, locks | modifiers)
+

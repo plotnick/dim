@@ -169,7 +169,7 @@ class Widget(EventHandler):
         try:
             action = self.config.key_bindings[event]
         except KeyError:
-            return
+            raise UnhandledEvent(event)
         action(self, event)
 
     @handler((ButtonPressEvent, ButtonReleaseEvent))
@@ -177,5 +177,5 @@ class Widget(EventHandler):
         try:
             action = self.config.button_bindings[event]
         except KeyError:
-            return
+            raise UnhandledEvent(event)
         action(self, event)

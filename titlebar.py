@@ -34,6 +34,11 @@ class Titlebar(Widget):
         super(Titlebar, self).__init__(**kwargs)
         self.client = client
 
+    def create_window(self, *args, **kwargs):
+        window = super(Titlebar, self).create_window(*args, **kwargs)
+        self.config.button_bindings.establish_grabs(window)
+        return window
+
     def draw(self):
         # Fill the titlebar with the background color.
         w = max(self.geometry.width - 1, 0)
