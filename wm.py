@@ -67,7 +67,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     def raise_and_move(widget, event):
         manager = widget.manager
         manager.raise_window(event)
-        manager.move_window(event)
+        manager.move_window(event, move_delta=5)
 
     @staticmethod
     def change_tags(widget, event):

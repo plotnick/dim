@@ -297,11 +297,12 @@ class ClientUpdate(object):
         XK_Return: lambda self, event: self.commit(event.time)
     })
 
-    def __init__(self, client, pointer, cleanup, change_cursor):
+    def __init__(self, client, pointer, cleanup, change_cursor, move_delta=0):
         self.client = client
         self.pointer = pointer
         self.cleanup = cleanup
         self.change_cursor = change_cursor
+        self.move_delta = move_delta
         self.geometry = client.absolute_geometry
         self.frame_geometry = client.frame_geometry
         self.key_bindings = KeyBindings(self.key_binding_map,
@@ -309,7 +310,13 @@ class ClientUpdate(object):
                                         self.client.manager.modmap)
 
     def delta(self, pointer):
-        return pointer - self.pointer
+        dp = pointer - self.pointer
+        if self.move_delta:
+            if abs(dp) < self.move_delta:
+                return Position(0, 0)
+            else:
+                self.move_delta = 0
+        return dp
 
     def update(self, pointer):
         pass
@@ -343,15 +350,15 @@ class ClientUpdate(object):
 class ClientMove(ClientUpdate):
     cursor = XC_fleur
 
-    def __init__(self, *args):
-        super(ClientMove, self).__init__(*args)
+    def __init__(self, *args, **kwargs):
+        super(ClientMove, self).__init__(*args, **kwargs)
         self.position = self.frame_geometry.position()
         self.change_cursor(self.cursor)
-        self.display_geometry(self.position)
+        if not self.move_delta:
+            self.display_geometry(self.position)
 
     def update(self, pointer):
-        delta = self.delta(pointer)
-        self.display_geometry(self.move(self.position + delta))
+        self.display_geometry(self.move(self.position + self.delta(pointer)))
 
     def rollback(self, time=Time.CurrentTime):
         self.move(self.position)
@@ -373,8 +380,8 @@ class ClientResize(ClientUpdate):
         XK_space: lambda self, event: self.cycle_gravity(event.time)
     }, parent=ClientUpdate.key_binding_map)
 
-    def __init__(self, *args):
-        super(ClientResize, self).__init__(*args)
+    def __init__(self, *args, **kwargs):
+        super(ClientResize, self).__init__(*args, **kwargs)
         self.initial_geometry = self.geometry
         self.size_hints = self.client.properties.wm_normal_hints
 
@@ -469,14 +476,14 @@ class MoveResize(WindowManager):
                                                self.__grab_event_mask)
 
     @event_mask(__grab_event_mask)
-    def move_window(self, event):
-        self.move_resize_window(event, ClientMove)
+    def move_window(self, event, **kwargs):
+        self.move_resize_window(event, ClientMove, **kwargs)
 
     @event_mask(__grab_event_mask)
-    def resize_window(self, event):
-        self.move_resize_window(event, ClientResize)
+    def resize_window(self, event, **kwargs):
+        self.move_resize_window(event, ClientResize, **kwargs)
 
-    def move_resize_window(self, event, update):
+    def move_resize_window(self, event, update, **kwargs):
         assert isinstance(event, ButtonPressEvent)
         client = self.get_client(event.event)
         if not client or self.client_update:
@@ -489,7 +496,8 @@ class MoveResize(WindowManager):
         self.client_update = update(client,
                                     Position(event.root_x, event.root_y),
                                     self.end_client_update,
-                                    self.change_client_update_cursor)
+                                    self.change_client_update_cursor,
+                                    **kwargs)
         self.client_update.resistance = EdgeResistance(client)
         self.client_update.button = event.detail
 

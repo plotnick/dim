@@ -175,12 +175,15 @@ class ModButtonDown(object):
     def __exit__(self, *exc_info):
         self.test.fake_input(EventType.ButtonRelease, self.button)
 
+def maybe_move_window(*args):
+    MoveResize.move_window(*args, move_delta=5)
+
 class TestMoveResize(WMTestCase):
     """Integration test for interactive move/resize."""
 
     wm_class = MoveResize
 
-    button_bindings = {("control", 1): MoveResize.move_window,
+    button_bindings = {("control", 1): maybe_move_window,
                        ("control", 3): MoveResize.resize_window}
 
     def setUp(self):
@@ -208,6 +211,13 @@ class TestMoveResize(WMTestCase):
                 delta = Position(5, 10)
                 self.fake_input(EventType.MotionNotify, True, *delta)
                 self.loop(self.make_geometry_delta_test(delta))
+
+    def test_move_delta(self):
+        with WarpedPointer(self, self.relative_position(0.5)): # center
+            with ModButtonDown(self, self.control, 1):
+                delta = Position(3, 3) # < move delta
+                self.fake_input(EventType.MotionNotify, True, *delta)
+                self.loop(self.make_geometry_delta_test(Position(0, 0)))
 
     def test_resize_southeast(self):
         with WarpedPointer(self, self.relative_position(0.85)): # southeast
