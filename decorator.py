@@ -93,7 +93,7 @@ class TitlebarDecorator(Decorator):
     """Decorate a client with a multi-purpose titlebar."""
 
     def __init__(self, conn, client,
-                 focused_config=None, unfocused_config=None, button_bindings={},
+                 focused_config=None, unfocused_config=None,
                  **kwargs):
         super(TitlebarDecorator, self).__init__(conn, client, **kwargs)
 
@@ -101,7 +101,6 @@ class TitlebarDecorator(Decorator):
         assert isinstance(unfocused_config, TitlebarConfig)
         self.titlebar = None
         self.titlebar_configs = (unfocused_config, focused_config)
-        self.button_bindings = button_bindings
 
     def decorate(self):
         assert self.titlebar is None
@@ -112,7 +111,6 @@ class TitlebarDecorator(Decorator):
         self.titlebar = SimpleTitlebar(client=self.client,
                                        manager=self.client.manager,
                                        parent=self.client.frame,
-                                       button_bindings=self.button_bindings,
                                        geometry=geometry,
                                        config=config)
         if self.client.shaped:

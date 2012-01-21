@@ -32,44 +32,56 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
     minibuffer_font = "10x20"
 
+    def __init__(self, titlebar_bindings={}, **kwargs):
+        self.titlebar_bindings = titlebar_bindings
+        super(BaseWM, self).__init__(**kwargs)
+
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
+
+        bindings = self.titlebar_bindings
         self.focused_config = TitlebarConfig(self,
                                              fg_color=RGBi(1.0, 1.0, 1.0),
                                              bg_color=RGBi(0.0, 0.0, 0.0),
-                                             font=self.title_font)
+                                             font=self.title_font,
+                                             button_bindings=bindings)
         self.unfocused_config = TitlebarConfig(self,
                                                fg_color=RGBi(0.0, 0.0, 0.0),
                                                bg_color=RGBi(0.75, 0.75, 0.75),
-                                               font=self.title_font)
+                                               font=self.title_font,
+                                               button_bindings=bindings)
+
         self.minibuffer_config = MinibufferConfig(self,
                                                   fg_color=RGBi(0.0, 0.0, 0.0),
                                                   bg_color=RGBi(1.0, 1.0, 1.0),
                                                   font=self.minibuffer_font)
 
     def decorator(self, client):
+        return TitlebarDecorator(self.conn, client,
+                                 focused_config=self.focused_config,
+                                 unfocused_config=self.unfocused_config)
+
+    @staticmethod
+    def raise_and_move(widget, event):
+        manager = widget.manager
+        manager.raise_window(event)
+        manager.move_window(event)
+
+    @staticmethod
+    def change_tags(widget, event):
+        client = widget.client
+        def intern_atom(name):
+            return client.atoms[name.encode("UTF-8", "replace")]
+        def atom_name(atom):
+            return client.atoms.name(atom, "UTF-8", "replace")
         def tags_changed(value, sep=re.compile(r",\s*")):
-            def atom(name):
-                # ICCCM note 1: "The comment in the protocol specification
-                # for InternAtom that ISO Latin-1 encoding should be used
-                # is in the nature of a convention; the server treats the
-                # string as a byte sequence." We'll ignore that convention
-                # here and always use UTF-8 for tag names.
-                return self.atoms[name.encode("UTF-8", "replace")]
-            client.properties.dim_tags = AtomList(map(atom, sep.split(value)))
-        def change_tags(widget, event):
-            def name(atom):
-                return self.atoms.name(atom, "UTF-8", "replace")
-            tags = map(name, client.properties.dim_tags)
-            decorator.read_from_user("Tags: ",
-                                     ", ".join(tags),
-                                     tags_changed,
-                                     time=event.time)
-        decorator = TitlebarDecorator(self.conn, client,
-                                      focused_config=self.focused_config,
-                                      unfocused_config=self.unfocused_config,
-                                      button_bindings={2: change_tags})
-        return decorator
+            client.properties.dim_tags = AtomList(map(intern_atom,
+                                                      sep.split(value)))
+        tags = map(atom_name, client.properties.dim_tags)
+        client.decorator.read_from_user("Tags: ",
+                                        ", ".join(tags),
+                                        tags_changed,
+                                        time=event.time)
 
     def shell_command(self, event):
         def execute(command):
@@ -85,7 +97,7 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                                 rollback=dismiss)
         minibuffer.map(event.time)
 
-    def tagset(self, event):
+    def change_tagset(self, event):
         def execute(spec):
             try:
                 expr = parse_tagset_spec(spec)
@@ -127,23 +139,28 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
         assert isinstance(event, (KeyReleaseEvent, ButtonReleaseEvent))
         self.conn.core.ForceScreenSaverChecked(ScreenSaver.Active).check()
 
-def terminal(*args):
-    spawn("xterm")
+    def terminal(self, event):
+        spawn("xterm")
 
-key_bindings = {
-    ("control", "meta", XK_Return): terminal,
-    ("control", "meta", XK_Tab): BaseWM.tagset,
+titlebar_button_bindings = {
+    1: BaseWM.raise_and_move,
+    2: BaseWM.change_tags
+}
+
+global_key_bindings = {
+    ("control", "meta", XK_Return): BaseWM.terminal,
+    ("control", "meta", XK_Tab): BaseWM.change_tagset,
     ("control", "meta", XK_Escape): BaseWM.delete_window,
     ("control", "meta", XK_space): BaseWM.shell_command,
     ("control", XK_Pause): BaseWM.debug,
     -XK_Pause: BaseWM.activate_screen_saver
 }
 
-button_bindings = {
+global_button_bindings = {
     ("meta", 1): MoveResize.move_window,
     ("meta", 3): MoveResize.resize_window,
     ("shift", "meta", 1): RaiseLower.raise_window,
-    ("shift", "meta", 3): RaiseLower.lower_window,
+    ("shift", "meta", 3): RaiseLower.lower_window
 }
 
 if __name__ == "__main__":
@@ -196,9 +213,10 @@ if __name__ == "__main__":
         wm_class = type("WM",
                         (focus_modes[options.focus_mode], BaseWM),
                         dict(title_font=options.title_font))
-        wm = wm_class(options.display,
-                      key_bindings=key_bindings,
-                      button_bindings=button_bindings)
+        wm = wm_class(display=options.display,
+                      key_bindings=global_key_bindings,
+                      button_bindings=global_button_bindings,
+                      titlebar_bindings=titlebar_button_bindings)
         wm.start()
     except KeyboardInterrupt:
         log.info("Interrupt caught; shutting down.")

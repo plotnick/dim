@@ -478,17 +478,28 @@ class MoveResize(WindowManager):
 
     def move_resize_window(self, event, update):
         assert isinstance(event, ButtonPressEvent)
-        client = self.get_client(event.child)
+        client = self.get_client(event.event)
         if not client or self.client_update:
             return
+        self.conn.core.GrabPointer(False,
+                                   self.screen.root,
+                                   self.__grab_event_mask,
+                                   GrabMode.Async,
+                                   GrabMode.Async,
+                                   Window._None,
+                                   Cursor._None,
+                                   event.time)
+        self.conn.core.GrabKeyboard(False,
+                                    self.screen.root,
+                                    event.time,
+                                    GrabMode.Async,
+                                    GrabMode.Async)
         self.client_update = update(client,
                                     Position(event.root_x, event.root_y),
                                     self.end_client_update,
                                     self.change_client_update_cursor)
         self.client_update.resistance = EdgeResistance(client)
         self.client_update.button = event.detail
-        self.conn.core.GrabKeyboard(False, self.screen.root, event.time,
-                                    GrabMode.Async, GrabMode.Async)
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):

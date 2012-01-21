@@ -13,10 +13,16 @@ __all__ = ["Config", "FontConfig", "HighlightConfig", "Widget"]
 class Config(object):
     """A shared configuration object used by widget instances."""
 
-    def __init__(self, manager, **kwargs):
+    def __init__(self, manager, key_bindings={}, button_bindings={}, **kwargs):
         self.manager = manager
         self.conn = manager.conn
         self.screen = manager.screen
+        self.key_bindings = KeyBindings(key_bindings,
+                                        manager.keymap,
+                                        manager.modmap)
+        self.button_bindings = ButtonBindings(button_bindings,
+                                              manager.keymap,
+                                              manager.modmap)
 
         self.black_gc = self.conn.generate_id()
         self.conn.core.CreateGC(self.black_gc, self.screen.root,
@@ -93,19 +99,11 @@ class Widget(EventHandler):
     event_mask = EventMask.Exposure
     override_redirect = False
 
-    def __init__(self, manager=None, config=None,
-                 key_bindings={}, button_bindings={},
-                 **kwargs):
+    def __init__(self, manager=None, config=None, **kwargs):
         self.manager = manager
         self.conn = manager.conn
         self.screen = manager.screen
         self.config = config
-        self.key_bindings = KeyBindings(key_bindings,
-                                        manager.keymap,
-                                        manager.modmap)
-        self.button_bindings = ButtonBindings(button_bindings,
-                                              manager.keymap,
-                                              manager.modmap)
         self.window = self.create_window(**kwargs)
 
     def create_window(self,
@@ -166,18 +164,18 @@ class Widget(EventHandler):
         if event.count == 0:
             self.draw()
 
-    @handler(KeyPressEvent)
+    @handler((KeyPressEvent, KeyReleaseEvent))
     def handle_key_press(self, event):
         try:
-            action = self.key_bindings[event]
+            action = self.config.key_bindings[event]
         except KeyError:
             return
         action(self, event)
 
-    @handler(ButtonPressEvent)
+    @handler((ButtonPressEvent, ButtonReleaseEvent))
     def handle_button_press(self, event):
         try:
-            action = self.button_bindings[event]
+            action = self.config.button_bindings[event]
         except KeyError:
             return
         action(self, event)
