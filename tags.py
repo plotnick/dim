@@ -399,6 +399,7 @@ class TagManager(WindowManager):
     def manage(self, window):
         client = super(TagManager, self).manage(window)
         if client:
+            self.auto_tag(client)
             self.note_tags(client)
             client.properties.register_change_handler("_DIM_TAGS",
                                                       self.tags_changed)
@@ -410,14 +411,23 @@ class TagManager(WindowManager):
                                                     self.tags_changed)
         super(TagManager, self).unmanage(client, **kwargs)
 
-    def note_tags(self, client):
-        for tag in client.properties.dim_tags:
-            log.debug("Adding client window 0x%x to tagset %s.",
-                      client.window, self.atoms.name(tag, "UTF-8"))
-            self.tagsets[tag].add(client)
+    def auto_tag(self, client):
+        # If this client doesn't have any tags yet, copy the tags of the
+        # currently focused window.
+        if not client.properties.dim_tags:
+            focus = self.current_focus
+            if focus:
+                tags = focus.properties.dim_tags
+                if tags:
+                    log.debug("Auto-tagging client window 0x%x with tags [%s].",
+                              client.window,
+                              ", ".join(self.atoms.name(atom, "UTF-8")
+                                        for atom in tags))
+                    client.properties.dim_tags = AtomList(tags[:])
 
         # We'll use the client's instance and class names (ICCCM §4.1.2.5)
-        # as implicit tags.
+        # as implicit tags. Note that these will not show up in the client's
+        # tags list, since we're adding it directly to the tagsets.
         def atom(string):
             return self.atoms.intern(string, "UTF-8")
         instance, cls = tuple(client.properties.wm_class)
@@ -425,6 +435,12 @@ class TagManager(WindowManager):
             self.tagsets[atom(instance)].add(client)
         if cls:
             self.tagsets[atom(cls)].add(client)
+
+    def note_tags(self, client):
+        for tag in client.properties.dim_tags:
+            log.debug("Adding client window 0x%x to tagset %s.",
+                      client.window, self.atoms.name(tag, "UTF-8"))
+            self.tagsets[tag].add(client)
 
     def forget_tags(self, client):
         for tagset in self.tagsets.values():
