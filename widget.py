@@ -112,9 +112,6 @@ class Widget(EventHandler):
                       event_mask=None,
                       override_redirect=None):
         """Create a top-level window for this widget."""
-        assert parent
-        assert isinstance(geometry, Geometry)
-
         self.parent = parent if parent else self.screen.root
         self.geometry = geometry
         self.window = self.conn.generate_id()
