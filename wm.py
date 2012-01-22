@@ -72,17 +72,16 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
     @staticmethod
     def change_tags(widget, event):
         client = widget.client
-        def intern_atom(name):
+        def intern(name):
             return client.atoms[name.encode("UTF-8", "replace")]
-        def atom_name(atom):
+        def name(atom):
             return client.atoms.name(atom, "UTF-8", "replace")
-        def tags_changed(value, sep=re.compile(r",\s*")):
-            client.properties.dim_tags = AtomList(map(intern_atom,
-                                                      sep.split(value)))
-        tags = map(atom_name, client.properties.dim_tags)
+        def set_tags(value):
+            client.properties.dim_tags = AtomList(map(intern, value.split()))
+        tags = client.properties.dim_tags
         client.decorator.read_from_user("Tags: ",
-                                        ", ".join(tags),
-                                        tags_changed,
+                                        " ".join(name(tag) for tag in tags),
+                                        set_tags,
                                         time=event.time)
 
     def shell_command(self, event):
