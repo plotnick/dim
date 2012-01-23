@@ -437,10 +437,6 @@ class MoveResize(WindowManager):
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
 
-    def __init__(self, display=None, screen=None, **kwargs):
-        super(MoveResize, self).__init__(display, screen, **kwargs)
-        self.client_update = None
-
     def constrain_position(self, client, position):
         position = super(MoveResize, self).constrain_position(client, position)
         if self.client_update:

@@ -102,6 +102,7 @@ class WindowManager(EventHandler):
 
         self.clients = {} # managed clients, indexed by window ID
         self.frames = {} # client frames, indexed by window ID
+        self.client_update = None # for move/resize
         self.parents = {self.screen.root: None}
         self.atoms = AtomCache(self.conn)
         self.colors = ColorCache(self.conn, self.screen.default_colormap)
