@@ -31,7 +31,7 @@ class ClientProperties(PropertyManager):
     wm_hints = PropertyDescriptor("WM_HINTS", WMHints, WMHints())
     wm_class = PropertyDescriptor("WM_CLASS", WMClass, (None, None))
     wm_transient_for = PropertyDescriptor("WM_TRANSIENT_FOR", WindowProperty)
-    wm_protocols = PropertyDescriptor("WM_PROTOCOLS", WMProtocols, [])
+    wm_protocols = PropertyDescriptor("WM_PROTOCOLS", AtomList, [])
     wm_state = PropertyDescriptor("WM_STATE", WMState, WMState())
 
     # EWMH properties

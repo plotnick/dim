@@ -18,8 +18,7 @@ __all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
            "ScalarPropertyValue", "PropertyValueStruct", "PropertyValueList",
            "WindowProperty", "AtomProperty", "AtomList",
            "StringProperty", "UTF8StringProperty",
-           "WMClass", "WMTransientFor", "WMProtocols", "WMColormapWindows",
-           "WMClientMachine", "WMState", "WMSizeHints", "WMHints"]
+           "WMClass", "WMColormapWindows", "WMState", "WMSizeHints", "WMHints"]
 
 # Translate between X property formats and Python's struct & array type codes.
 type_codes = {8: "B", 16: "H", 32: "I"}
@@ -39,48 +38,31 @@ class PropertyDescriptor(object):
     """A descriptor class for cached properties. To be used as attributes of
     a PropertyManager."""
 
-    def __init__(self, name, type, default=None):
+    def __init__(self, name, cls, default=None):
         assert isinstance(name, basestring), "invalid property name"
-        assert issubclass(type, PropertyValue), "invalid property value type"
+        assert issubclass(cls, PropertyValue), "invalid property value class"
         self.name = name
-        self.type = type
+        self.value_class = cls
         self.default = default
 
     def __get__(self, instance, owner):
-        # Check the value cache.
-        try:
-            return instance.values[self.name]
-        except KeyError:
-            pass
-
-        # Request the property, construct a new value from the reply data,
-        # and cache it.
-        try:
-            reply = instance.request_property(self.name).reply()
-        except BadWindow:
-            instance.log.warning("Error fetching property %s.", self.name)
-            return None
-        if reply.type:
-            try:
-                value = owner.properties[self.name].unpack(reply.value.buf())
-            except exceptions.ValueError:
-                instance.log.warning("Invalid %s property value.", self.name)
-                value = self.default
-        else:
-            value = self.default
-        instance.values[self.name] = value
-        return value
+        return instance.get_property(self.name,
+                                     self.value_class.property_type,
+                                     self.default)
 
     def __set__(self, instance, value):
-        if instance.values.get(self.name, None) != value:
-            instance.set_property(self.name, self.type.property_type, value)
+        if instance.values.get(self.name) != value:
+            instance.set_property(self.name,
+                                  self.value_class.property_type,
+                                  value)
 
     def __delete__(self, instance):
         instance.delete_property(self.name)
 
 class PropertyManagerClass(type):
     """A metaclass for PropertyManager that supports auto-registration of
-    property descriptors."""
+    property descriptors. Creates a "properties" class attribute mapping
+    property names to value classes."""
 
     def __new__(metaclass, name, bases, namespace):
         cls = super(PropertyManagerClass, metaclass).__new__(metaclass, name,
@@ -91,7 +73,7 @@ class PropertyManagerClass(type):
                 cls.properties.update(superclass.properties)
         for attr in namespace.values():
             if isinstance(attr, PropertyDescriptor):
-                cls.properties[attr.name] = attr.type
+                cls.properties[attr.name] = attr.value_class
         return cls
 
 class PropertyManager(object):
@@ -108,27 +90,67 @@ class PropertyManager(object):
         self.change_handlers = defaultdict(set)
         self.log = logging.getLogger("properties.0x%x" % self.window)
 
+    def get_property(self, name, type=None, default=None):
+        """Fetch the value of a property on the window."""
+        # Check the value cache.
+        try:
+            return self.values[name]
+        except KeyError:
+            pass
+
+        # Request the property, construct a new value from the reply data,
+        # and cache it.
+        try:
+            reply = self.request_property(name, type).reply()
+        except BadWindow:
+            self.log.warning("Error fetching property %s.", name)
+            return None
+        if reply.type:
+            cls = self.properties.get(name)
+            if cls:
+                try:
+                    value = cls.unpack(reply.value.buf())
+                except exceptions.ValueError:
+                    self.log.warning("Invalid %s property value.", name)
+                    value = default
+            else:
+                # If this isn't a registered property, just return the raw
+                # property data.
+                value = reply.value.buf()
+        else:
+            value = default
+        self.values[name] = value
+        return value
+
     def request_property(self, name, type=None):
         """Request the value of a property on the window, and return a cookie
         for the request. Does not wait for a reply."""
+        # Check the cookie cache.
         try:
-            # We might already have a pending request for this property.
             return self.cookies[name]
         except KeyError:
             pass
 
-        self.log.debug("Requesting property %s.", name)
-        def atom(x):
-            return self.atoms[x] if isinstance(x, basestring) else x
+        # Request the property from the server.
         if type is None:
             type = (self.properties[name].property_type
                     if name in self.properties
                     else GetPropertyType.Any)
+        self.log.debug("Requesting property %s (%s).", name, type)
         cookie = self.conn.core.GetProperty(False, self.window,
-                                            atom(name), atom(type),
+                                            self.atoms[name],
+                                            self.atoms[type],
                                             0, 0xffffffff)
         self.cookies[name] = cookie
         return cookie
+
+    def request_properties(self):
+        """Request the values of all the registered properties for which we
+        have neither a cached value nor a pending request. Does not wait for
+        any of the replies."""
+        for name, cls in self.properties.items():
+            if name not in self.values and name not in self.cookies:
+                self.request_property(name, cls.property_type)
 
     def set_property(self, name, type, value, mode=PropMode.Replace):
         """Change the value of a property on the window."""
@@ -145,7 +167,8 @@ class PropertyManager(object):
         else:
             raise PropertyError("unknown property value type")
         self.conn.core.ChangeProperty(mode, self.window,
-                                      self.atoms[name], self.atoms[type],
+                                      self.atoms[name],
+                                      self.atoms[type],
                                       format, data_len, data)
 
         # We'll accept the given value as provisionally correct until a
@@ -155,14 +178,6 @@ class PropertyManager(object):
 
         # Any pending request for the property value should be canceled.
         self.cookies.pop(name, None)
-
-    def request_properties(self):
-        """Request the values of all the registered properties for which we
-        don't have a cached value or a pending request. Does not wait for
-        any of the replies."""
-        for name in self.properties:
-            if name not in self.values:
-                self.request_property(name)
 
     def delete_property(self, name):
         """Remove the given property from the window."""
@@ -193,7 +208,17 @@ class PropertyManager(object):
     def unregister_change_handler(self, name, handler):
         self.change_handlers[name].discard(handler)
 
-class ScalarPropertyValueClass(type):
+class PropertyValueClass(type):
+    """Base metaclass for X property values."""
+
+    def __new__(metaclass, name, bases, namespace):
+        cls = super(PropertyValueClass, metaclass).__new__(metaclass, name,
+                                                           bases, namespace)
+        format = cls.property_format
+        assert format in type_codes, "invalid property format %r" % format
+        return cls
+
+class ScalarPropertyValueClass(PropertyValueClass):
     """Metaclass for scalar X property values."""
 
     def __new__(metaclass, name, bases, namespace):
@@ -201,19 +226,10 @@ class ScalarPropertyValueClass(type):
                                                                  name,
                                                                  bases,
                                                                  namespace)
-
-        for c in cls.__mro__:
-            if hasattr(c, "property_format"):
-                format = c.property_format
-                break
-        else:
-            raise TypeError("scalar property values must specify format")
-        assert format in type_codes, \
-            "invalid property format %r" % format
-        cls.formatter = Struct(type_codes[format])
+        cls.formatter = Struct(type_codes[cls.property_format])
         return cls
 
-class PropertyValueStructClass(type):
+class PropertyValueStructClass(PropertyValueClass):
     """Metaclass for struct-like X property values."""
 
     def __new__(metaclass, name, bases, namespace):
@@ -221,38 +237,10 @@ class PropertyValueStructClass(type):
                                                                  name,
                                                                  bases,
                                                                  namespace)
-
-        for c in cls.__mro__:
-            if hasattr(c, "fields") and hasattr(c, "property_format"):
-                fields = c.fields
-                format = c.property_format
-                break
-        else:
-            raise TypeError("property values must specify format and fields")
-        assert all(len(field) == 2
-                   for field in fields), \
+        fields = cls.fields
+        assert all(len(field) == 2 for field in fields), \
             "invalid fields specification %r" % (fields,)
-        assert format in type_codes, \
-            "invalid property format %r" % format
         cls.formatter = Struct("".join(map(itemgetter(1), fields)))
-        return cls
-
-class PropertyValueListClass(type):
-    """Metaclass for list-like X property values."""
-
-    def __new__(metaclass, name, bases, namespace):
-        cls = super(PropertyValueListClass, metaclass).__new__(metaclass,
-                                                               name,
-                                                               bases,
-                                                               namespace)
-        for c in cls.__mro__:
-            if hasattr(c, "property_format"):
-                format = c.property_format
-                break
-        else:
-            raise TypeError("property value lists must specify format")
-        assert format in type_codes, \
-            "invalid property format %r" % format
         return cls
 
 class PropertyValue(object):
@@ -338,7 +326,7 @@ class PropertyValueStruct(PropertyValue):
 class PropertyValueList(PropertyValue):
     """Base class for representations of list-like X property values."""
 
-    __metaclass__ = PropertyValueListClass
+    __metaclass__ = PropertyValueClass
     property_format = 32
 
     def __init__(self, elements):
@@ -445,26 +433,10 @@ class WMClass(StringProperty):
         yield s[0:i]
         yield s[i + 1:j]
 
-class WMTransientFor(PropertyValueStruct):
-    """A representation of the WM_TRANSIENT_FOR property (ICCCM §4.1.2.6)"""
-
-    property_format = 32
-    property_type = "WINDOW"
-    fields = (("window", WINDOW),)
-
-class WMProtocols(AtomList):
-    """A representation of the WM_PROTOCOLS property (ICCCM §4.1.2.7)"""
-    pass
-
 class WMColormapWindows(PropertyValueList):
     """A representation of the WM_COLORMAP_WINDOWS property (ICCCM §4.1.2.8)"""
     property_format = 32
     property_type = "WINDOW"
-
-class WMClientMachine(StringProperty):
-    """A representation of the WM_CLIENT_MACHINE property (ICCCM §4.1.2.9)"""
-    property_format = 8
-    property_type = "STRING"
 
 class WMState(PropertyValueStruct):
     """A representation of the WM_STATE type (ICCCM §4.1.3.1)"""
@@ -516,7 +488,7 @@ class PropertyField(object):
             if callable(self.defaults):
                 return self.type(*self.defaults(instance))
             elif isinstance(self.defaults, (list, tuple)):
-                return self.type(*self.defaults)                
+                return self.type(*self.defaults)
             else:
                 return self.type(self.defaults)
 
