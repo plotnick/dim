@@ -87,12 +87,18 @@ Geometry.__nonzero__ = lambda self: \
     (self.x != 0 or self.y != 0 or
      self.width != 0 or self.height != 0 or
      self.border_width != 0)
+Geometry.__and__ = Geometry.__rand__ = lambda self, other: \
+    (point_in_rect(other, self) if isinstance(other, Position) else
+     (point_in_rect(other.position(), self) or
+      point_in_rect(other.position() + other.size(), self) or
+      point_in_rect(self.position(), other) or
+      point_in_rect(self.position() + self.size(), other))
+     if isinstance(other, Geometry) else NotImplemented)
 Geometry.__contains__ = lambda self, other: \
     (point_in_rect(other, self) if isinstance(other, Position) else
-     (point_in_rect(Position(other.x, other.y), self) and
-      point_in_rect(Position(other.x + other.width,
-                             other.y + other.height),
-                    self)) if isinstance(other, Geometry) else False)
+     (point_in_rect(other.position(), self) and
+      point_in_rect(other.position() + other.size(), self))
+     if isinstance(other, Geometry) else False)
 Geometry.__str__ = lambda self: \
     str(self.size()) + str(self.position())
 Geometry.__unicode__ = lambda self: \
@@ -113,7 +119,8 @@ Geometry.edge = lambda self, direction: \
     (self.x if direction[0] < 0 and direction[1] == 0 else
      self.y if direction[0] == 0 and direction[1] < 0 else
      self.right_edge() if direction[0] > 0 and direction[1] == 0 else
-     self.bottom_edge() if direction[0] == 0 and direction[1] > 0 else None)
+     self.bottom_edge() if direction[0] == 0 and direction[1] > 0 else
+     None)
 
 AspectRatio = namedtuple("AspectRatio", "width, height")
 AspectRatio.__nonzero__ = lambda self: \

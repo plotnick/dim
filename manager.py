@@ -242,7 +242,11 @@ class WindowManager(EventHandler):
             client.resize(requested_geometry.size(),
                           requested_geometry.border_width)
         else:
-            client.configure(requested_geometry)
+            if requested_geometry & self.screen_geometry:
+                client.configure(requested_geometry)
+            else:
+                geometry = requested_geometry.move(Position(0, 0))
+                client.configure(client.frame_to_absolute_geometry(geometry))
 
     def constrain_position(self, client, position):
         """Compute and return a new position for the given client's frame

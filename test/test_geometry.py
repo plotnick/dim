@@ -54,6 +54,24 @@ class TestGeometryClasses(unittest.TestCase):
         self.assertEqual(str(g), "3x5+100-50")
         self.assertFalse(Geometry(0, 0, 0, 0, 0))
 
+    def assertIntersecting(self, x, y):
+        self.assertTrue(x & y)
+        self.assertTrue(y & x)
+
+    def assertNonIntersecting(self, x, y):
+        self.assertFalse(x & y)
+        self.assertFalse(y & x)
+
+    def test_intersection(self):
+        g = Geometry(x=0, y=0, width=10, height=10, border_width=0)
+        self.assertIntersecting(Position(0, 0), g)
+        self.assertIntersecting(Position(5, 5), g)
+        self.assertNonIntersecting(Position(10, 10), g)
+        self.assertIntersecting(g, g)
+        self.assertIntersecting(Geometry(9, 9, 5, 5, 0), g)
+        self.assertIntersecting(Geometry(0, 0, 1, 1, 0), g)
+        self.assertNonIntersecting(Geometry(-10, -10, 5, 5, 0), g)
+
     def test_contains(self):
         g = Geometry(x=0, y=0, width=10, height=10, border_width=0)
         self.assertTrue(Position(0, 0) in g)
