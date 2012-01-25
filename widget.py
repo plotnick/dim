@@ -5,7 +5,6 @@ from xcb.xproto import *
 from bindings import *
 from color import *
 from event import *
-from font import text_width
 from geometry import *
 
 __all__ = ["Config", "FontConfig", "HighlightConfig", "Widget"]
@@ -44,7 +43,7 @@ class FontConfig(Config):
         bg_color = kwargs["bg_color"]
         font = kwargs["font"]
         self.font = manager.fonts[font] if isinstance(font, str) else font
-        self.font_info = manager.fonts.info(self.font)
+        self.font_info = manager.font_infos[self.font]
 
         colors = manager.colors
 
@@ -68,9 +67,6 @@ class FontConfig(Config):
                                 [GX.xor,
                                  colors[fg_color] ^ colors[bg_color],
                                  self.font])
-
-    def text_width(self, string):
-        return text_width(self.font_info, string)
 
 class HighlightConfig(Config):
     def __init__(self, manager, **kwargs):

@@ -19,6 +19,7 @@ from cursor import FontCursor
 from decorator import Decorator
 from event import StopPropagation, UnhandledEvent, EventHandler, handler
 from font import FontCache
+from fontinfo import FontInfoCache
 from geometry import *
 from keymap import *
 from properties import *
@@ -108,6 +109,7 @@ class WindowManager(EventHandler):
         self.colors = ColorCache(self.conn, self.screen.default_colormap)
         self.cursors = FontCursor(self.conn)
         self.fonts = FontCache(self.conn)
+        self.font_infos = FontInfoCache(self.conn, self.atoms)
         self.modmap = ModifierMap(self.conn)
         self.keymap = KeyboardMap(self.conn, modmap=self.modmap)
         self.key_bindings = KeyBindings(key_bindings,

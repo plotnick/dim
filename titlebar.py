@@ -66,18 +66,21 @@ class SimpleTitlebar(Titlebar):
                   EventMask.Exposure |
                   EventMask.ButtonPress)
 
-    def __init__(self, title="", **kwargs):
+    def __init__(self, title="", margin=5, **kwargs):
         super(SimpleTitlebar, self).__init__(**kwargs)
         self.title = title
+        self.margin = margin
 
-    def draw(self, x=5):
+    def draw(self):
         super(SimpleTitlebar, self).draw()
 
         if not self.title:
             self.title = self.client_name()
-        text_items = list(textitem16(self.title))
+        width = self.geometry.width - 2 * self.margin
+        title = self.config.font_info.truncate(unicode(self.title), width)
+        text_items = list(textitem16(title))
         self.conn.core.PolyText16(self.window, self.config.fg_gc,
-                                  x, self.config.baseline,
+                                  self.margin, self.config.baseline,
                                   len(text_items), "".join(text_items))
 
     def name_changed(self, window, *args):

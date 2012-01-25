@@ -77,7 +77,7 @@ class InputField(Widget):
             self.conn.core.PolyText16(self.window, self.config.fg_gc,
                                       x, y,
                                       len(text_items), "".join(text_items))
-            return self.config.text_width(string)
+            return self.config.font_info.text_width(string)
         if self.prompt:
             x += draw_string(x, self.prompt)
         if self.buffer:
@@ -86,8 +86,8 @@ class InputField(Widget):
         # Draw an xor rectangle as a cursor.
         c = self.buffer.point
         n = len(self.buffer)
-        x -= self.config.text_width(self.buffer[c:])
-        w = self.config.text_width(" " if c >= n else self.buffer[c])
+        x -= self.config.font_info.text_width(self.buffer[c:])
+        w = self.config.font_info.text_width(" " if c >= n else self.buffer[c])
         a = self.config.font_info.font_ascent
         d = self.config.font_info.font_descent
         self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
