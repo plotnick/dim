@@ -56,10 +56,10 @@ class Client(EventHandler):
                         EventMask.EnterWindow |
                         EventMask.VisibilityChange)
 
-    def __init__(self, conn, window, manager):
+    def __init__(self, conn, manager, window, geometry):
         self.conn = conn
-        self.window = window
         self.manager = manager
+        self.window = window
         self.screen = manager.screen
         self.atoms = manager.atoms
         self.colors = manager.colors
@@ -76,10 +76,6 @@ class Client(EventHandler):
         self.visibility = None
         self.log = logging.getLogger("client.0x%x" % self.window)
 
-        geometry = get_window_geometry(self.conn, self.window)
-        if not geometry:
-            return
-
         # Set the client's border width to 0, but save the current value
         # so that we can restore it if and when we reparent the client
         # back to the root.
@@ -88,13 +84,11 @@ class Client(EventHandler):
                                        ConfigWindow.BorderWidth,
                                        [0])
 
-        # Compute the frame geometry based on the current geometry
-        # and the requirements of our decorator.
-        offset = self.decorator.compute_client_offset()
-        gravity = self.properties.wm_normal_hints.win_gravity
-        frame_geometry = geometry.resize(geometry.size() + offset.size(),
-                                         self.decorator.border_width,
-                                         gravity)
+        # Compute the frame geometry based on the current geometry and the
+        # requirements of our decorator.
+        self.offset = self.decorator.compute_client_offset()
+        self.frame_geometry = self.compute_frame_geometry(geometry)
+        self.geometry = geometry.reborder(0).move(self.offset.position())
 
         # Create the frame and reparent the client window.
         self.frame = self.conn.generate_id()
@@ -102,11 +96,11 @@ class Client(EventHandler):
         self.conn.core.CreateWindow(self.screen.root_depth,
                                     self.frame,
                                     self.screen.root,
-                                    frame_geometry.x,
-                                    frame_geometry.y,
-                                    frame_geometry.width,
-                                    frame_geometry.height,
-                                    frame_geometry.border_width,
+                                    self.frame_geometry.x,
+                                    self.frame_geometry.y,
+                                    self.frame_geometry.width,
+                                    self.frame_geometry.height,
+                                    self.frame_geometry.border_width,
                                     WindowClass.InputOutput,
                                     self.screen.root_visual,
                                     CW.OverrideRedirect | CW.EventMask,
@@ -114,12 +108,7 @@ class Client(EventHandler):
         self.conn.core.ChangeSaveSet(SetMode.Insert, self.window)
         with self.disable_structure_notify():
             self.conn.core.ReparentWindow(self.window, self.frame,
-                                          offset.x, offset.y)
-
-        # Record the new window and frame geometries.
-        self.geometry = geometry.reborder(0).move(offset.position())
-        self.frame_geometry = frame_geometry
-        self.offset = offset
+                                          self.offset.x, self.offset.y)
 
         # Register for shape change notifications, and, if the client
         # window is shaped, adapt the frame to its shape.
@@ -203,6 +192,12 @@ class Client(EventHandler):
         return self.geometry.move(self.frame_geometry.position() +
                                   self.offset.position()).reborder(bw)
 
+    def compute_frame_geometry(self, geometry):
+        """Compute the frame geometry given a client-requested geometry."""
+        return geometry.resize(geometry.size() + self.offset.size(),
+                               self.decorator.border_width,
+                               self.properties.wm_normal_hints.win_gravity)
+
     def absolute_to_frame_geometry(self, geometry):
         """Convert an absolute client window geometry to a frame geometry."""
         return (geometry.reborder(self.frame_geometry.border_width) -
@@ -232,11 +227,13 @@ class Client(EventHandler):
                                                             border_width,
                                                             gravity))
 
-    def configure(self, geometry):
+    def configure(self, geometry, client_request=False):
         """Given a requested client geometry in the root coordinate system,
         update the client and frame geometry accordingly. Returns the new
         client geometry."""
-        frame_geometry = self.absolute_to_frame_geometry(geometry)
+        frame_geometry = (self.absolute_to_frame_geometry(geometry)
+                          if not client_request
+                          else self.compute_frame_geometry(geometry))
         self.conn.core.ConfigureWindow(self.frame,
                                        (ConfigWindow.X |
                                         ConfigWindow.Y |

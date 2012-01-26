@@ -463,12 +463,7 @@ class TestWMClientMoveResize(WMTestCase):
         self.client.map()
         self.loop(lambda: (self.client.mapped and
                            self.client.managed and
-                           self.client.reparented and
-                           self.client.synthetic_geometry == geometry))
-
-        # Reset received geometries for tests.
-        self.geometry = None
-        self.client.synthetic_geometry = None
+                           self.client.reparented))
 
     def test_no_change(self):
         """Configure a top-level window without changing its size or position"""

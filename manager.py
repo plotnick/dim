@@ -220,11 +220,14 @@ class WindowManager(EventHandler):
             return self.clients[window]
 
         log.debug("Managing client window 0x%x.", window)
-        client = self.clients[window] = Client(self.conn, window, self)
+        geometry = get_window_geometry(self.conn, window)
+        if not geometry:
+            return None
+        client = Client(self.conn, self, window, self.place(geometry))
         self.frames[client.frame] = client
         self.key_bindings.establish_grabs(client.frame)
         self.button_bindings.establish_grabs(client.frame)
-        self.place(client, client.absolute_geometry)
+        self.clients[window] = client
         return client
 
     def unmanage(self, client, **kwargs):
@@ -235,18 +238,12 @@ class WindowManager(EventHandler):
         client.undecorate(**kwargs)
         return client
 
-    def place(self, client, requested_geometry, resize_only=False):
-        """Determine and configure a suitable geometry for the client's frame.
-        This may, but need not, utilize the geometry the client requested."""
-        if resize_only:
-            client.resize(requested_geometry.size(),
-                          requested_geometry.border_width)
-        else:
-            if requested_geometry & self.screen_geometry:
-                client.configure(requested_geometry)
-            else:
-                geometry = requested_geometry.move(Position(0, 0))
-                client.configure(client.frame_to_absolute_geometry(geometry))
+    def place(self, geometry):
+        """Determine a suitable geometry for a client window. This may, but
+        need not, utilize the geometry the client requested."""
+        return (geometry
+                if geometry & self.screen_geometry
+                else geometry.move(Position(0, 0)))
 
     def constrain_position(self, client, position):
         """Compute and return a new position for the given client's frame
@@ -407,23 +404,26 @@ class WindowManager(EventHandler):
                       client.window,
                       requested_geometry,
                       requested_geometry.border_width)
-            self.place(client,
-                       requested_geometry,
-                       not (event.value_mask & move_mask))
+            if event.value_mask & move_mask == 0:
+                client.resize(requested_geometry.size(),
+                              requested_geometry.border_width)
+            else:
+                client.configure(requested_geometry, True)
         else:
             # Just grant the request.
             log.debug("Granting configure request for unmanaged window 0x%x.",
                       event.window)
-            self.conn.core.ConfigureWindow(event.window, event.value_mask,
-                                           select_values(event.value_mask,
-                                                         [event.x,
-                                                          event.y,
-                                                          event.width,
-                                                          event.height,
-                                                          event.border_width,
-                                                          event.sibling,
-                                                          event.stack_mode]))
-        self.conn.flush()
+            value_list = select_values(event.value_mask,
+                                       [int16(event.x),
+                                        int16(event.y),
+                                        card16(event.width),
+                                        card16(event.height),
+                                        card16(event.border_width),
+                                        event.sibling,
+                                        event.stack_mode])
+            self.conn.core.ConfigureWindow(event.window,
+                                           event.value_mask,
+                                           value_list)
 
     @handler(CreateNotifyEvent)
     def handle_create_notify(self, event):
