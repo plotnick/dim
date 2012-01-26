@@ -190,7 +190,7 @@ class SharedFocusPolicyTests(object):
         a = self.make_client(Geometry(0, 0, 100, 50, 1))
         b = self.make_client(Geometry(110, 40, 100, 50, 1))
         c = self.make_client(Geometry(115, 0, 80, 35, 1))
-        self.warp_pointer(*center(b.geometry))
+        self.warp_pointer(*center(c.geometry))
         self.steal_focus(a)
         self.steal_focus(b)
         b.unmap()
