@@ -345,7 +345,6 @@ class Client(EventHandler):
         return self.focus_time is not None
 
     def unfocus(self):
-        self.focus_time = None
         self.decorator.unfocus()
 
     def map(self):
