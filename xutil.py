@@ -11,7 +11,7 @@ import xcb.shape
 from geometry import *
 
 __all__ = ["power_of_2", "popcount", "int16", "card16",
-           "sequence_number", "is_synthetic_event",
+           "compare_timestamps", "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
            "configure_notify", "send_client_message", "grab_server",
            "get_input_focus", "get_window_geometry",
@@ -35,6 +35,23 @@ def card16(x):
     """Truncate an unsigned integer to 16 bits."""
     assert x >= 0, "invalid cardinal %d" % x
     return int(x) & 0xffff
+
+def compare_timestamps(x, y, half=0x80000000, CurrentTime=Time.CurrentTime):
+    """Interpreted as timestamps, return negative if x precedes y,
+    zero if x is coincident with y, and positive if x is after y."""
+    # From the glossary of the X Protocol Reference Manual ("Timestamp"):
+    # 
+    #   The server, given its current time is represented by timestamp T,
+    #   always interprets timestamps from clients by treating half of the
+    #   timestamp space as being earlier in time than T and half of the
+    #   timestamp space as being later in time than T."""
+    assert x >= 0 and y >= 0
+    if x == CurrentTime:
+        return y
+    if y == CurrentTime:
+        return -x
+    d = x - y
+    return d if abs(d) <= half else -d
 
 def sequence_number(event, struct=Struct("H")):
     """Return the sequence number of the given event."""

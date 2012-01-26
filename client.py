@@ -308,25 +308,25 @@ class Client(EventHandler):
             if self.focus_time is not None:
                 return True
             time = Time.CurrentTime
-        if self.focus_time is not None:
-            # We could be called more than once in response to some request,
-            # so we'll only update the focus if the timestamp is newer than
-            # the last-focus time for this client.
-            if time != Time.CurrentTime and time <= self.focus_time:
-                return True
+
+        # We might called more than once in response to some request,
+        # so we'll only update the focus if the timestamp is newer than
+        # the last-focus time for this client.
+        if self.focus_time and compare_timestamps(self.focus_time, time) >= 0:
+            return True
 
         def set_input_focus(window, time):
             self.log.debug("Setting input focus to window 0x%x at time %d.",
                            window, time)
             try:
                 self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
-                                                    window,
-                                                    time).check()
+                                                    window, time).check()
             except (BadMatch, BadWindow):
                 self.log.warning("Error trying to focus window 0x%x.", window)
                 return None
             else:
                 return time
+
         if self.focus_override:
             # We'll occasionally want to preempt focus of a client window
             # (e.g., for user input in a titlebar).
