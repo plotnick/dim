@@ -53,7 +53,8 @@ class FocusPolicyTestCase(WMTestCase):
     safe_position = Position(1000, 1000)
 
     def setUp(self, start_wm=True):
-        super(FocusPolicyTestCase, self).setUp(start_wm=start_wm)
+        super(FocusPolicyTestCase, self).setUp(start_wm=start_wm,
+                                               focus_new_windows=False)
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
                                             InputFocus.PointerRoot,
                                             Time.CurrentTime).check()
