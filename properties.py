@@ -246,6 +246,8 @@ class PropertyValueStructClass(PropertyValueClass):
 class PropertyValue(object):
     """Base class for X property values."""
 
+    property_format = 32
+
     @classmethod
     def unpack(cls, data):
         """Create and return a new instance by unpacking the property data."""
@@ -274,7 +276,6 @@ class ScalarPropertyValue(PropertyValue):
     """Base class for scalar X property values."""
 
     __metaclass__ = ScalarPropertyValueClass
-    property_format = 32
 
     @classmethod
     def unpack(cls, data):
@@ -297,7 +298,6 @@ class PropertyValueStruct(PropertyValue):
     pairs."""
 
     __metaclass__ = PropertyValueStructClass
-    property_format = 32
     fields = ()
 
     def __init__(self, *args, **kwargs):
@@ -327,7 +327,6 @@ class PropertyValueList(PropertyValue):
     """Base class for representations of list-like X property values."""
 
     __metaclass__ = PropertyValueClass
-    property_format = 32
 
     def __init__(self, elements):
         self.elements = elements
