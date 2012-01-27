@@ -312,6 +312,8 @@ class WindowManager(EventHandler):
             select(rlist, wlist, xlist)
 
     def get_pending_events(self):
+        """Push all available events onto the event queue and return the queue.
+        Flushes all pending requests before returning."""
         while True:
             event = self.conn.poll_for_event()
             if event:
@@ -345,6 +347,9 @@ class WindowManager(EventHandler):
                                                event_window(event) == window))
 
     def handle_event(self, event):
+        """Handle an event from the server. If a handler is registered for
+        the window the event was reported with respect to, dispatch the
+        event to that handler."""
         handler = self.window_handlers.get(event_window(event), None)
         if handler:
             try:
