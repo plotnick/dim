@@ -435,16 +435,15 @@ class Client(EventHandler):
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
-        if event.window != self.window:
-            raise UnhandledEvent(event)
-        transient_for = self.properties.wm_transient_for
-        if transient_for:
-            other = self.manager.get_client(transient_for, True)
-            if other:
-                try:
-                    other.transients.remove(self.window)
-                except exceptions.ValueError:
-                    pass
+        if event.window == self.window:
+            transient_for = self.properties.wm_transient_for
+            if transient_for:
+                other = self.manager.get_client(transient_for, True)
+                if other:
+                    try:
+                        other.transients.remove(self.window)
+                    except exceptions.ValueError:
+                        pass
         raise UnhandledEvent(event)
 
     @handler(VisibilityNotifyEvent)
