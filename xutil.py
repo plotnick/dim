@@ -1,8 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-from collections import namedtuple
 from contextlib import contextmanager
-import operator
 from struct import Struct
 
 from xcb.xproto import *
@@ -10,22 +8,14 @@ import xcb.shape
 
 from geometry import *
 
-__all__ = ["power_of_2", "popcount", "int16", "card16",
+__all__ = ["int16", "card16",
            "compare_timestamps", "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
            "configure_notify", "send_client_message", "grab_server",
            "get_input_focus", "get_window_geometry",
            "query_extension", "query_pointer",
-           "select_values", "value_list", "textitem16", "GrabButtons",
+           "select_values", "textitem16", "GrabButtons",
            "client_message_type", "client_message", "ClientMessage"]
-
-def power_of_2(x):
-    """Check whether x is a power of 2."""
-    return isinstance(x, int) and x > 0 and x & (x - 1) == 0
-
-def popcount(x):
-    """Count the number of 1 bits in the binary representation of x."""
-    return bin(x).count("1")
 
 def int16(x):
     """Truncate an integer to 16 bits, ignoring sign."""
@@ -207,27 +197,6 @@ def select_values(value_mask, values):
     """Create a value-list from the supplied possible values according to the
     bits in the given value-mask."""
     return [values[i] for i in range(len(values)) if value_mask & (1 << i)]
-
-def value_list(flag_class, **kwargs):
-    """Construct and return a value-mask and value-list from the supplied
-    keyword arguments. The flag_class should be an object with attributes
-    that define the flags for the possible values."""
-    flags = {}
-    for attr in dir(flag_class):
-        if not attr.startswith("_"):
-            value = getattr(flag_class, attr, None)
-            if power_of_2(value):
-                flags[attr.lower()] = value
-    assert len(set(flags.values())) == len(flags), \
-        "Duplicate flags in %s" % (flag_class.__name__ \
-                                       if hasattr(flag_class, "__name__")
-                                       else flag_class)
-    
-    values = [(value, flags[name.replace("_", "").lower()])
-              for name, value in kwargs.items()]
-    return (reduce(operator.or_, map(operator.itemgetter(1), values), 0),
-            map(operator.itemgetter(0),
-                sorted(values, key=operator.itemgetter(1))))
 
 def textitem16(string, pack_header=Struct("Bx").pack):
     """Given a string, yield a sequence of TEXTITEM16s suitable for embedding
