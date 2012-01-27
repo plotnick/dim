@@ -362,6 +362,10 @@ class WindowManager(EventHandler):
         log.debug("Registering event handler for window 0x%x.", window)
         self.window_handlers[window] = handler
 
+    def unregister_window_handler(self, window):
+        if self.window_handlers.pop(window, None):
+            log.debug("Removed event handler for window 0x%x.", window)
+
     def unhandled_event(self, event):
         window = event_window(event)
         log.debug("Ignoring unhandled %s%s.",
@@ -438,14 +442,7 @@ class WindowManager(EventHandler):
     def handle_destroy_notify(self, event):
         log.debug("Window 0x%x destroyed.", event.window)
         self.parents.pop(event.window, None)
-
-        # DestroyNotify is generated on all inferiors before being
-        # generated on the window being destroyed. We'll wait until
-        # the latter happens to remove any registered handlers.
-        if event.window == event.event:
-            if self.window_handlers.pop(event.window, None):
-                log.debug("Removed event handler for window 0x%x.",
-                          event.window)
+        self.unregister_window_handler(event.window)
 
         client = self.get_client(event.window, True)
         if client:
