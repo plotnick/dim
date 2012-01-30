@@ -28,8 +28,9 @@ class FocusPolicy(WindowManager):
 
         self.focus_list = deque() # most-recently focused first
 
-        # Create a default focus window. This window will receive the input
-        # focus when no client window has it.
+        # Create a default focus window. We'll give the input focus to this
+        # window when no client window has it so that global key bindings
+        # continue to work.
         self.default_focus_window = self.conn.generate_id()
         self.conn.core.CreateWindowChecked(0,
                                            self.default_focus_window,
@@ -98,18 +99,18 @@ class FocusPolicy(WindowManager):
         """Send a message to ourselves requesting that some client receive
         the input focus. If the client argument is provided, it must be
         either a client instance or a window; that window will be tried
-        first in the search for a client to focus.
-
-        We use a client message for ensuring focus so that we can be sure
-        that any outstanding requests or events generated as a result
-        thereof have been completely processed before we go groveling
-        through the focus list."""
+        first in the search for a client to focus."""
+        # We use a client message for ensuring focus so that we can be sure
+        # that any outstanding requests or events generated as a result
+        # thereof have been completely processed before we go groveling
+        # through the focus list. See the EnsureFocus handler, below,
+        # for the the actual algorithm.
         window = (Window._None
                   if client is None
                   else getattr(client, "window", client))
         send_client_message(self.conn, self.screen.root, self.screen.root,
                             (EventMask.SubstructureRedirect |
-                             EventMask.StructureNotify),
+                             EventMask.SubstructureNotify),
                             32, self.atoms["_DIM_ENSURE_FOCUS"],
                             [time, window, 0, 0, 0])
 
@@ -263,16 +264,6 @@ class ClickToFocus(FocusPolicy):
             self.grab_focus_click(client)
         return client
 
-    def grab_focus_click(self, client):
-        if not client.frame:
-            self.__log.warning("Unable to establish grab for focus click.")
-            return
-        self.conn.core.GrabButton(False, client.frame,
-                                  EventMask.ButtonPress,
-                                  GrabMode.Sync, GrabMode.Async,
-                                  Window._None, Cursor._None,
-                                  1, ModMask.Any)
-
     def focus(self, client, time, **kwargs):
         if super(ClickToFocus, self).focus(client, time, **kwargs):
             # Once a client is focused, we can release our grab. This is
@@ -287,6 +278,16 @@ class ClickToFocus(FocusPolicy):
     def unfocus(self, client):
         self.grab_focus_click(client)
         super(ClickToFocus, self).unfocus(client)
+
+    def grab_focus_click(self, client):
+        if not client.frame:
+            self.__log.warning("Unable to establish grab for focus click.")
+            return
+        self.conn.core.GrabButton(False, client.frame,
+                                  EventMask.ButtonPress,
+                                  GrabMode.Sync, GrabMode.Async,
+                                  Window._None, Cursor._None,
+                                  1, ModMask.Any)
 
     @handler(ButtonPressEvent)
     def handle_button_press(self, event):
