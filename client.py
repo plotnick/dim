@@ -378,11 +378,16 @@ class Client(EventHandler):
                 gravity = self.properties.wm_normal_hints.win_gravity
                 geometry = self.frame_geometry.resize(size, bw, gravity)
                 with self.disable_structure_notify():
-                    self.conn.core.ReparentWindow(self.window,
-                                                  self.screen.root,
-                                                  geometry.x,
-                                                  geometry.y)
-                    self.conn.core.ChangeSaveSet(SetMode.Delete, self.window)
+                    try:
+                        self.conn.core.ReparentWindowChecked(self.window,
+                                                             self.screen.root,
+                                                             geometry.x,
+                                                             geometry.y).check()
+                    except BadWindow:
+                        pass
+                    else:
+                        self.conn.core.ChangeSaveSet(SetMode.Delete,
+                                                     self.window)
 
         self.conn.core.DestroyWindow(self.frame)
         self.frame = None
