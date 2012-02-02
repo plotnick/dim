@@ -170,11 +170,13 @@ class WindowManager(EventHandler):
         # SubstructureRedirect events on the root window. If another client
         # has already done so (i.e., there's already a window manager
         # running on this screen), the check will raise an exception.
-        assert self.root_event_mask & EventMask.SubstructureRedirect, \
+        event_mask = self.root_event_mask
+        assert event_mask & EventMask.SubstructureRedirect, \
             "A window manager must select for SubstructureRedirect."
         try:
             self.conn.core.ChangeWindowAttributesChecked(self.screen.root,
-                CW.EventMask, [self.root_event_mask]).check()
+                                                         CW.EventMask,
+                                                         [event_mask]).check()
         except BadAccess:
             log.error("Can't select for SubstructureRedirect on screen %d; "
                       "is another window manager already running?",
