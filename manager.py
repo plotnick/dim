@@ -190,8 +190,9 @@ class WindowManager(EventHandler):
     def shutdown(self):
         """Unmanage all clients and disconnect from the server."""
         if self.conn:
-            for client in self.clients.values():
-                self.unmanage(client)
+            with grab_server(self.conn):
+                for client in self.clients.values():
+                    self.unmanage(client)
             self.conn.flush()
             self.conn.disconnect()
             self.conn = None
