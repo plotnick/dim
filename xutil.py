@@ -14,7 +14,7 @@ __all__ = ["int16", "card16",
            "configure_notify", "send_client_message", "grab_server",
            "get_input_focus", "get_window_geometry",
            "query_extension", "query_pointer",
-           "select_values", "textitem16", "GrabButtons",
+           "select_values", "textitem16",
            "client_message_type", "client_message", "ClientMessage"]
 
 def int16(x):
@@ -202,23 +202,6 @@ def textitem16(string, pack_header=Struct("Bx").pack):
     for segment in (string[i:i + 254] for i in xrange(0, len(string), 254)):
         string16 = segment.encode("UTF-16BE")
         yield pack_header(len(string16) // 2) + string16
-
-class GrabButtons(dict):
-    """Helper class for managing passive grabs established with GrabButton.
-
-    Instances of this class will be dictionaries whose keys are tuples of
-    the form (button, modifiers), and whose values are event masks."""
-
-    def merge(self, other):
-        """Given another dictionary, update this instance with any new entries
-        and merge the event masks (i.e., compute the logical or) of entries
-        with corresponding keys."""
-        for key, mask in other.items():
-            if key in self:
-                self[key] |= mask
-            else:
-                self[key] = mask
-        return self
 
 client_message_types = {}
 
