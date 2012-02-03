@@ -108,11 +108,11 @@ class FocusPolicy(WindowManager):
         window = (Window._None
                   if client is None
                   else getattr(client, "window", client))
-        send_client_message(self.conn, self.screen.root, self.screen.root,
+        send_client_message(self.conn, self.screen.root, False,
                             (EventMask.SubstructureRedirect |
                              EventMask.SubstructureNotify),
-                            32, self.atoms["_DIM_ENSURE_FOCUS"],
-                            [time, window, 0, 0, 0])
+                            self.screen.root, self.atoms["_DIM_ENSURE_FOCUS"],
+                            32, [time, window, 0, 0, 0])
 
     @handler((FocusInEvent, FocusOutEvent))
     def handle_focus_event(self, event):

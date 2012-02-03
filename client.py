@@ -154,9 +154,9 @@ class Client(EventHandler):
     def send_protocol_message(self, message, time):
         """Send a protocol message to the client (ICCCM §4.2.8)."""
         if message in self.properties.wm_protocols:
-            send_client_message(self.conn, self.window, self.window, 0,
-                                32, self.atoms["WM_PROTOCOLS"],
-                                [message, time, 0, 0, 0])
+            send_client_message(self.conn, self.window, False, 0,
+                                self.window, self.atoms["WM_PROTOCOLS"],
+                                32, [message, time, 0, 0, 0])
             return True
         return False
 

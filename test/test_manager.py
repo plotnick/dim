@@ -187,11 +187,11 @@ class TestClient(EventHandler, Thread):
 
     def iconify(self):
         # See ICCCM §4.1.4.
-        send_client_message(self.conn, self.screen.root, self.window,
+        send_client_message(self.conn, self.screen.root, False,
                             (EventMask.SubstructureRedirect |
                              EventMask.SubstructureNotify),
-                            32, self.atoms["WM_CHANGE_STATE"],
-                            [WMState.IconicState, 0, 0, 0, 0])
+                            self.window, self.atoms["WM_CHANGE_STATE"],
+                            32, [WMState.IconicState, 0, 0, 0, 0])
 
     def shutdown(self):
         self.conn.flush()
@@ -281,9 +281,10 @@ class WMTestCase(unittest.TestCase):
 
     def kill_wm(self):
         """Ask the window manager to exit."""
-        send_client_message(self.conn, self.screen.root, self.screen.root,
+        send_client_message(self.conn, self.screen.root, False,
                             EventMask.StructureNotify,
-                            8, self.atoms["WM_EXIT"], [0] * 20)
+                            self.screen.root, self.atoms["WM_EXIT"],
+                            8, [0] * 20)
         self.conn.flush()
 
     def add_client(self, client, start_client=True):
