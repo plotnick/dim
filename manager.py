@@ -213,13 +213,15 @@ class WindowManager(EventHandler):
                 continue
             log.debug("Adopting window 0x%x.", window)
             client = self.manage(window)
-            if attrs.map_state != MapState.Unmapped:
+            if client and attrs.map_state != MapState.Unmapped:
                 client.normalize()
 
     def manage(self, window):
-        """Manage a window and return the client instance."""
-        if window in self.clients:
+        """Manage a window and return a (possibly) new client instance."""
+        try:
             return self.clients[window]
+        except KeyError:
+            pass
 
         log.debug("Managing client window 0x%x.", window)
         geometry = get_window_geometry(self.conn, window)
@@ -464,6 +466,8 @@ class WindowManager(EventHandler):
     def handle_map_request(self, event):
         """Handle a request to map a top-level window on behalf of a client."""
         client = self.manage(event.window)
+        if not client:
+            return
         if (client.properties.wm_state == WMState.WithdrawnState and
             client.properties.wm_hints.initial_state == WMState.IconicState):
             # Withdrawn → Iconic state transition (ICCCM §4.1.4).
