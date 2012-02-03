@@ -579,4 +579,3 @@ class WindowManager(EventHandler):
             else:
                 log.debug("CRTC 0x%x disabled.", cc.crtc)
                 del self.crtcs[cc.crtc]
-            
