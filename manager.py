@@ -25,8 +25,7 @@ from keymap import *
 from properties import *
 from xutil import *
 
-__all__ = ["ExitWindowManager", "WindowManagerProperties", "compress",
-           "WindowManager"]
+__all__ = ["WindowManager"]
 
 log = logging.getLogger("manager")
 

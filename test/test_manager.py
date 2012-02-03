@@ -15,7 +15,7 @@ from atom import AtomCache
 from event import *
 from geometry import *
 from keymap import *
-from manager import *
+from manager import WindowManager, compress
 from properties import WindowProperty, WMState, WMSizeHints, WMHints
 from xutil import *
 
