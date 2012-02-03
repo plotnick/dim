@@ -224,12 +224,14 @@ if __name__ == "__main__":
         log.info("Interrupt caught; shutting down.")
         wm.shutdown()
     except:
-        conn = xcb.connect()
-        conn.core.SetInputFocus(InputFocus.PointerRoot,
-                                InputFocus.PointerRoot,
-                                Time.CurrentTime)
-        conn.flush()
-
+        if wm.conn:
+            wm.conn.core.UngrabServer()
+            wm.conn.core.UngrabPointer(Time.CurrentTime)
+            wm.conn.core.UngrabKeyboard(Time.CurrentTime)
+            wm.conn.core.SetInputFocus(InputFocus.PointerRoot,
+                                       InputFocus.PointerRoot,
+                                       Time.CurrentTime)
+            wm.conn.flush()
         traceback.print_exc()
         if options.debug and (sys.stdout.isatty() or os.environ.get("EMACS")):
             pdb.post_mortem()
