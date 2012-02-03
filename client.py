@@ -151,8 +151,8 @@ class Client(EventHandler):
                                                       CW.EventMask,
                                                       [self.client_event_mask])
 
-    def send_client_message(self, message, time):
-        """Send a protocol message to the client."""
+    def send_protocol_message(self, message, time):
+        """Send a protocol message to the client (ICCCM §4.2.8)."""
         if message in self.properties.wm_protocols:
             send_client_message(self.conn, self.window, self.window, 0,
                                 32, self.atoms["WM_PROTOCOLS"],
@@ -336,7 +336,7 @@ class Client(EventHandler):
             if (self.properties.wm_hints.flags & WMHints.InputHint == 0 or
                 self.properties.wm_hints.input):
                 self.focus_time = set_input_focus(self.window, time)
-            if self.send_client_message(self.atoms["WM_TAKE_FOCUS"], time):
+            if self.send_protocol_message(self.atoms["WM_TAKE_FOCUS"], time):
                 self.log.debug("Taking input focus at time %d.", time)
                 self.focus_time = time
         return self.focus_time is not None
@@ -436,7 +436,7 @@ class Client(EventHandler):
 
     def delete(self, time=Time.CurrentTime):
         """Ask the client to delete its top-level window."""
-        self.send_client_message(self.atoms["WM_DELETE_WINDOW"], time)
+        self.send_protocol_message(self.atoms["WM_DELETE_WINDOW"], time)
 
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
