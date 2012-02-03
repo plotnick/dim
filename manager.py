@@ -34,7 +34,7 @@ class ExitWindowManager(Exception):
     out of the main event loop."""
     pass
 
-@client_message("WM_EXIT")
+@client_message("_DIM_WM_EXIT")
 class WMExit(ClientMessage):
     """Sent by a client that would like the window manager to shut down."""
     pass

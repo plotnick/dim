@@ -283,8 +283,8 @@ class WMTestCase(unittest.TestCase):
         """Ask the window manager to exit."""
         send_client_message(self.conn, self.screen.root, False,
                             EventMask.StructureNotify,
-                            self.screen.root, self.atoms["WM_EXIT"],
-                            8, [0] * 20)
+                            self.screen.root, self.atoms["_DIM_WM_EXIT"],
+                            32, [0] * 5)
         self.conn.flush()
 
     def add_client(self, client, start_client=True):
