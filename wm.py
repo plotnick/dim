@@ -167,6 +167,7 @@ global_button_bindings = {
 if __name__ == "__main__":
     from optparse import OptionParser
     import logging
+    import os
     import pdb
     import sys
     import traceback
@@ -210,10 +211,10 @@ if __name__ == "__main__":
 
     log = logging.getLogger("wm")
     log.debug("Using %s focus policy.", options.focus_mode)
+    wm_class = type("WM",
+                    (focus_modes[options.focus_mode], BaseWM),
+                    dict(title_font=options.title_font))
     try:
-        wm_class = type("WM",
-                        (focus_modes[options.focus_mode], BaseWM),
-                        dict(title_font=options.title_font))
         wm = wm_class(display=options.display,
                       key_bindings=global_key_bindings,
                       button_bindings=global_button_bindings,
@@ -230,4 +231,5 @@ if __name__ == "__main__":
         conn.flush()
 
         traceback.print_exc()
-        pdb.post_mortem()
+        if options.debug and (sys.stdout.isatty() or os.environ.get("EMACS")):
+            pdb.post_mortem()
