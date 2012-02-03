@@ -8,6 +8,7 @@ import sys
 
 from xcb.xproto import *
 
+from atom import AtomCache
 from bindings import *
 from color import RGBi
 from daemon import daemon
@@ -20,6 +21,7 @@ from moveresize import MoveResize
 from properties import AtomList
 from raiselower import RaiseLower
 from tags import *
+from xutil import *
 
 def spawn(command):
     """Execute command (a string) in the background via a shell."""
@@ -28,6 +30,18 @@ def spawn(command):
     daemon(True, True)
     execv("/bin/sh",
           ["/bin/sh", "-c", command.encode(sys.stdin.encoding, "ignore")])
+
+def wm_exit(display):
+    """Ask a running window manager to exit gracefully."""
+    conn = xcb.connect(display)
+    root = conn.get_setup().roots[conn.pref_screen].root
+    atoms = AtomCache(conn)
+    send_client_message(conn, root, False,
+                        EventMask.StructureNotify,
+                        root, atoms["_DIM_WM_EXIT"],
+                        32, [0] * 5)
+    conn.flush()
+    conn.disconnect()
 
 class BaseWM(TagManager, MoveResize, RaiseLower):
     title_font = "fixed"
@@ -178,12 +192,10 @@ if __name__ == "__main__":
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
                          help="show debugging messages")
-    optparser.add_option("-V", "--verbose", action="store_true", dest="verbose",
-                         help="be prolix, loquacious, and multiloquent")
     optparser.add_option("-L", "--log", action="append", dest="log",
                          help="enable logging for the specified module")
-    optparser.add_option("-v", "--version", action="store_true", dest="version",
-                         help="output version information and exit")
+    optparser.add_option("-V", "--verbose", action="store_true", dest="verbose",
+                         help="be prolix, loquacious, and multiloquent")
     optparser.add_option("-d", "--display", dest="display",
                          help="the X server display name")
     optparser.add_option("-f", "--focus-mode", dest="focus_mode",
@@ -193,10 +205,17 @@ if __name__ == "__main__":
     optparser.add_option("-t", "--title-font", dest="title_font",
                          default="fixed",
                          help="client window title font")
+    optparser.add_option("-v", "--version", action="store_true", dest="version",
+                         help="output version information and exit")
+    optparser.add_option("-x", "--exit", action="store_true", dest="exit",
+                         help="ask running window manager to exit gracefully")
     (options, args) = optparser.parse_args()
 
     if options.version:
         print "Python Window Manager version 0.0"
+        sys.exit(0)
+    elif options.exit:
+        wm_exit(options.display)
         sys.exit(0)
 
     tty = logging.StreamHandler()
