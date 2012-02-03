@@ -218,6 +218,7 @@ def client_message(type_name):
     return register_client_message_type
 
 class ClientMessage(object):
+    """Pseudo-event class for client messages."""
     def __init__(self, window, format, data):
         self.window = window
         self.format = format
