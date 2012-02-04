@@ -274,6 +274,18 @@ class WindowManager(EventHandler):
                                gravity)
 
     @property
+    def current_crtc_geometry(self):
+        """If RandR is available, return the geometry of the CRTC that
+        currently contains the pointer. Otherwise, return the geometry
+        of the root window."""
+        if self.crtcs:
+            pointer = query_pointer(self.conn, self.screen)
+            for geometry in self.crtcs.values():
+                if pointer in geometry:
+                    return geometry
+        return self.screen_geometry
+
+    @property
     def current_focus(self):
         """Return the client that currently has the input focus."""
         window = get_input_focus(self.conn, self.screen_number)

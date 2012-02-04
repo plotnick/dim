@@ -51,20 +51,9 @@ class Minibuffer(InputField):
 
     def create_window(self, **kwargs):
         if not kwargs.get("geometry"):
-            def get_screen_geometry():
-                """If RANDR is available, return the geometry of the CRTC
-                that currently contains the pointer. Otherwise, return the
-                geometry of the root window."""
-                if self.manager.crtcs:
-                    pointer = query_pointer(self.conn, self.manager.screen)
-                    for geometry in self.manager.crtcs.values():
-                        if pointer in geometry:
-                            return geometry
-                return self.manager.screen_geometry
-
             # Center the window along the bottom edge of the screen, taking
             # 80% of the available width.
-            screen_geometry = get_screen_geometry()
+            screen_geometry = self.manager.current_crtc_geometry
             w = int(screen_geometry.width * 0.8)
             h = self.config.height
             x = screen_geometry.x + (screen_geometry.width - w) // 2
