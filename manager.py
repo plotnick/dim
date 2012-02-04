@@ -127,7 +127,7 @@ class WindowManager(EventHandler):
 
     def get_crtc_info(self, screen):
         """Yield pairs of the form (CRTC, Geometry) for each CRTC connected
-        to the given screen, and select for change notification if available."""
+        to the given screen."""
         resources = self.randr.GetScreenResources(screen.root).reply()
         timestamp = resources.config_timestamp
         for crtc, cookie in [(crtc, self.randr.GetCrtcInfo(crtc, timestamp))
