@@ -39,6 +39,14 @@ class FontInfo(object):
         for attr in attrs:
             setattr(self, attr, getattr(info, attr))
 
+        # Storing these bounds as a tuple lets us replace four attribute
+        # lookups with one, which makes a measurable performance difference
+        # in char_info.
+        self.index_bounds = (self.min_byte1,
+                             self.max_byte1,
+                             self.min_char_or_byte2,
+                             self.max_char_or_byte2)
+
         self.default_char_info = self.char_info(self.default_char, None)
 
         for p in self.properties:
@@ -56,18 +64,21 @@ class FontInfo(object):
         the CHARINFO for the font's default character is returned (which
         may be None if that character is itself nonexistent or missing).
         Otherwise, the provided default is returned."""
-        if isinstance(char, basestring):
+        try:
             char = ord(char)
-        row = char >> 8
-        col = char & 0xff
-        if (self.min_byte1 <= row <= self.max_byte1 and
-            self.min_char_or_byte2 <= col <= self.max_char_or_byte2):
-            info = (self.char_infos[((row - self.min_byte1) *
-                                     (self.max_char_or_byte2 -
-                                      self.min_char_or_byte2 + 1)) +
-                                    (col - self.min_char_or_byte2)]
-                    if self.char_infos
-                    else self.min_bounds)
+        except TypeError:
+            pass
+        byte1 = char >> 8
+        byte2 = char & 0xff
+        (min_byte1, max_byte1, min_byte2, max_byte2) = self.index_bounds
+        if (min_byte1 <= byte1 <= max_byte1 and
+            min_byte2 <= byte2 <= max_byte2):
+            try:
+                info = self.char_infos[((byte1 - min_byte1) *
+                                        (max_byte2 - min_byte2 + 1)) +
+                                       (byte2 - min_byte2)]
+            except IndexError:
+                info = self.min_bounds
         else:
             info = default
         if (not info or
