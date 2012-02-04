@@ -49,6 +49,13 @@ class FontInfo(object):
             self.spacing = None
 
     def char_info(self, char, default=True):
+        """Return the CHARINFO for the given character.
+
+        If the given character is nonexistent or missing, then the info
+        returned depends on the default argument. If default is True, then
+        the CHARINFO for the font's default character is returned (which
+        may be None if that character is itself nonexistent or missing).
+        Otherwise, the provided default is returned."""
         if isinstance(char, basestring):
             char = ord(char)
         row = char >> 8
@@ -73,6 +80,7 @@ class FontInfo(object):
         return info
 
     def text_width(self, string):
+        """Compute the width of the given string."""
         if self.spacing == "M" or self.spacing == "C":
             # Monospaced font.
             return self.min_bounds.character_width * len(string)
@@ -82,6 +90,14 @@ class FontInfo(object):
                        if info)
 
     def truncate(self, string, max_width):
+        """Return a possibly-truncated version of the given string that fits
+        in max_width pixels.
+
+        If there is room, an ellipsis will be appended to the truncated
+        string to indicate that truncation has occurred. The width of the
+        ellipsis is accounted for in the computation, thus maintaining the
+        invariant that the width of whatever string is returned will be
+        less than or equal to max_width."""
         if self.text_width(string) <= max_width:
             return string
         ellipsis = u"…"
