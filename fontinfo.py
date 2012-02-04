@@ -43,7 +43,7 @@ class FontInfo(object):
 
         for p in self.properties:
             if p.name == atoms["SPACING"]:
-                self.spacing = atoms.name(p.value)
+                self.spacing = atoms.name(p.value).upper()
                 break
         else:
             self.spacing = None
@@ -73,12 +73,13 @@ class FontInfo(object):
         return info
 
     def text_width(self, string):
-        if self.spacing == "P":
+        if self.spacing == "M" or self.spacing == "C":
+            # Monospaced font.
+            return self.min_bounds.character_width * len(string)
+        else:
             return sum(info.character_width
                        for info in map(self.char_info, string)
                        if info)
-        else:
-            return self.min_bounds.character_width * len(string)
 
     def truncate(self, string, max_width):
         if self.text_width(string) <= max_width:
