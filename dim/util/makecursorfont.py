@@ -7,7 +7,7 @@ import re
 
 cursor_pattern = re.compile(r"""^#define (XC_[a-zA-Z_0-9]+)\s+([0-9]+)$""")
 
-def makecursorfont(input, output):
+def make_cursor_font(input, output):
     if input.name:
         output.write("# Automatically generated from %s.\n\n" % input.name)
 
@@ -30,4 +30,4 @@ if __name__ == "__main__":
         sys.exit(1)
     with open(input_file) as input:
         with open(output_file, "w") as output:
-            makecursorfont(input, output)
+            make_cursor_font(input, output)

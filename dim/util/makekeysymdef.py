@@ -43,7 +43,7 @@ def is_legacy_keysym(keysym):
 def is_unicode_keysym(keysym):
     return (keysym & 0xff000000) == 0x01000000
 
-def keysymdef(input, output):
+def make_keysym_def(input, output):
     if input.name:
         output.write("# Automatically generated from %s.\n\n" % input.name)
 
@@ -122,4 +122,4 @@ if __name__ == "__main__":
         sys.exit(1)
     with open(input_file) as input:
         with open(output_file, "w") as output:
-            keysymdef(input, output)
+            make_keysym_def(input, output)
