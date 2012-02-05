@@ -1,4 +1,4 @@
 *.pyc
 *.pyo
-cursorfont.py
-keysymdef.py
+dim/cursorfont.py
+dim/keysymdef.py
