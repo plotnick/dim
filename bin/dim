@@ -8,20 +8,20 @@ import sys
 
 from xcb.xproto import *
 
-from atom import AtomCache
-from bindings import *
-from color import RGBi
-from daemon import daemon
-from decorator import TitlebarConfig, TitlebarDecorator
-from event import handler
-from focus import SloppyFocus, ClickToFocus
-from keysym import *
-from minibuffer import *
-from moveresize import MoveResize
-from properties import AtomList
-from raiselower import RaiseLower
-from tags import *
-from xutil import *
+from dim.atom import AtomCache
+from dim.bindings import *
+from dim.color import RGBi
+from dim.daemon import daemon
+from dim.decorator import TitlebarConfig, TitlebarDecorator
+from dim.event import handler
+from dim.focus import SloppyFocus, ClickToFocus
+from dim.keysym import *
+from dim.minibuffer import *
+from dim.moveresize import MoveResize
+from dim.properties import AtomList
+from dim.raiselower import RaiseLower
+from dim.tags import *
+from dim.xutil import *
 
 def spawn(command):
     """Execute command (a string) in the background via a shell."""
