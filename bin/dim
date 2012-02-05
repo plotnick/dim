@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- mode: Python; coding: utf-8 -*-
 
+"""A window manager for the X window system."""
+
 from collections import deque
 from os import fork, execv
 import re
@@ -30,6 +32,13 @@ def spawn(command):
     daemon(True, True)
     execv("/bin/sh",
           ["/bin/sh", "-c", command.encode(sys.stdin.encoding, "ignore")])
+
+def update_tagset(display, spec):
+    """Send a tagset specification to a running window manager."""
+    conn = xcb.connect(display)
+    send_tagset_expr(conn, parse_tagset_spec(spec))
+    conn.flush()
+    conn.disconnect()
 
 def wm_exit(display):
     """Ask a running window manager to exit gracefully."""
@@ -202,6 +211,8 @@ if __name__ == "__main__":
                          type="choice", choices=focus_modes.keys(),
                          default="sloppy",
                          help="focus mode: sloppy or click")
+    optparser.add_option("-s", "--tagset", dest="tagset_spec",
+                         help="specify a tagset expression")
     optparser.add_option("-t", "--title-font", dest="title_font",
                          default="fixed",
                          help="client window title font")
@@ -212,7 +223,12 @@ if __name__ == "__main__":
     (options, args) = optparser.parse_args()
 
     if options.version:
-        print "Python Window Manager version 0.0"
+        print "DIM OF THE YARD!"
+        print "Version 0.1"
+        sys.exit(0)
+    elif options.tagset_spec:
+        update_tagset(options.display,
+                      unicode(options.tagset_spec, sys.stdin.encoding))
         sys.exit(0)
     elif options.exit:
         wm_exit(options.display)
