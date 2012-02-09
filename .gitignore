@@ -2,3 +2,4 @@
 *.pyo
 dim/cursorfont.py
 dim/keysymdef.py
+build
