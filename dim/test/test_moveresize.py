@@ -6,13 +6,13 @@ import unittest
 import xcb
 from xcb.xproto import *
 
-from cursor import *
-from geometry import *
-from keysym import *
-from moveresize import bsearch_floor, bsearch_ceil, \
+from dim.cursor import *
+from dim.geometry import *
+from dim.keysym import *
+from dim.moveresize import bsearch_floor, bsearch_ceil, \
     ClientMove, ClientResize, MoveResize
-from properties import WMSizeHints
-from xutil import int16
+from dim.properties import WMSizeHints
+from dim.xutil import int16
 
 from test_manager import EventType, TestClient, WMTestCase, WarpedPointer
 

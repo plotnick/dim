@@ -2,7 +2,7 @@
 
 import unittest
 
-from event import *
+from dim.event import *
 
 class Event(object):
     def __init__(self):

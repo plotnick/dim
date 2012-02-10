@@ -5,7 +5,7 @@ import unittest
 import xcb
 from xcb.xproto import *
 
-from atom import AtomCache
+from dim.atom import AtomCache
 
 class TestAtomCache(unittest.TestCase):
     def setUp(self):

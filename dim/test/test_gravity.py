@@ -2,11 +2,11 @@
 
 import unittest
 
-from decorator import Decorator
-from event import handler
-from geometry import *
-from manager import WindowManager
-from properties import WMSizeHints
+from dim.decorator import Decorator
+from dim.event import handler
+from dim.geometry import *
+from dim.manager import WindowManager
+from dim.properties import WMSizeHints
 
 from xcb.xproto import *
 

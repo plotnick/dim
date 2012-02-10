@@ -7,8 +7,8 @@ import unittest
 import xcb
 from xcb.xproto import *
 
-from geometry import *
-from properties import *
+from dim.geometry import *
+from dim.properties import *
 
 class TestScalarPropertyValue(unittest.TestCase):
     def test_unpack(self):

@@ -2,9 +2,9 @@
 
 import unittest
 
-from keysym import *
-from keysym import _keysyms # borrow private dictionary from keysymdef
-import keysymdef
+from dim.keysym import *
+from dim.keysym import _keysyms # borrow private dictionary from keysymdef
+from dim import keysymdef
 
 class TestKeysym(unittest.TestCase):
     def test_mnemonics(self):

@@ -11,10 +11,10 @@
 from time import sleep
 import unittest
 
-from event import *
-from geometry import *
-from focus import *
-from properties import WMHints
+from dim.event import *
+from dim.geometry import *
+from dim.focus import *
+from dim.properties import WMHints
 
 from xcb.xproto import *
 

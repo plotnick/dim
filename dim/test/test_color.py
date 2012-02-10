@@ -6,7 +6,7 @@ import unittest
 import xcb
 from xcb.xproto import *
 
-from color import *
+from dim.color import *
 
 class TestParseColor(unittest.TestCase):
     def test_hex_spec(self):

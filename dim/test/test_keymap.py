@@ -7,8 +7,8 @@ from random import choice, shuffle
 import xcb
 from xcb.xproto import *
 
-from keymap import KeymapError, KeyboardMap, ModifierMap, PointerMap
-from keysym import *
+from dim.keymap import KeymapError, KeyboardMap, ModifierMap, PointerMap
+from dim.keysym import *
 
 def flatten(l):
     return [y for x in l for y in x]

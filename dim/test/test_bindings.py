@@ -6,10 +6,11 @@ import unittest
 import xcb
 from xcb.xproto import *
 
-from bindings import all_combinations, ensure_sequence, ensure_keysym, \
-    KeyBindingMap, ButtonBindingMap, KeyBindings, ButtonBindings
-from keymap import *
-from keysym import *
+from dim.bindings import (all_combinations, ensure_sequence, ensure_keysym,
+                          KeyBindingMap, ButtonBindingMap,
+                          KeyBindings, ButtonBindings)
+from dim.keymap import *
+from dim.keysym import *
 
 class TestAuxFunctions(unittest.TestCase):
     def test_all_combinations(self):

@@ -2,7 +2,7 @@
 
 import unittest
 
-from xutil import *
+from dim.xutil import *
 
 class TestTimestamps(unittest.TestCase):
     def assertBefore(self, x, y):

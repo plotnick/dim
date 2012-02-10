@@ -9,11 +9,11 @@ import unittest
 
 from xcb.xproto import *
 
-from event import *
-from geometry import *
-from properties import AtomList
-from tags import (TagMachine, TagManager, SpecSyntaxError,
-                  tokenize, parse_tagset_spec, send_tagset_expr)
+from dim.event import *
+from dim.geometry import *
+from dim.properties import AtomList
+from dim.tags import (TagMachine, TagManager, SpecSyntaxError,
+                      tokenize, parse_tagset_spec, send_tagset_expr)
 
 from test_manager import TestClient, WMTestCase
 

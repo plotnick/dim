@@ -3,8 +3,8 @@
 from operator import lt, gt
 import unittest
 
-from geometry import *
-from properties import WMSizeHints
+from dim.geometry import *
+from dim.properties import WMSizeHints
 
 class TestGeometryClasses(unittest.TestCase):
     def test_position(self):

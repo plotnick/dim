@@ -11,13 +11,13 @@ import xcb
 from xcb.xproto import *
 import xcb.xtest
 
-from atom import AtomCache
-from event import *
-from geometry import *
-from keymap import *
-from manager import WindowManager, compress
-from properties import WindowProperty, WMState, WMSizeHints, WMHints
-from xutil import *
+from dim.atom import AtomCache
+from dim.event import *
+from dim.geometry import *
+from dim.keymap import *
+from dim.manager import WindowManager, compress
+from dim.properties import WindowProperty, WMState, WMSizeHints, WMHints
+from dim.xutil import *
 
 ms = 1e-3 # one millisecond; useful for sleep times
 

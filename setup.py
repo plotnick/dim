@@ -8,11 +8,17 @@ modules (definitions for the standard X cursor font and keysyms).
 Since Distutils has no built-in support for auto-generated Python
 modules, we'll add a custom command ("generate_py") and associated
 infrastructure (subclasses of "Distribution" and "build" that are
-aware of the new command and its options).
+aware of the new command and its options). The actual generation
+routines are in their own modules, which export a simple functional
+interface that we use here.
 
-The actual generation routines are in their own modules, which export
-a simple functional interface that we use here."""
+We also add a new "test" command, which executes the test suite.
+The test suite must be run on a display that does not already have
+a window manager running; a nesting X server such as Xephyr or Xnest
+may be useful here."""
 
+from contextlib import contextmanager
+from glob import glob
 import os
 
 from distutils.cmd import Command
@@ -22,18 +28,24 @@ from distutils.dep_util import newer
 from distutils.errors import *
 from distutils import log
 
+from unittest import TestLoader, TextTestRunner
+
 from dim.util.makecursorfont import make_cursor_font
 from dim.util.makekeysymdef import make_keysym_def
 
-class Distribution(_Distribution):
-    # Unknown setup options are ignored by default (with a warning),
-    # but defining an attribute in the distribution class is sufficient
-    # to declare a new option as valid.
+class AutogenDistribution(_Distribution):
+    # Declare options for auto-generation command.
     autogen_modules = None
     autogen_source_dirs = None
 
     def has_autogen_modules(self):
         return self.autogen_modules and len(self.autogen_modules) > 0
+
+class AutogenCommand(Command):
+    def has_autogen_modules(self):
+        return self.distribution.has_autogen_modules()
+
+    sub_commands = [("generate_py", has_autogen_modules)]
 
 class generate_py(Command):
     description = "auto-generate Python modules"
@@ -79,13 +91,59 @@ class generate_py(Command):
                         with open(module_filename, "w") as output_file:
                             generator(input_file, output_file)
 
-class build(_build):
-    def has_autogen_modules(self):
-        return self.distribution.has_autogen_modules()
-
+class build(_build, AutogenCommand):
     # Sub-commands are run in order, and auto-generation must precede the
     # other build commands.
-    sub_commands = [("generate_py", has_autogen_modules)] + _build.sub_commands
+    sub_commands = AutogenCommand.sub_commands + _build.sub_commands
+
+class TestDistribution(_Distribution):
+    # Declare options for test command.
+    test_packages = None
+    test_modules = None
+
+@contextmanager
+def display(display_name):
+    """Execute a block with the DISPLAY environment variable rebound."""
+    original_display = os.environ.get("DISPLAY")
+    if display_name:
+        os.environ["DISPLAY"] = display_name
+    try:
+        yield
+    finally:
+        if original_display:
+            os.environ["DISPLAY"] = original_display
+        elif display_name:
+            del os.environ["DISPLAY"]
+
+class test(AutogenCommand):
+    description = "execute the test suite"
+    user_options = [("display=", "d", "the X server to contact")]
+
+    def initialize_options(self):
+        self.display = None
+
+    def finalize_options(self):
+        self.test_packages = self.distribution.test_packages or []
+        self.test_modules = self.distribution.test_modules or []
+
+    def run(self):
+        for cmd_name in self.get_sub_commands():
+            self.run_command(cmd_name)
+
+        build_py = self.get_finalized_command("build_py")
+        test_names = self.test_modules
+        for package in self.test_packages:
+            package_dir = build_py.get_package_dir(package)
+            for pkg, module, f in build_py.find_package_modules(package,
+                                                                package_dir):
+                if module != "__init__":
+                    test_names.append(".".join([pkg, module]))
+        tests = TestLoader().loadTestsFromNames(test_names)
+        with display(self.display):
+            TextTestRunner(verbosity=self.verbose).run(tests)
+
+class Distribution(AutogenDistribution, TestDistribution):
+    pass
 
 setup(name="dim",
       version="0.1",
@@ -94,8 +152,9 @@ setup(name="dim",
       author_email="shrike@netaxs.com",
       scripts=["bin/dim"],
       packages=["dim", "dim.test", "dim.util"],
+      test_packages=["dim.test"],
       autogen_modules=[("cursorfont.h", "dim.cursorfont", make_cursor_font),
                        ("keysymdef.h", "dim.keysymdef", make_keysym_def)],
       autogen_source_dirs=["/usr/local/include/X11", "/usr/include/X11"],
-      cmdclass={"build": build, "generate_py": generate_py},
+      cmdclass={"build": build, "generate_py": generate_py, "test": test},
       distclass=Distribution)

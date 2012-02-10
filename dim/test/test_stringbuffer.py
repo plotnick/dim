@@ -2,7 +2,7 @@
 
 import unittest
 
-from stringbuffer import *
+from dim.stringbuffer import *
 
 class TestStringBuffer(unittest.TestCase):
     def assertBuffer(self, buf, contents, point=None):
