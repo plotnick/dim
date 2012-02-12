@@ -64,8 +64,8 @@ class FocusPolicy(WindowManager):
 
     def focus(self, client, time):
         """Offer the input focus to a client. If the offer is accepted,
-        returns true and moves the client to the head of the focus list;
-        otherwise, returns false."""
+        return true and move the client to the head of the focus list;
+        otherwise, return false."""
         if client and client.focus(time):
             try:
                 self.focus_list.remove(client)
