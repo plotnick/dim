@@ -23,8 +23,8 @@ class FocusPolicy(WindowManager):
 
     __log = logging.getLogger("focus")
 
-    def __init__(self, *args, **kwargs):
-        super(FocusPolicy, self).__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super(FocusPolicy, self).__init__(**kwargs)
 
         self.focus_list = deque() # most-recently focused first
 
@@ -191,8 +191,8 @@ class SloppyFocus(FocusPolicy):
 
     __log = logging.getLogger("focus.sloppy")
 
-    def __init__(self, *args, **kwargs):
-        super(SloppyFocus, self).__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super(SloppyFocus, self).__init__(**kwargs)
 
         # In a comment in the source of AHWM (event.c,v 1.72 2002/02/16),
         # Alex Hioreanu writes:
@@ -253,10 +253,9 @@ class ClickToFocus(FocusPolicy):
 
     __log = logging.getLogger("focus.click")
 
-    def __init__(self, display=None, screen=None,
-                 ignore_focus_click=False, **kwargs):
+    def __init__(self, ignore_focus_click=False, **kwargs):
         self.ignore_focus_click = ignore_focus_click
-        super(ClickToFocus, self).__init__(display, screen, **kwargs)
+        super(ClickToFocus, self).__init__(**kwargs)
 
     def manage(self, window):
         client = super(ClickToFocus, self).manage(window)

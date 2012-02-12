@@ -370,8 +370,8 @@ class TagManagerProperties(WindowManagerProperties):
 class TagManager(WindowManager):
     property_class = TagManagerProperties
 
-    def __init__(self, *args, **kwargs):
-        super(TagManager, self).__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super(TagManager, self).__init__(**kwargs)
 
         self.tagsets = defaultdict(set) # sets of clients, indexed by tag
         opcodes = {None: "nop",

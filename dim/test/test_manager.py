@@ -30,12 +30,10 @@ class EventType(object):
     MotionNotify = 6
 
 class WindowManagerThread(Thread):
-    def __init__(self, wm_class, screen, **kwargs):
+    def __init__(self, wm_class, **kwargs):
         assert issubclass(wm_class, WindowManager)
-        assert isinstance(screen, int)
-
         super(WindowManagerThread, self).__init__(name="WM")
-        self.wm = wm_class(None, screen, **kwargs)
+        self.wm = wm_class(**kwargs)
 
     def run(self):
         try:
@@ -262,7 +260,8 @@ class WMTestCase(unittest.TestCase):
         self.keymap = KeyboardMap(self.conn, None, self.modmap)
         self.buttons = PointerMap(self.conn)
         self.clients = []
-        self.wm_thread = WindowManagerThread(self.wm_class, screen, **kwargs)
+        self.wm_thread = WindowManagerThread(self.wm_class, screen=screen,
+                                             **kwargs)
         if start_wm:
             self.wm_thread.start()
 
@@ -563,8 +562,8 @@ class EventLoopTester(WindowManager):
     """A window manager that records the number of ConfigureNotify events
     that it receives on its client windows."""
 
-    def __init__(self, *args, **kwargs):
-        super(EventLoopTester, self).__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super(EventLoopTester, self).__init__(**kwargs)
         self.events_received = 0
 
     @handler(ConfigureNotifyEvent)
