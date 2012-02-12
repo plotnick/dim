@@ -249,11 +249,11 @@ if __name__ == "__main__":
     wm_class = type("WM",
                     (focus_modes[options.focus_mode], BaseWM),
                     dict(title_font=options.title_font))
+    wm = wm_class(display=options.display,
+                  key_bindings=global_key_bindings,
+                  button_bindings=global_button_bindings,
+                  titlebar_bindings=titlebar_button_bindings)
     try:
-        wm = wm_class(display=options.display,
-                      key_bindings=global_key_bindings,
-                      button_bindings=global_button_bindings,
-                      titlebar_bindings=titlebar_button_bindings)
         wm.start()
     except KeyboardInterrupt:
         log.info("Interrupt caught; shutting down.")
