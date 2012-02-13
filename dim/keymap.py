@@ -233,6 +233,7 @@ class KeyboardMap(InputDeviceMapping):
         self.meta = 0
         self.super = 0
         self.hyper = 0
+        self.locking_modifiers = []
 
     def scry_modifiers(self, modmap):
         """Grovel through the modifier map and assign meanings to modifiers.
@@ -276,6 +277,13 @@ class KeyboardMap(InputDeviceMapping):
                                XK_Super_R in keysyms) << mod
                 self.hyper |= (XK_Hyper_L in keysyms or
                                XK_Hyper_R in keysyms) << mod
+
+        # Various parties (especially those establishing passive grabs)
+        # may be interested in which bucky bits correspond to locks.
+        self.locking_mods = filter(bool,
+                                   [ModMask.Lock,
+                                    self.num_lock,
+                                    self.scroll_lock])
 
 class ModifierMap(InputDeviceMapping):
     def refresh(self):

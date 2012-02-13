@@ -222,13 +222,10 @@ class Bindings(object):
             bindings = bindings.parent
         raise KeyError(symbol, state, press)
 
-    def lock_modifiers(self):
-        """Yield combinations of locking modifiers.
-
-        When we establish a passive grab, we'll repeat the grab with all
-        bound combinations of Caps Lock, Num Lock, and Scroll Lock."""
-        locks = [ModMask.Lock, self.keymap.num_lock, self.keymap.scroll_lock]
-        for mods in all_combinations([[0, lock] for lock in locks if lock]):
+    def locking_modifier_combinations(self):
+        """Yield combinations of bound locking modifiers."""
+        for mods in all_combinations([[0, lock]
+                                      for lock in self.keymap.locking_mods]):
             yield reduce(or_, mods)
 
     def establish_grabs(self, window):
@@ -259,7 +256,7 @@ class KeyBindings(Bindings):
                     yield (modifiers, keycode)
         self.conn.core.UngrabKey(Grab.Any, window, ModMask.Any)
         for modifiers, key in grabs():
-            for locks in self.lock_modifiers():
+            for locks in self.locking_modifier_combinations():
                 self.conn.core.GrabKey(True, window, locks | modifiers, key,
                                        GrabMode.Async, GrabMode.Async)
 
@@ -289,7 +286,7 @@ class ButtonBindings(Bindings):
                 yield (modifiers, button, mask)
         self.conn.core.UngrabButton(ButtonIndex.Any, window, ModMask.Any)
         for modifiers, button, mask in grabs():
-            for locks in self.lock_modifiers():
+            for locks in self.locking_modifier_combinations():
                 self.conn.core.GrabButton(True, window, mask,
                                           GrabMode.Async, GrabMode.Async,
                                           Window._None, Cursor._None,

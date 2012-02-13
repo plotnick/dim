@@ -3,6 +3,7 @@
 from collections import deque
 import logging
 import exceptions
+from operator import or_
 
 from xcb.xproto import *
 
@@ -256,6 +257,7 @@ class ClickToFocus(FocusPolicy):
     def __init__(self, ignore_focus_click=False, **kwargs):
         self.ignore_focus_click = ignore_focus_click
         super(ClickToFocus, self).__init__(**kwargs)
+        self.non_lock_modifiers = 0xff & ~reduce(or_, self.keymap.locking_mods)
 
     def manage(self, window):
         client = super(ClickToFocus, self).manage(window)
@@ -265,11 +267,16 @@ class ClickToFocus(FocusPolicy):
 
     def focus(self, client, time, **kwargs):
         if super(ClickToFocus, self).focus(client, time, **kwargs):
-            # Once a client is focused, we can release our grab. This is
-            # purely an optimization: we don't want to be responsible
-            # for proxying all button press events to the client. We'll
-            # re-establish our grab when the client loses focus.
+            # Once a client is focused, we can release our focus grab.
+            # This is purely an optimization: we don't want to be
+            # responsible for proxying all button press events to
+            # the client. We'll re-establish our grab when the client
+            # loses focus.
             self.conn.core.UngrabButton(1, client.frame, ModMask.Any)
+
+            # The above may release passive button grabs established by
+            # our global button bindings, so we'll re-establish those here.
+            self.button_bindings.establish_grabs(client.frame)
             return True
         else:
             return False
@@ -296,8 +303,14 @@ class ClickToFocus(FocusPolicy):
             return
         self.__log.debug("Button %d press in window 0x%x.",
                          event.detail, event.event)
+        if event.state & self.non_lock_modifiers:
+            self.__log.debug("Unfreezing pointer.")
+            self.conn.core.AllowEvents(Allow.AsyncPointer, event.time)
+            return
         if self.ignore_focus_click:
+            self.__log.debug("Ignoring focus click.")
             self.conn.core.UngrabPointer(event.time)
         else:
+            self.__log.debug("Replaying click.")
             self.conn.core.AllowEvents(Allow.ReplayPointer, event.time)
         self.focus(client, event.time)
