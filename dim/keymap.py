@@ -3,6 +3,7 @@
 from abc import abstractmethod, ABCMeta
 from array import array
 from collections import Mapping as AbstractMapping # avoid conflict with xcb
+from operator import or_
 
 from xcb.xproto import *
 
@@ -279,11 +280,13 @@ class KeyboardMap(InputDeviceMapping):
                                XK_Hyper_R in keysyms) << mod
 
         # Various parties (especially those establishing passive grabs)
-        # may be interested in which bucky bits correspond to locks.
+        # may be interested in which bucky bits correspond to locks, and
+        # which do not.
         self.locking_mods = filter(bool,
                                    [ModMask.Lock,
                                     self.num_lock,
                                     self.scroll_lock])
+        self.non_locking_mods = 0xff & ~reduce(or_, self.locking_mods)
 
 class ModifierMap(InputDeviceMapping):
     def refresh(self):

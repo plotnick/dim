@@ -405,6 +405,12 @@ class WindowManager(EventHandler):
                     w = self.parents.get(w, None)
         return self.clients.get(window, None)
 
+    def update_for_changed_mapping(self):
+        """Update for changed keyboard, modifier, or pointer mapping."""
+        for client in self.clients.values():
+            self.key_bindings.establish_grabs(client.frame)
+            self.button_bindings.establish_grabs(client.frame)
+
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
         if event.window == self.screen.root:
@@ -522,13 +528,12 @@ class WindowManager(EventHandler):
                 self.keymap.refresh(event.first_keycode, event.count)
             except KeymapError as e:
                 log.warning("Unable to refresh partial keymap: %s.", e)
-                # Do a full refresh. If that fails, just bail out.
                 self.keymap.refresh()
-
-        # Update our passive grabs for the new mapping.
-        for client in self.clients.values():
-            self.key_bindings.establish_grabs(client.window)
-            self.button_bindings.establish_grabs(client.window)
+        elif event.request == Mapping.Modifier:
+            log.debug("Refreshing modifier mapping.")
+            self.modmap.refresh()
+            self.keymap.scry_modifiers(self.modmap)
+        self.update_for_changed_mapping()
 
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):

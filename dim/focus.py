@@ -3,7 +3,6 @@
 from collections import deque
 import logging
 import exceptions
-from operator import or_
 
 from xcb.xproto import *
 
@@ -115,6 +114,10 @@ class FocusPolicy(WindowManager):
                             self.screen.root, self.atoms["_DIM_ENSURE_FOCUS"],
                             32, [time, window, 0, 0, 0])
 
+    def update_for_changed_mapping(self):
+        super(FocusPolicy, self).update_for_changed_mapping()
+        self.key_bindings.establish_grabs(self.default_focus_window)
+
     @handler((FocusInEvent, FocusOutEvent))
     def handle_focus_event(self, event):
         if (event.mode == NotifyMode.Grab or
@@ -180,10 +183,6 @@ class FocusPolicy(WindowManager):
                 break
         else:
             self.focus_default_window(time)
-
-    @handler(MappingNotifyEvent)
-    def handle_mapping_notify(self, event):
-        self.key_bindings.establish_grabs(self.default_focus_window)
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer
@@ -257,7 +256,6 @@ class ClickToFocus(FocusPolicy):
     def __init__(self, ignore_focus_click=False, **kwargs):
         self.ignore_focus_click = ignore_focus_click
         super(ClickToFocus, self).__init__(**kwargs)
-        self.non_lock_modifiers = 0xff & ~reduce(or_, self.keymap.locking_mods)
 
     def manage(self, window):
         client = super(ClickToFocus, self).manage(window)
@@ -303,7 +301,7 @@ class ClickToFocus(FocusPolicy):
             return
         self.__log.debug("Button %d press in window 0x%x.",
                          event.detail, event.event)
-        if event.state & self.non_lock_modifiers:
+        if event.state & self.keymap.non_locking_mods:
             self.__log.debug("Unfreezing pointer.")
             self.conn.core.AllowEvents(Allow.AsyncPointer, event.time)
             return
