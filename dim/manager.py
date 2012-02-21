@@ -238,7 +238,11 @@ class WindowManager(EventHandler):
         """Unmanage the given client."""
         log.debug("Unmanaging client window 0x%x.", client.window)
         del self.clients[client.window]
-        del self.frames[client.frame]
+        try:
+            del self.frames[client.frame]
+        except KeyError:
+            # The client could have been reparented.
+            pass
         client.undecorate(**kwargs)
         return client
 
