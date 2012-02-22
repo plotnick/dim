@@ -542,6 +542,23 @@ class WindowManager(EventHandler):
     @handler(PropertyNotifyEvent)
     def handle_property_notify(self, event):
         """Note the change of a window property."""
+        # Sometimes clients generate little storms of property updates.
+        # When that happens, we'll ignore all but the last one available.
+        def similar_event(other):
+            return (type(other) == PropertyNotifyEvent and
+                    other.window == event.window and
+                    other.atom == event.atom and
+                    other.state == event.state and
+                    other.time >= event.time)
+        while True:
+            next_event = self.check_event(similar_event)
+            if next_event:
+                event = next_event
+            else:
+                break
+
+        # Property notifications are dispatched to the appropriate property
+        # manager. We have one for the root window, and one for each client.
         if event.window == self.screen.root:
             properties = self.properties
         else:
@@ -549,6 +566,8 @@ class WindowManager(EventHandler):
             if client:
                 properties = client.properties
             else:
+                log.debug("Got PropertyNotify for unmanaged window 0x%x (%s).",
+                          event.window, self.atoms.name(event.atom))
                 return
         properties.property_changed(self.atoms.name(event.atom),
                                     event.state == Property.Delete,
