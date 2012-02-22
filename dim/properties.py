@@ -100,9 +100,10 @@ class PropertyManager(object):
 
         # Request the property, construct a new value from the reply data,
         # and cache it.
+        cookie = self.request_property(name, type)
         try:
-            reply = self.request_property(name, type).reply()
-        except BadWindow:
+            reply = cookie.reply()
+        except (BadWindow, IOError):
             self.log.warning("Error fetching property %s.", name)
             return None
         if reply.type:
@@ -187,8 +188,8 @@ class PropertyManager(object):
 
     def property_changed(self, name, deleted, time):
         """Handle a change or deletion of a property."""
-        self.log.debug("Property %s %s.",
-                       name, ("deleted" if deleted else "changed"))
+        self.log.debug("Property %s %s at time %d.",
+                       name, ("deleted" if deleted else "changed"), time)
         self.invalidate_cached_property(name)
         if not deleted and name in self.properties:
             self.request_property(name)
