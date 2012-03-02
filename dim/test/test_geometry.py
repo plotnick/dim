@@ -98,22 +98,5 @@ class TestGeometryClasses(unittest.TestCase):
         self.assertEqual(AspectRatio(3, 4).crop(Rectangle(1600, 1600)),
                          Rectangle(1200, 1600))
 
-class TestIsMoveOnly(unittest.TestCase):
-    """Test case for the is_move_only function."""
-
-    def test_null_geometry(self):
-        """Test is_move_only with null geometry"""
-        self.assertFalse(is_move_only(None, None))
-        self.assertFalse(is_move_only(None, Geometry(1, 1, 1, 1, 1)))
-        self.assertFalse(is_move_only(Geometry(1, 1, 1, 1, 1), None))
-
-    def test_is_move_only(self):
-        """Test is_move_only"""
-        g = Geometry(1, 1, 1, 1, 1)
-        self.assertFalse(is_move_only(g, Geometry(2, 2, 2, 2, 1))) # resize
-        self.assertFalse(is_move_only(g, Geometry(2, 2, 1, 1, 2))) # bw change
-        self.assertTrue(is_move_only(g, Geometry(2, 2, 1, 1, 1))) # move
-        self.assertTrue(is_move_only(g, g)) # trivial move
-
 if __name__ == "__main__":
     unittest.main()

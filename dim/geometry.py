@@ -8,7 +8,6 @@ from operator import add, sub, lt, le, eq, ne, gt, ge
 from xcb.xproto import BadWindow, Gravity
 
 __all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
-           "is_move_only",
            "offset_gravity", "gravity_offset", "gravity_names"]
 
 def make_tuple_adder(op):
@@ -138,15 +137,6 @@ AspectRatio.crop = lambda self, rect: \
     Rectangle(rect.width, rect.width * self.height // self.width) \
         if self.width > self.height \
         else Rectangle(rect.height * self.width // self.height, rect.height)
-
-def is_move_only(old, new):
-    """Return true if the new geometry represents a (possibly trivial) move
-    without a resize or border-width change of the old geometry."""
-    return (old is not None and
-            new is not None and
-            new.width == old.width and
-            new.height == old.height and
-            new.border_width == old.border_width)
 
 # When dealing with window gravity, it's sometimes more convenient to use
 # a slightly richer representation than the simple enumeration specified
