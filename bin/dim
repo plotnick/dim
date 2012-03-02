@@ -4,7 +4,7 @@
 """A window manager for the X window system."""
 
 from collections import deque
-from os import fork, execv
+from os import fork, execv, wait
 import re
 import sys
 
@@ -28,7 +28,7 @@ from dim.xutil import *
 def spawn(command):
     """Execute command (a string) in the background via a shell."""
     if fork():
-        return
+        return wait()
     daemon(True, True)
     execv("/bin/sh",
           ["/bin/sh", "-c", command.encode(sys.stdin.encoding, "ignore")])
