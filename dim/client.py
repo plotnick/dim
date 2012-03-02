@@ -216,6 +216,8 @@ class Client(EventHandler):
                                        ConfigWindow.X | ConfigWindow.Y,
                                        map(int16, position))
         self.frame_geometry = self.frame_geometry.move(position)
+        # Inform the client of its new position (ICCCM §4.2.3).
+        configure_notify(self.conn, self.window, *self.absolute_geometry)
         return position
 
     def resize(self, size, border_width=None, gravity=None):
