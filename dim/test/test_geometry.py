@@ -3,6 +3,8 @@
 from operator import lt, gt
 import unittest
 
+from xcb.xproto import Gravity
+
 from dim.geometry import *
 from dim.properties import WMSizeHints
 
@@ -53,6 +55,19 @@ class TestGeometryClasses(unittest.TestCase):
         self.assertEqual(r + g, g + r)
         self.assertEqual(str(g), "3x5+100-50")
         self.assertFalse(Geometry(0, 0, 0, 0, 0))
+
+    def test_resize(self):
+        g = Geometry(x=0, y=0, width=100, height=100, border_width=1)
+        self.assertEqual(g.resize(Rectangle(50, 200)),
+                         Geometry(0, 0, 50, 200, 1))
+        self.assertEqual(g.resize(Rectangle(50, 200), 0),
+                         Geometry(0, 0, 50, 200, 0))
+        self.assertEqual(g.resize(Rectangle(50, 200), 1, Gravity.SouthEast),
+                         Geometry(50, -100, 50, 200, 1))
+        self.assertEqual(g.resize(Rectangle(50, 200), 0, Gravity.SouthEast),
+                         Geometry(52, -98, 50, 200, 0))
+        self.assertEqual(g.resize(Rectangle(50, 200), 2, Gravity.SouthEast),
+                         Geometry(48, -102, 50, 200, 2))
 
     def assertIntersecting(self, x, y):
         self.assertTrue(x & y)
