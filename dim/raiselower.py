@@ -12,9 +12,9 @@ class RaiseLower(WindowManager):
     def raise_window(self, event):
         client = self.get_client(event.event)
         if client:
-            client.restack(StackMode.TopIf)
+            client.configure(stack_mode=StackMode.TopIf)
 
     def lower_window(self, event):
         client = self.get_client(event.event)
         if client:
-            client.restack(StackMode.BottomIf)
+            client.configure(stack_mode=StackMode.BottomIf)

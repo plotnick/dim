@@ -79,7 +79,7 @@ class Client(EventHandler):
         # Set the client's border width to 0, but save the current value
         # so that we can restore it if and when we reparent the client
         # back to the root.
-        self.original_border_width = geometry.border_width
+        self.border_width = geometry.border_width
         self.conn.core.ConfigureWindow(self.window,
                                        ConfigWindow.BorderWidth,
                                        [0])
@@ -210,47 +210,66 @@ class Client(EventHandler):
                 self.offset.position() -
                 self.offset.size())
 
-    def move(self, position):
-        """Move the frame and return its new position."""
-        self.conn.core.ConfigureWindow(self.frame,
-                                       ConfigWindow.X | ConfigWindow.Y,
-                                       map(int16, position))
-        self.frame_geometry = self.frame_geometry.move(position)
-        # Inform the client of its new position (ICCCM §4.2.3).
-        configure_notify(self.conn, self.window, *self.absolute_geometry)
-        return position
-
-    def resize(self, size, border_width=None, gravity=None):
-        """Resize the client window and return the new geometry, which may
-        differ in both size and position due to window gravity."""
-        if gravity is None:
+    def configure_request(self,
+                          x=None, y=None,
+                          width=None, height=None, border_width=None,
+                          sibling=None, stack_mode=None):
+        """Update the client configuration in response to a client request.
+        If supplied, the x and y coordinates should be frame positions
+        expressed in the root coordinate system. Width and height, if
+        given, should be the requested width and height of the client
+        window."""
+        geometry = self.absolute_geometry
+        if x is not None:
+            geometry = geometry._replace(x=x + self.offset.x)
+        if y is not None:
+            geometry = geometry._replace(y=y + self.offset.y)
+        if width is not None or height is not None:
+            # Resize requests must respect the window gravity.
+            size = Rectangle(width or geometry.width, height or geometry.height)
             gravity = self.properties.wm_normal_hints.win_gravity
-        return self.configure(self.absolute_geometry.resize(size,
-                                                            border_width,
-                                                            gravity))
+            geometry = geometry.resize(size, None, gravity)
+        if border_width is not None:
+            # We do not honor border width change requests, but we record them
+            # in case the client is reparented, and we pass the requested
+            # border width to configure so that it can report it correctly
+            # to the client.
+            self.border_width = border_width
+            geometry = geometry.reborder(border_width)
+        self.configure(geometry, sibling, stack_mode)
 
-    def configure(self, geometry, client_request=False):
-        """Given a requested client geometry in the root coordinate system,
-        update the client and frame geometry accordingly. Returns the new
-        client geometry."""
-        frame_geometry = (self.absolute_to_frame_geometry(geometry)
-                          if not client_request
-                          else self.compute_frame_geometry(geometry))
+    def configure(self, geometry=None, sibling=None, stack_mode=None):
+        """Update the client and frame configuration according to the given
+        absolute geometry and stacking parameters, and return the new client
+        geometry."""
+        frame_value_mask = 0
+        frame_value_list = []
+        if geometry is None:
+            geometry = self.absolute_geometry
+        else:
+            self.frame_geometry = self.absolute_to_frame_geometry(geometry)
+            self.decorator.configure(self.frame_geometry)
+            frame_value_mask |= (ConfigWindow.X |
+                                 ConfigWindow.Y |
+                                 ConfigWindow.Width |
+                                 ConfigWindow.Height)
+            frame_value_list += [int16(self.frame_geometry.x),
+                                 int16(self.frame_geometry.y),
+                                 card16(self.frame_geometry.width),
+                                 card16(self.frame_geometry.height)]
+        if stack_mode is not None:
+            if sibling is not None:
+                frame_value_mask |= ConfigWindow.Sibling
+                frame_value_list += [sibling]
+            frame_value_mask |= ConfigWindow.StackMode
+            frame_value_list += [stack_mode]
         self.conn.core.ConfigureWindow(self.frame,
-                                       (ConfigWindow.X |
-                                        ConfigWindow.Y |
-                                        ConfigWindow.Width |
-                                        ConfigWindow.Height |
-                                        ConfigWindow.BorderWidth),
-                                       [int16(frame_geometry.x),
-                                        int16(frame_geometry.y),
-                                        card16(frame_geometry.width),
-                                        card16(frame_geometry.height),
-                                        card16(frame_geometry.border_width)])
-        self.frame_geometry = frame_geometry
-        self.decorator.configure(frame_geometry)
+                                       frame_value_mask,
+                                       frame_value_list)
 
-        # See ICCCM §4.1.5.
+        # If we change the window configuration, the client will receive
+        # a real ConfigureNotify from the server; otherwise, we'll send a
+        # synthetic one. See ICCCM §4.1.5 for details.
         if self.geometry.size() != geometry.size():
             self.conn.core.ConfigureWindow(self.window,
                                            (ConfigWindow.Width |
@@ -259,13 +278,14 @@ class Client(EventHandler):
                                             card16(geometry.height)])
             self.geometry = self.geometry.resize(geometry.size())
         else:
-            configure_notify(self.conn, self.window, *self.absolute_geometry)
+            # The synthetic ConfigureNotify event must be adjusted for and
+            # include the requested border width, even if we don't actually
+            # set it.
+            configure_notify(self.conn, self.window,
+                             *self.absolute_geometry.resize(geometry.size(),
+                                                            geometry.border_width,
+                                                            Gravity.Static))
         return geometry
-
-    def restack(self, stack_mode):
-        self.conn.core.ConfigureWindow(self.frame,
-                                       ConfigWindow.StackMode,
-                                       [stack_mode])
 
     def set_frame_shape(self):
         self.manager.shape.Combine(xcb.shape.SO.Set,
@@ -369,7 +389,7 @@ class Client(EventHandler):
                 self.decorated = False
 
         if not destroyed:
-            bw = self.original_border_width
+            bw = self.border_width
             self.conn.core.ConfigureWindow(self.window,
                                            ConfigWindow.BorderWidth,
                                            [bw])

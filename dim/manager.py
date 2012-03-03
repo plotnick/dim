@@ -258,8 +258,8 @@ class WindowManager(EventHandler):
         based on the requested position."""
         return position
 
-    def constrain_size(self, client, geometry, size=None, border_width=None,
-                       gravity=None):
+    def constrain_size(self, client, geometry,
+                       size=None, border_width=None, gravity=None):
         """Constrain the client geometry using size hints and gravity.
         If a resize is requested, the caller should pass the client's current
         absolute geometry and the requested size and border width; if a move
@@ -427,25 +427,19 @@ class WindowManager(EventHandler):
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event,
                                  move_mask=ConfigWindow.X | ConfigWindow.Y):
-        """Handle a ConfigureWindow request from a top-level window.
-        See ICCCM §4.1.5 for details."""
+        """Handle a ConfigureWindow request from a top-level window."""
         client = self.get_client(event.window, True)
         if client:
-            client = self.clients[event.window]
-            requested_geometry = Geometry(event.x, event.y,
-                                          event.width, event.height,
-                                          event.border_width)
-            log.debug("Client 0x%x requested geometry %s/%d.",
-                      client.window,
-                      requested_geometry,
-                      requested_geometry.border_width)
-            if event.value_mask & move_mask == 0:
-                client.resize(requested_geometry.size(),
-                              requested_geometry.border_width)
-            else:
-                client.configure(requested_geometry, True)
+            attrs = ["x", "y", "width", "height", "border_width",
+                     "sibling", "stack_mode"]
+            arg_names = select_values(event.value_mask, attrs)
+            arg_values = select_values(event.value_mask, [getattr(event, attr)
+                                                          for attr in attrs])
+            args = zip(arg_names, arg_values)
+            log.debug("Client 0x%x requested %s.", client.window,
+                      ", ".join(map(lambda arg: "%s=%s" % arg, args)))
+            client.configure_request(**dict(args))
         else:
-            # Just grant the request.
             log.debug("Granting configure request for unmanaged window 0x%x.",
                       event.window)
             value_list = select_values(event.value_mask,

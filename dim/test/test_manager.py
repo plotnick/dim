@@ -472,10 +472,15 @@ class TestWMClientMoveResize(WMTestCase):
         self.loop(lambda: self.client.synthetic_geometry == geometry)
 
     def test_change_border_width(self):
-        """Ignore changes to the client's border width"""
-        geometry = self.initial_geometry
-        self.client.configure(geometry.reborder(5))
-        self.loop(lambda: self.client.synthetic_geometry == geometry)
+        """Request a change to the client's border width"""
+        # Requests to change border width are ignored, but reported
+        # as if they were not (see ICCCM §4.1.5).
+        geometry = self.initial_geometry.reborder(5)
+        self.client.configure(geometry)
+        self.loop(lambda: (self.client.synthetic_geometry ==
+                           self.initial_geometry.resize(geometry.size(),
+                                                        geometry.border_width,
+                                                        Gravity.Static)))
 
     def test_move(self):
         """Move a top-level window without changing its size"""

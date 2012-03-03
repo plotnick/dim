@@ -114,19 +114,19 @@ def notify_detail_name(event, detail={0: "Ancestor",
     return detail[event.detail]
 
 def configure_notify(connection, window, x, y, width, height, border_width,
+                     above_sibling=Window._None,
                      override_redirect=False,
-                     formatter=Struct("bx2xIIIhhHHHB5x")):
-    """Send a synthetic ConfigureNotify event to a window, as per ICCCM §4.1.5
-    and §4.2.3."""
-    assert formatter.size == 32
+                     formatter=Struct("bx2xIIIhhHHHB5x"),
+                     code=22): # ConfigureNotify
+    """Send a synthetic ConfigureNotify event to a window."""
     return connection.core.SendEvent(False, window, EventMask.StructureNotify,
-                                     formatter.pack(22, # code (ConfigureNotify)
-                                                    window, # event
-                                                    window, # window
-                                                    0, # above-sibling: None
+                                     formatter.pack(code,
+                                                    window,
+                                                    window,
+                                                    above_sibling,
                                                     x, y, width, height,
                                                     border_width,
-                                                    override_redirect))
+                                                    bool(override_redirect)))
 
 def send_client_message(connection, destination, propagate, event_mask,
                         window, type, format, data,

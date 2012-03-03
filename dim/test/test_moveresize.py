@@ -53,14 +53,14 @@ class MockClient(object):
         self.decorator = MockDecorator()
         self.properties = MockProperties(size_hints)
 
-    def move(self, position):
-        self.test.assertTrue(isinstance(position, Position))
-        self.geometry = self.geometry._replace(x=position.x, y=position.y)
-        return self.geometry
+    def absolute_to_frame_geometry(self, geometry):
+        return geometry
 
-    def resize(self, size, border_width=None, gravity=Gravity.NorthWest):
-        self.test.assertTrue(isinstance(size, Rectangle))
-        return self.configure(self.geometry.resize(size, border_width, gravity))
+    def frame_to_absolute_geometry(self, geometry):
+        return geometry
+
+    def configure_request(self, **kwargs):
+        return self.configure(self.geometry._replace(**kwargs))
 
     def configure(self, geometry):
         self.test.assertTrue(isinstance(geometry, Geometry))
