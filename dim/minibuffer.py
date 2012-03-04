@@ -103,4 +103,3 @@ class Minibuffer(InputField):
         else:
             self.buffer[:] = self.history[self.history_index]
         self.draw()
-        
