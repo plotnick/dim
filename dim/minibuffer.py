@@ -65,7 +65,8 @@ class Minibuffer(InputField):
     def map(self, time=Time.CurrentTime):
         super(Minibuffer, self).map()
         self.conn.core.GrabKeyboard(False, self.window, time,
-                                    GrabMode.Async, GrabMode.Async)
+                                    GrabMode.Sync, # queue pointer events
+                                    GrabMode.Async)
 
     def draw(self):
         # Fill with the background color.
