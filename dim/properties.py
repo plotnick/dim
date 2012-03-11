@@ -106,7 +106,7 @@ class PropertyManager(object):
             reply = cookie.reply()
         except (BadWindow, IOError):
             self.log.warning("Error fetching property %s.", name)
-            return None
+            return default
         if reply.type:
             cls = self.properties.get(name)
             if cls:
