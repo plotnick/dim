@@ -396,10 +396,11 @@ class TagManager(WindowManager):
         for tagset in self.tagsets.values():
             assert not tagset
 
-    def manage(self, window):
+    def manage(self, window, adopted=False):
         client = super(TagManager, self).manage(window)
         if client:
-            self.auto_tag(client)
+            if not adopted:
+                self.auto_tag(client)
             self.note_tags(client)
             client.properties.register_change_handler("_DIM_TAGS",
                                                       self.tags_changed)

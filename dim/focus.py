@@ -257,8 +257,8 @@ class ClickToFocus(FocusPolicy):
         self.ignore_focus_click = ignore_focus_click
         super(ClickToFocus, self).__init__(**kwargs)
 
-    def manage(self, window):
-        client = super(ClickToFocus, self).manage(window)
+    def manage(self, window, adopted=False):
+        client = super(ClickToFocus, self).manage(window, adopted)
         if client:
             self.grab_focus_click(client)
         return client

@@ -212,11 +212,11 @@ class WindowManager(EventHandler):
             if attrs.override_redirect:
                 continue
             log.debug("Adopting window 0x%x.", window)
-            client = self.manage(window)
+            client = self.manage(window, True)
             if client and attrs.map_state != MapState.Unmapped:
                 client.normalize()
 
-    def manage(self, window):
+    def manage(self, window, adopted=False):
         """Manage a window and return a (possibly) new client instance."""
         try:
             return self.clients[window]
