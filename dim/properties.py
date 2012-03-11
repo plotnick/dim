@@ -51,7 +51,8 @@ class PropertyDescriptor(object):
                                      self.default)
 
     def __set__(self, instance, value):
-        if instance.values.get(self.name) != value:
+        current_value = instance.values.get(self.name)
+        if current_value is None or current_value != value:
             instance.set_property(self.name,
                                   self.value_class.property_type,
                                   value)
