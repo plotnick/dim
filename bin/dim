@@ -4,6 +4,7 @@
 """A window manager for the X window system."""
 
 from collections import deque
+from locale import getpreferredencoding, setlocale, LC_ALL
 from os import fork, execv, wait
 import re
 import sys
@@ -31,7 +32,8 @@ def spawn(command):
         return wait()
     daemon(True, True)
     execv("/bin/sh",
-          ["/bin/sh", "-c", command.encode(sys.stdin.encoding, "ignore")])
+          ["/bin/sh", "-c",
+           command.encode(getpreferredencoding(False), "backslashreplace")])
 
 def update_tagset(display, spec):
     """Send a tagset specification to a running window manager."""
@@ -196,8 +198,9 @@ if __name__ == "__main__":
     import traceback
     import xcb
 
-    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
+    setlocale(LC_ALL, "")
 
+    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
                          help="show debugging messages")
@@ -228,7 +231,8 @@ if __name__ == "__main__":
         sys.exit(0)
     elif options.tagset_spec:
         update_tagset(options.display,
-                      unicode(options.tagset_spec, sys.stdin.encoding))
+                      unicode(options.tagset_spec,
+                              getpreferredencoding(False)))
         sys.exit(0)
     elif options.exit:
         wm_exit(options.display)
