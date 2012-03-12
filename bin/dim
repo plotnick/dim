@@ -55,11 +55,14 @@ def wm_exit(display):
     conn.disconnect()
 
 class BaseWM(TagManager, MoveResize, RaiseLower):
-    title_font = "fixed"
-    minibuffer_font = "10x20"
-
-    def __init__(self, titlebar_bindings={}, **kwargs):
+    def __init__(self,
+                 titlebar_bindings={},
+                 title_font="fixed",
+                 minibuffer_font="10x20",
+                 **kwargs):
         self.titlebar_bindings = titlebar_bindings
+        self.title_font = title_font
+        self.minibuffer_font = minibuffer_font
         super(BaseWM, self).__init__(**kwargs)
 
     def init_graphics(self):
@@ -198,8 +201,10 @@ if __name__ == "__main__":
     import traceback
     import xcb
 
+    # Initialize locale.
     setlocale(LC_ALL, "")
 
+    # Parse command-line options.
     focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
     optparser = OptionParser("Usage: %prog [OPTIONS]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
@@ -219,12 +224,14 @@ if __name__ == "__main__":
     optparser.add_option("-t", "--title-font", dest="title_font",
                          default="fixed",
                          help="client window title font")
+    optparser.add_option("-m", "--minibuffer-font", dest="minibuffer_font",
+                         default="10x20",
+                         help="window manager minibuffer font")
     optparser.add_option("-v", "--version", action="store_true", dest="version",
                          help="output version information and exit")
     optparser.add_option("-x", "--exit", action="store_true", dest="exit",
                          help="ask running window manager to exit gracefully")
     (options, args) = optparser.parse_args()
-
     if options.version:
         print "DIM OF THE YARD!"
         print "Version 0.1"
@@ -238,6 +245,7 @@ if __name__ == "__main__":
         wm_exit(options.display)
         sys.exit(0)
 
+    # Initialize logging system.
     tty = logging.StreamHandler()
     tty.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
     logging.getLogger("").addHandler(tty)
@@ -247,16 +255,19 @@ if __name__ == "__main__":
     for name in ([""] if options.log is None or "*" in options.log
                  else options.log):
         logging.getLogger(name).setLevel(log_level)
-
     log = logging.getLogger("wm")
+
+    # Construct a window manager class by mixing in the selected focus policy.
     log.debug("Using %s focus policy.", options.focus_mode)
-    wm_class = type("WM",
-                    (focus_modes[options.focus_mode], BaseWM),
-                    dict(title_font=options.title_font))
+    wm_class = type("WM", (focus_modes[options.focus_mode], BaseWM), {})
+
+    # Instantiate the window manager and start it up.
     wm = wm_class(display=options.display,
                   key_bindings=global_key_bindings,
                   button_bindings=global_button_bindings,
-                  titlebar_bindings=titlebar_button_bindings)
+                  titlebar_bindings=titlebar_button_bindings,
+                  title_font=options.title_font,
+                  minibuffer_font=options.minibuffer_font)
     try:
         wm.start()
     except KeyboardInterrupt:
