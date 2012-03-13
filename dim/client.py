@@ -140,16 +140,10 @@ class Client(EventHandler):
         for the duration of its body."""
         # We must operate with the server grabbed to avoid race conditions.
         with grab_server(self.conn):
-            self.conn.core.ChangeWindowAttributes(self.window,
-                                                  CW.EventMask,
-                                                  [self.client_event_mask &
-                                                   ~EventMask.StructureNotify])
-            try:
+            with mask_events(self.conn, self.window,
+                             self.client_event_mask,
+                             EventMask.StructureNotify):
                 yield
-            finally:
-                self.conn.core.ChangeWindowAttributes(self.window,
-                                                      CW.EventMask,
-                                                      [self.client_event_mask])
 
     def send_protocol_message(self, message, time):
         """Send a protocol message to the client (ICCCM §4.2.8)."""

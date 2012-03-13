@@ -11,7 +11,8 @@ from geometry import *
 __all__ = ["int16", "card16",
            "compare_timestamps", "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
-           "configure_notify", "send_client_message", "grab_server",
+           "configure_notify", "send_client_message",
+           "grab_server", "mask_events",
            "get_input_focus", "get_window_geometry",
            "query_extension", "query_pointer",
            "select_values", "textitem16",
@@ -150,6 +151,24 @@ def grab_server(connection):
         yield
     finally:
         connection.core.UngrabServer()
+
+@contextmanager
+def mask_events(connection, window, event_mask, bits, checked=False):
+    """A context manager that executes its body with certain bits masked
+    out of the window's event mask."""
+    if checked:
+        def change_event_mask(mask):
+            connection.core.ChangeWindowAttributesChecked(window,
+                                                          CW.EventMask,
+                                                          [mask]).check()
+    else:
+        def change_event_mask(mask):
+            connection.core.ChangeWindowAttributes(window, CW.EventMask, [mask])
+    change_event_mask(event_mask & ~bits)
+    try:
+        yield
+    finally:
+        change_event_mask(event_mask)
 
 def get_input_focus(connection, screen=None):
     """Return the window that has the input focus."""
