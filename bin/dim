@@ -3,7 +3,6 @@
 
 """A window manager for the X window system."""
 
-from collections import deque
 from locale import getpreferredencoding, setlocale, LC_ALL
 from os import (close, dup, dup2, execlp, execv, fork, kill,
                 openpty, ttyname, wait)
