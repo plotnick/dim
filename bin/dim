@@ -70,7 +70,7 @@ def wm_exit(display, argv=[]):
     else:
         time = Time.CurrentTime
     send_client_message(conn, root, False,
-                        EventMask.StructureNotify,
+                        EventMask.SubstructureRedirect,
                         root, atoms["_DIM_WM_EXIT"],
                         32, [time, 0, 0, 0, 0])
     conn.flush()
