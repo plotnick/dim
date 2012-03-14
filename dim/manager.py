@@ -5,6 +5,7 @@
 from collections import deque
 import logging
 from functools import wraps
+from os import execvp
 from select import select
 
 import xcb
@@ -41,7 +42,7 @@ class WMExit(ClientMessage):
 
 class WindowManagerProperties(PropertyManager):
     """Track and manage properties on the root window."""
-    pass
+    wm_command = PropertyDescriptor("WM_COMMAND", WMCommand, [])
 
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.
@@ -165,6 +166,11 @@ class WindowManager(EventHandler):
 
     def start(self):
         """Start the window manager. This method must only be called once."""
+        # Stash the argument vector used to start the manager in the
+        # WM_COMMAND property on the root window. We'll assume that
+        # the arguments are encoded according to the current locale.
+        self.properties.wm_command = WMCommand(decode_argv())
+
         # Make this client a window manager by selecting (at least)
         # SubstructureRedirect events on the root window. If another client
         # has already done so (i.e., there's already a window manager
@@ -188,8 +194,10 @@ class WindowManager(EventHandler):
         # Process events from the server.
         self.event_loop()
 
-    def shutdown(self):
-        """Unmanage all clients and disconnect from the server."""
+    def shutdown(self, *args):
+        """Unmanage all clients and disconnect from the server. If args
+        are supplied, treat them as a command with which to replace the
+        current process."""
         if self.conn:
             with grab_server(self.conn):
                 for client in self.clients.values():
@@ -199,6 +207,9 @@ class WindowManager(EventHandler):
             self.conn = None
         assert not self.clients
         assert not self.frames
+        if args:
+            argv = encode_argv(args)
+            execvp(argv[0], argv)
 
     def adopt(self, windows):
         """Adopt existing top-level windows."""
@@ -326,8 +337,8 @@ class WindowManager(EventHandler):
             while self.get_pending_events():
                 try:
                     self.handle_event(self.events.popleft())
-                except ExitWindowManager:
-                    self.shutdown()
+                except ExitWindowManager as e:
+                    self.shutdown(*e.args)
                     return
             select(rlist, wlist, xlist)
 
@@ -602,7 +613,13 @@ class WindowManager(EventHandler):
     @handler(WMExit)
     def handle_wm_exit(self, client_message):
         log.debug("Received exit message; shutting down.")
-        raise ExitWindowManager
+        argv = []
+        timestamp = client_message.data.data32[0]
+        if (timestamp and
+            compare_timestamps(self.properties.timestamps["WM_COMMAND"],
+                               timestamp) <= 0):
+            argv = self.properties.wm_command
+        raise ExitWindowManager(*argv)
 
     @handler(xcb.randr.NotifyEvent)
     def handle_randr_notify(self, event):

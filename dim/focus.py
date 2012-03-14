@@ -43,12 +43,12 @@ class FocusPolicy(WindowManager):
         self.key_bindings.establish_grabs(self.default_focus_window)
         self.conn.core.MapWindow(self.default_focus_window)
 
-    def shutdown(self):
+    def shutdown(self, *args):
         if self.conn:
             self.conn.core.SetInputFocus(InputFocus.PointerRoot,
                                          InputFocus.PointerRoot,
                                          Time.CurrentTime)
-        super(FocusPolicy, self).shutdown()
+        super(FocusPolicy, self).shutdown(*args)
 
     def adopt(self, windows):
         focus = get_input_focus(self.conn)

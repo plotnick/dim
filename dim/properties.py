@@ -18,7 +18,8 @@ __all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
            "ScalarPropertyValue", "PropertyValueStruct", "PropertyValueList",
            "WindowProperty", "AtomProperty", "AtomList",
            "StringProperty", "UTF8StringProperty",
-           "WMClass", "WMColormapWindows", "WMState", "WMSizeHints", "WMHints"]
+           "WMClass", "WMColormapWindows", "WMState", "WMSizeHints", "WMHints",
+           "WMCommand"]
 
 # Translate between X property formats and Python's struct & array type codes.
 type_codes = {8: "B", 16: "H", 32: "I"}
@@ -88,6 +89,7 @@ class PropertyManager(object):
         self.atoms = atoms
         self.values = {} # cached property values
         self.cookies = {} # pending property request cookies
+        self.timestamps = {} # last-changed times from PropertyNotify events
         self.change_handlers = defaultdict(set)
         self.log = logging.getLogger("properties.0x%x" % self.window)
 
@@ -191,6 +193,7 @@ class PropertyManager(object):
         """Handle a change or deletion of a property."""
         self.log.debug("Property %s %s at time %d.",
                        name, ("deleted" if deleted else "changed"), time)
+        self.timestamps[name] = time
         self.invalidate_cached_property(name)
         if not deleted and name in self.properties:
             self.request_property(name)
@@ -654,3 +657,26 @@ class WMHints(PropertyValueStruct):
                                   ("_icon_x", "_icon_y"))
     icon_mask = PropertyField(IconMaskHint, int, "_icon_mask")
     window_group = PropertyField(WindowGroupHint, int, "_window_group")
+
+class WMCommand(UTF8StringProperty):
+    """A representation of the WM_COMMAND property (ICCCM §C.1.1),
+    encoded using UTF-8 instead of Latin-1."""
+
+    def __init__(self, argv):
+        if isinstance(argv, (list, tuple)):
+            # Assume a sequence of Unicode strings. WM_COMMAND strings are
+            # null-terminated, not just null-separated.
+            super(WMCommand, self).__init__("\0".join(argv) + "\0")
+        else:
+            # Assume an already encoded string or byte-array representation.
+            super(WMCommand, self).__init__(argv)
+
+    def __iter__(self):
+        s = unicode(self)
+        i = 0
+        while i < len(s):
+            j = s.find("\0", i)
+            if j < 0:
+                break
+            yield s[i:j]
+            i = j + 1

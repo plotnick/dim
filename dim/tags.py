@@ -391,8 +391,8 @@ class TagManager(WindowManager):
         self.properties.register_change_handler("_DIM_TAGSET_EXPR",
                                                 self.tagset_expr_changed)
 
-    def shutdown(self):
-        super(TagManager, self).shutdown()
+    def shutdown(self, *args):
+        super(TagManager, self).shutdown(*args)
         for tagset in self.tagsets.values():
             assert not tagset
 

@@ -3,7 +3,7 @@
 
 """A window manager for the X window system."""
 
-from locale import getpreferredencoding, setlocale, LC_ALL
+from locale import setlocale, LC_ALL
 from os import (close, dup, dup2, execlp, execv, fork, kill,
                 openpty, ttyname, wait)
 from sys import exc_info, exit, stdin, stdout, stderr
@@ -23,7 +23,7 @@ from dim.focus import SloppyFocus, ClickToFocus
 from dim.keysym import *
 from dim.minibuffer import *
 from dim.moveresize import MoveResize
-from dim.properties import AtomList
+from dim.properties import AtomList, WMCommand
 from dim.raiselower import RaiseLower
 from dim.tags import *
 from dim.xutil import *
@@ -33,9 +33,7 @@ def spawn(command):
     if fork():
         return wait()
     daemon(True, True)
-    execv("/bin/sh",
-          ["/bin/sh", "-c",
-           command.encode(getpreferredencoding(False), "backslashreplace")])
+    execv("/bin/sh", ["/bin/sh", "-c"] + encode_argv([command]))
 
 def update_tagset(display, spec):
     """Send a tagset specification to a running window manager."""
@@ -44,15 +42,37 @@ def update_tagset(display, spec):
     conn.flush()
     conn.disconnect()
 
-def wm_exit(display):
-    """Ask a running window manager to exit gracefully."""
+def wm_exit(display, argv=[]):
+    """Ask a running window manager to exit gracefully, optionally replacing
+    it with another command."""
     conn = xcb.connect(display)
     root = conn.get_setup().roots[conn.pref_screen].root
     atoms = AtomCache(conn)
+    if argv:
+        # Change the WM_COMMAND property on the root window. We need to
+        # wait for the PropertyNotify so that we can use a valid timestamp
+        # in the client message below.
+        conn.core.ChangeWindowAttributes(root,
+                                         CW.EventMask,
+                                         [EventMask.PropertyChange])
+        conn.core.ChangeProperty(PropMode.Replace, root,
+                                 atoms["WM_COMMAND"],
+                                 atoms["UTF8_STRING"],
+                                 *WMCommand(argv).change_property_args())
+        while True:
+            conn.flush()
+            event = conn.wait_for_event()
+            if (isinstance(event, PropertyNotifyEvent) and
+                event.window == root and
+                event.atom == atoms["WM_COMMAND"]):
+                    time = event.time
+                    break
+    else:
+        time = Time.CurrentTime
     send_client_message(conn, root, False,
                         EventMask.StructureNotify,
                         root, atoms["_DIM_WM_EXIT"],
-                        32, [0] * 5)
+                        32, [time, 0, 0, 0, 0])
     conn.flush()
     conn.disconnect()
 
@@ -259,7 +279,7 @@ global_button_bindings = {
 }
 
 if __name__ == "__main__":
-    from optparse import OptionParser
+    from optparse import OptionParser, OptionValueError
     import logging
     import os
     import xcb
@@ -268,8 +288,15 @@ if __name__ == "__main__":
     setlocale(LC_ALL, "")
 
     # Parse command-line options.
+    def consume_remaining_args(option, opt_str, value, parser):
+        if not parser.rargs:
+            raise OptionValueError("%s option requires at least one argument" %
+                                   option)
+        value = parser.rargs[:]
+        del parser.rargs[:]
+        setattr(parser.values, option.dest, value)
     focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
-    optparser = OptionParser("Usage: %prog [OPTIONS]")
+    optparser = OptionParser("Usage: %prog [OPTIONS] [-e COMMAND [ARG ...]]")
     optparser.add_option("-D", "--debug", action="store_true", dest="debug",
                          help="show debugging messages")
     optparser.add_option("-L", "--log", action="append", dest="log",
@@ -294,18 +321,22 @@ if __name__ == "__main__":
                          help="output version information and exit")
     optparser.add_option("-x", "--exit", action="store_true", dest="exit",
                          help="ask running window manager to exit gracefully")
+    optparser.add_option("-e", "--exec", action="callback", dest="command",
+                         callback=consume_remaining_args,
+                         help="execute another window manager command")
     (options, args) = optparser.parse_args()
     if options.version:
         print "DIM OF THE YARD!"
         print "Version 0.1"
         exit(0)
     elif options.tagset_spec:
-        update_tagset(options.display,
-                      unicode(options.tagset_spec,
-                              getpreferredencoding(False)))
+        update_tagset(options.display, *decode_argv([options.tagset_spec]))
         exit(0)
     elif options.exit:
         wm_exit(options.display)
+        exit(0)
+    elif options.command:
+        wm_exit(options.display, decode_argv(options.command))
         exit(0)
 
     # Put the display in the environment for the benefit of our children.

@@ -1,7 +1,9 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 from contextlib import contextmanager
+from locale import getpreferredencoding
 from struct import Struct
+import sys
 
 from xcb.xproto import *
 import xcb.shape
@@ -9,6 +11,7 @@ import xcb.shape
 from geometry import *
 
 __all__ = ["int16", "card16",
+           "decode_argv", "encode_argv",
            "compare_timestamps", "sequence_number", "is_synthetic_event",
            "event_window", "notify_detail_name",
            "configure_notify", "send_client_message",
@@ -26,6 +29,20 @@ def card16(x):
     """Truncate an unsigned integer to 16 bits."""
     assert x >= 0, "invalid cardinal %d" % x
     return int(x) & 0xffff
+
+def decode_argv(argv=None, errors="replace"):
+    """Given a list of argument byte strings (e.g., sys.argv), decode them
+    in accordance with the current locale."""
+    if argv is None:
+        argv = sys.argv
+    encoding = getpreferredencoding(True)
+    return [arg.decode(encoding, errors) for arg in argv]
+
+def encode_argv(argv, errors="backslashreplace"):
+    """Given a list of arguments as Unicode strings, encode them in
+    accordance with the current locale."""
+    encoding = getpreferredencoding(True)
+    return [arg.encode(encoding, errors) for arg in argv]
 
 def compare_timestamps(x, y, half=0x80000000, CurrentTime=Time.CurrentTime):
     """Interpreted as timestamps, return negative if x precedes y,
