@@ -225,7 +225,9 @@ class WindowManager(EventHandler):
             log.debug("Adopting window 0x%x.", window)
             client = self.manage(window, True)
             if client and attrs.map_state != MapState.Unmapped:
-                client.normalize()
+                self.change_state(client,
+                                  WMState.WithdrawnState,
+                                  WMState.NormalState)
 
     def manage(self, window, adopted=False):
         """Manage a window and return a (possibly) new client instance."""
@@ -256,6 +258,15 @@ class WindowManager(EventHandler):
             pass
         client.undecorate(**kwargs)
         return client
+
+    def change_state(self, client, initial, final):
+        """Transition a client from initial state to final state."""
+        if final == WMState.IconicState:
+            client.iconify()
+        elif final == WMState.NormalState:
+            client.normalize()
+        elif final == WMState.WithdrawnState:
+            client.withdraw()
 
     def place(self, geometry):
         """Determine a suitable geometry for a client window. This may, but
@@ -498,10 +509,14 @@ class WindowManager(EventHandler):
         if (client.properties.wm_state == WMState.WithdrawnState and
             client.properties.wm_hints.initial_state == WMState.IconicState):
             # Withdrawn → Iconic state transition (ICCCM §4.1.4).
-            client.iconify()
+            self.change_state(client,
+                              WMState.WithdrawnState,
+                              WMState.IconicState)
         else:
             # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
-            client.normalize()
+            self.change_state(client,
+                              client.properties.wm_state,
+                              WMState.NormalState)
             if self.focus_new_windows:
                 log.debug("Ensuring focus of new window 0x%x.", client.window)
                 self.ensure_focus(client)
@@ -521,7 +536,9 @@ class WindowManager(EventHandler):
             self.handle_event(e)
         else:
             # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
-            client.withdraw()
+            self.change_state(client,
+                              client.properties.wm_state,
+                              WMState.WithdrawnState)
             reparented = self.check_typed_window_event(event.window,
                                                        ReparentNotifyEvent)
             self.unmanage(client, destroyed=False, reparented=reparented)
