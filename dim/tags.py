@@ -399,8 +399,6 @@ class TagManager(WindowManager):
     def manage(self, window, adopted=False):
         client = super(TagManager, self).manage(window)
         if client:
-            if not adopted:
-                self.auto_tag(client)
             self.note_tags(client)
             client.properties.register_change_handler("_DIM_TAGS",
                                                       self.tags_changed)
@@ -412,12 +410,16 @@ class TagManager(WindowManager):
                                                     self.tags_changed)
         super(TagManager, self).unmanage(client, **kwargs)
 
-    def auto_tag(self, client):
-        # If this client doesn't have any tags yet, copy the tags of the
-        # currently focused window.
-        if not client.properties.dim_tags:
+    def change_state(self, client, initial, final):
+        super(TagManager, self).change_state(client, initial, final)
+
+        # If a newly-normalized client doesn't have any tags yet,
+        # try to copy the tags of the currently focused window.
+        if (initial == WMState.WithdrawnState and
+            final == WMState.NormalState and
+            not client.properties.dim_tags):
             focus = self.current_focus
-            if focus:
+            if focus and focus.properties.wm_state == WMState.NormalState:
                 tags = focus.properties.dim_tags
                 if tags:
                     log.debug("Auto-tagging client window 0x%x with tags [%s].",
