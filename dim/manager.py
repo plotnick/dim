@@ -78,8 +78,7 @@ class WindowManager(EventHandler):
     property_class = WindowManagerProperties
 
     def __init__(self, display=None, screen=None,
-                 key_bindings={}, button_bindings={},
-                 focus_new_windows=True):
+                 key_bindings={}, button_bindings={}):
         self.conn = xcb.connect(display)
         self.screen_number = (screen
                               if screen is not None
@@ -121,7 +120,6 @@ class WindowManager(EventHandler):
         self.properties = self.property_class(self.conn,
                                               self.screen.root,
                                               self.atoms)
-        self.focus_new_windows = focus_new_windows
         self.events = deque([])
         self.window_handlers = {}
         self.init_graphics()
@@ -517,9 +515,6 @@ class WindowManager(EventHandler):
             self.change_state(client,
                               client.properties.wm_state,
                               WMState.NormalState)
-            if self.focus_new_windows:
-                log.debug("Ensuring focus of new window 0x%x.", client.window)
-                self.ensure_focus(client)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
