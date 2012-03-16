@@ -8,6 +8,7 @@ from locale import getpreferredencoding, setlocale, LC_ALL
 from os import (close, dup, dup2, execlp, execv, fork, kill,
                 openpty, ttyname, wait)
 from sys import exc_info, exit, stdin, stdout, stderr
+from termios import tcgetattr, tcsetattr, ECHO, TCSADRAIN
 from traceback import print_exception
 import pdb
 import re
@@ -59,7 +60,7 @@ def wm_exit(display):
 
 class EmergencyTTY(object):
     """Attach to a terminal for emergency debugging. If we're already running
-    in a terminal, we'll just use that; otherwise, we'll launch a new xterm
+    in a terminal, we'll just use that; otherwise, we'll launch a new xterm(1)
     in slave mode and attach to it."""
 
     def __new__(cls, *args, **kwargs):
@@ -75,6 +76,15 @@ class EmergencyTTY(object):
         self.stdout = dup(stdout.fileno())
 
         master, slave = openpty()
+
+        # When xterm is started in slave mode, it immediately writes its
+        # X window id to the tty. We don't want that displayed to the user,
+        # so we'll temporarily disable echo, then re-enable it below.
+        orig_attr = tcgetattr(master)
+        temp_attr = orig_attr[:]
+        temp_attr[3] &= ~ECHO # lflags
+        tcsetattr(master, TCSADRAIN, temp_attr)
+
         if not fork():
             close(slave)
             daemon()
@@ -87,9 +97,10 @@ class EmergencyTTY(object):
             dup2(slave, stdout.fileno())
             if slave > stderr.fileno():
                 close(slave)
-            windowid = int(stdin.readline(), 16) # read windowid from xterm
+            windowid = int(stdin.readline(), 16) # read window id from xterm
             log.info("Attaching to xterm 0x%x on %s.",
                      windowid, ttyname(master))
+            tcsetattr(master, TCSADRAIN, orig_attr)
             close(master)
             wait()
 
