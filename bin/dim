@@ -5,7 +5,7 @@
 
 from collections import deque
 from locale import getpreferredencoding, setlocale, LC_ALL
-from os import (close, dup, dup2, execlp, execv, fork, kill,
+from os import (close, dup, dup2, execlp, execv, execvp, fork, kill,
                 openpty, ttyname, wait)
 from termios import tcgetattr, tcsetattr, ECHO, TCSADRAIN
 from traceback import print_exception
@@ -384,10 +384,14 @@ if __name__ == "__main__":
             print u"""\a
 Dim has caught a fatal exception, and has shut down as cleanly it can.
 This console is for post-mortem debugging only. Type ‘help' for a list
-of pdb commands, or ‘quit’ to abort.
+of pdb commands, ‘run’ to restart, or ‘quit’ to abort.
 
 The window manager instance is in the ‘wm’ variable, and the exception
 that delivered the fatal blow is in the ‘exc_value’ variable.
 """
             print_exception(exc_type, exc_value, traceback, file=sys.stdout)
-            pdb.post_mortem(traceback)
+            try:
+                pdb.post_mortem(traceback)
+            except pdb.Restart:
+                log.info("Restarting: %s", " ".join(sys.argv))
+                execvp(sys.argv[0], sys.argv)
