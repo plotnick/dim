@@ -235,6 +235,16 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                          EventMask.SubstructureRedirect,
                          checked=True):
             with EmergencyTTY():
+                print u"""DIM OF THE YARD!
+
+This is a debugging console running the Python debugger (pdb). Type ‘help’
+for a list of pdb commands, or ‘continue’ to resume normal operations.
+
+Dim is currently suspended. It is not processing events, and has temporarily
+de-selected SubstructureRedirect on the root window. The ‘self’ variable
+contains the current window manager instance, which you may use to examine
+and modify (carefully, please!) internal data structures.
+"""
                 pdb.set_trace()
                 pass
         self.ensure_focus()
@@ -361,5 +371,14 @@ if __name__ == "__main__":
         except Exception:
             pass
         with EmergencyTTY():
+            print u"""DIM OF THE YARD!
+
+Dim has caught a fatal exception, and has shut down as cleanly it can.
+This console is for post-mortem debugging only. Type ‘help' for a list
+of pdb commands, or ‘quit’ to abort.
+
+The window manager instance is in the ‘wm’ variable, and the exception
+that delivered the fatal blow is in the ‘exc_value’ variable.
+"""
             print_exception(exc_type, exc_value, traceback, file=stdout)
             pdb.post_mortem(traceback)
