@@ -7,11 +7,11 @@ from collections import deque
 from locale import getpreferredencoding, setlocale, LC_ALL
 from os import (close, dup, dup2, execlp, execv, fork, kill,
                 openpty, ttyname, wait)
-from sys import exc_info, exit, stdin, stdout, stderr
 from termios import tcgetattr, tcsetattr, ECHO, TCSADRAIN
 from traceback import print_exception
 import pdb
 import re
+import sys
 
 from xcb.xproto import *
 
@@ -33,7 +33,7 @@ from dim.xutil import *
 def print_caption(out=None):
     """You think you're so clever. Well, I'm Dim."""
     if out is None:
-        out = stdout
+        out = sys.stdout
     if out.isatty():
         print >> out, "\033[1mDIM OF THE YARD!\033[m"
     else:
@@ -73,7 +73,7 @@ class EmergencyTTY(object):
     in slave mode and attach to it."""
 
     def __new__(cls, *args, **kwargs):
-        if stdin.isatty() and stdout.isatty():
+        if sys.stdin.isatty() and sys.stdout.isatty():
             cls = TrivialTTY
         return super(EmergencyTTY, cls).__new__(cls, *args, **kwargs)
 
@@ -81,8 +81,8 @@ class EmergencyTTY(object):
         # Save the current values of stdin & stdout; we'll restore them on
         # close. We'll leave stderr alone, since presumably it's redirected
         # somewhere for logging.
-        self.stdin = dup(stdin.fileno())
-        self.stdout = dup(stdout.fileno())
+        self.stdin = dup(sys.stdin.fileno())
+        self.stdout = dup(sys.stdout.fileno())
 
         master, slave = openpty()
 
@@ -102,11 +102,11 @@ class EmergencyTTY(object):
                    "-geometry", "-0-0",
                    "-S%s/%d" % (ttyname(master), master))
         else:
-            dup2(slave, stdin.fileno())
-            dup2(slave, stdout.fileno())
-            if slave > stderr.fileno():
+            dup2(slave, sys.stdin.fileno())
+            dup2(slave, sys.stdout.fileno())
+            if slave > 2:
                 close(slave)
-            windowid = int(stdin.readline(), 16) # read window id from xterm
+            windowid = int(sys.stdin.readline(), 16)
             log.info("Attaching to xterm 0x%x on %s.",
                      windowid, ttyname(master))
             tcsetattr(master, TCSADRAIN, orig_attr)
@@ -116,8 +116,8 @@ class EmergencyTTY(object):
     def close(self):
         # Closing the fds attached to the tty should cause the xterm to die,
         # so we don't need to explicitly kill it.
-        dup2(self.stdin, stdin.fileno())
-        dup2(self.stdout, stdout.fileno())
+        dup2(self.stdin, sys.stdin.fileno())
+        dup2(self.stdout, sys.stdout.fileno())
         close(self.stdin)
         close(self.stdout)
 
@@ -329,22 +329,22 @@ if __name__ == "__main__":
     if options.version:
         print_caption()
         print "Version 0.1"
-        exit(0)
+        sys.exit(0)
     elif options.tagset_spec:
         update_tagset(options.display,
                       unicode(options.tagset_spec,
                               getpreferredencoding(False)))
-        exit(0)
+        sys.exit(0)
     elif options.exit:
         wm_exit(options.display)
-        exit(0)
+        sys.exit(0)
 
     # Put the display in the environment for the benefit of our children.
     if options.display:
         os.environ["DISPLAY"] = options.display
 
     # Initialize logging system.
-    tty = logging.StreamHandler(stderr)
+    tty = logging.StreamHandler(sys.stderr)
     tty.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
     logging.getLogger("").addHandler(tty)
     log_level = (logging.DEBUG if options.debug else
@@ -372,9 +372,9 @@ if __name__ == "__main__":
         log.info("Interrupt caught; shutting down.")
         wm.shutdown()
     except Exception:
-        exc_type, exc_value, traceback = exc_info()
-        if not stderr.isatty():
-            print_exception(exc_type, exc_value, traceback, file=stderr)
+        exc_type, exc_value, traceback = sys.exc_info()
+        if not sys.stderr.isatty():
+            print_exception(exc_type, exc_value, traceback, file=sys.stderr)
         try:
             wm.shutdown()
         except Exception:
@@ -389,5 +389,5 @@ of pdb commands, or ‘quit’ to abort.
 The window manager instance is in the ‘wm’ variable, and the exception
 that delivered the fatal blow is in the ‘exc_value’ variable.
 """
-            print_exception(exc_type, exc_value, traceback, file=stdout)
+            print_exception(exc_type, exc_value, traceback, file=sys.stdout)
             pdb.post_mortem(traceback)

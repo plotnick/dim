@@ -2,7 +2,7 @@
 
 from os import _exit, chdir, close, dup2, fork, open, setsid, O_RDWR
 from signal import signal, SIGHUP, SIG_IGN
-from sys import stdin, stdout, stderr
+import sys
 
 __all__ = ["daemon"]
 
@@ -31,9 +31,9 @@ def daemon(nochdir=False, noclose=False):
         if fd == -1:
             return False
         try:
-            dup2(fd, stdin.fileno())
-            dup2(fd, stdout.fileno())
-            dup2(fd, stderr.fileno())
+            dup2(fd, sys.stdin.fileno())
+            dup2(fd, sys.stdout.fileno())
+            dup2(fd, sys.stderr.fileno())
         finally:
             if fd > 2:
                 close(fd)
