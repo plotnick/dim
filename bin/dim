@@ -4,12 +4,13 @@
 """A window manager for the X window system."""
 
 from locale import setlocale, LC_ALL
-from os import (close, dup, dup2, execlp, execv, fork, kill,
+from os import (close, dup, dup2, execlp, execv, execvp, fork, kill,
                 openpty, ttyname, wait)
-from sys import exc_info, exit, stdin, stdout, stderr
+from termios import tcgetattr, tcsetattr, ECHO, TCSADRAIN
 from traceback import print_exception
 import pdb
 import re
+import sys
 
 from xcb.xproto import *
 
@@ -27,6 +28,15 @@ from dim.properties import AtomList, WMCommand
 from dim.raiselower import RaiseLower
 from dim.tags import *
 from dim.xutil import *
+
+def print_caption(out=None):
+    """You think you're so clever. Well, I'm Dim."""
+    if out is None:
+        out = sys.stdout
+    if out.isatty():
+        print >> out, "\033[1mDIM OF THE YARD!\033[m"
+    else:
+        print >> out, "DIM OF THE YARD!"
 
 def spawn(command):
     """Execute command (a string) in the background via a shell."""
@@ -78,11 +88,11 @@ def wm_exit(display, argv=[]):
 
 class EmergencyTTY(object):
     """Attach to a terminal for emergency debugging. If we're already running
-    in a terminal, we'll just use that; otherwise, we'll launch a new xterm
+    in a terminal, we'll just use that; otherwise, we'll launch a new xterm(1)
     in slave mode and attach to it."""
 
     def __new__(cls, *args, **kwargs):
-        if stdin.isatty() and stdout.isatty():
+        if sys.stdin.isatty() and sys.stdout.isatty():
             cls = TrivialTTY
         return super(EmergencyTTY, cls).__new__(cls, *args, **kwargs)
 
@@ -90,10 +100,19 @@ class EmergencyTTY(object):
         # Save the current values of stdin & stdout; we'll restore them on
         # close. We'll leave stderr alone, since presumably it's redirected
         # somewhere for logging.
-        self.stdin = dup(stdin.fileno())
-        self.stdout = dup(stdout.fileno())
+        self.stdin = dup(sys.stdin.fileno())
+        self.stdout = dup(sys.stdout.fileno())
 
         master, slave = openpty()
+
+        # When xterm is started in slave mode, it immediately writes its
+        # X window id to the tty. We don't want that displayed to the user,
+        # so we'll temporarily disable echo, then re-enable it below.
+        orig_attr = tcgetattr(master)
+        temp_attr = orig_attr[:]
+        temp_attr[3] &= ~ECHO # lflags
+        tcsetattr(master, TCSADRAIN, temp_attr)
+
         if not fork():
             close(slave)
             daemon()
@@ -102,21 +121,22 @@ class EmergencyTTY(object):
                    "-geometry", "-0-0",
                    "-S%s/%d" % (ttyname(master), master))
         else:
-            dup2(slave, stdin.fileno())
-            dup2(slave, stdout.fileno())
-            if slave > stderr.fileno():
+            dup2(slave, sys.stdin.fileno())
+            dup2(slave, sys.stdout.fileno())
+            if slave > 2:
                 close(slave)
-            windowid = int(stdin.readline(), 16) # read windowid from xterm
+            windowid = int(sys.stdin.readline(), 16)
             log.info("Attaching to xterm 0x%x on %s.",
                      windowid, ttyname(master))
+            tcsetattr(master, TCSADRAIN, orig_attr)
             close(master)
             wait()
 
     def close(self):
         # Closing the fds attached to the tty should cause the xterm to die,
         # so we don't need to explicitly kill it.
-        dup2(self.stdin, stdin.fileno())
-        dup2(self.stdout, stdout.fileno())
+        dup2(self.stdin, sys.stdin.fileno())
+        dup2(self.stdout, sys.stdout.fileno())
         close(self.stdin)
         close(self.stdout)
 
@@ -243,6 +263,16 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                          EventMask.SubstructureRedirect,
                          checked=True):
             with EmergencyTTY():
+                print_caption()
+                print u"""\a
+This is a debugging console running the Python debugger (pdb). Type ‘help’
+for a list of pdb commands, or ‘continue’ to resume normal operations.
+
+Dim is currently suspended. It is not processing events, and has temporarily
+de-selected SubstructureRedirect on the root window. The ‘self’ variable
+contains the current window manager instance, which you may use to examine
+and modify (carefully, please!) internal data structures.
+"""
                 pdb.set_trace()
                 pass
         self.ensure_focus()
@@ -326,25 +356,25 @@ if __name__ == "__main__":
                          help="execute another window manager command")
     (options, args) = optparser.parse_args()
     if options.version:
-        print "DIM OF THE YARD!"
+        print_caption()
         print "Version 0.1"
-        exit(0)
+        sys.exit(0)
     elif options.tagset_spec:
         update_tagset(options.display, *decode_argv([options.tagset_spec]))
-        exit(0)
+        sys.exit(0)
     elif options.exit:
         wm_exit(options.display)
-        exit(0)
+        sys.exit(0)
     elif options.command:
         wm_exit(options.display, decode_argv(options.command))
-        exit(0)
+        sys.exit(0)
 
     # Put the display in the environment for the benefit of our children.
     if options.display:
         os.environ["DISPLAY"] = options.display
 
     # Initialize logging system.
-    tty = logging.StreamHandler(stderr)
+    tty = logging.StreamHandler(sys.stderr)
     tty.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
     logging.getLogger("").addHandler(tty)
     log_level = (logging.DEBUG if options.debug else
@@ -372,13 +402,26 @@ if __name__ == "__main__":
         log.info("Interrupt caught; shutting down.")
         wm.shutdown()
     except Exception:
-        exc_type, exc_value, traceback = exc_info()
-        if not stderr.isatty():
-            print_exception(exc_type, exc_value, traceback, file=stderr)
+        exc_type, exc_value, traceback = sys.exc_info()
+        if not sys.stderr.isatty():
+            print_exception(exc_type, exc_value, traceback, file=sys.stderr)
         try:
             wm.shutdown()
         except Exception:
             pass
         with EmergencyTTY():
-            print_exception(exc_type, exc_value, traceback, file=stdout)
-            pdb.post_mortem(traceback)
+            print_caption()
+            print u"""\a
+Dim has caught a fatal exception, and has shut down as cleanly it can.
+This console is for post-mortem debugging only. Type ‘help' for a list
+of pdb commands, ‘run’ to restart, or ‘quit’ to abort.
+
+The window manager instance is in the ‘wm’ variable, and the exception
+that delivered the fatal blow is in the ‘exc_value’ variable.
+"""
+            print_exception(exc_type, exc_value, traceback, file=sys.stdout)
+            try:
+                pdb.post_mortem(traceback)
+            except pdb.Restart:
+                log.info("Restarting: %s", " ".join(sys.argv))
+                execvp(sys.argv[0], sys.argv)
