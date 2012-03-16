@@ -30,6 +30,15 @@ from dim.raiselower import RaiseLower
 from dim.tags import *
 from dim.xutil import *
 
+def print_caption(out=None):
+    """You think you're so clever. Well, I'm Dim."""
+    if out is None:
+        out = stdout
+    if out.isatty():
+        print >> out, "\033[1mDIM OF THE YARD!\033[m"
+    else:
+        print >> out, "DIM OF THE YARD!"
+
 def spawn(command):
     """Execute command (a string) in the background via a shell."""
     if fork():
@@ -235,8 +244,8 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
                          EventMask.SubstructureRedirect,
                          checked=True):
             with EmergencyTTY():
-                print u"""DIM OF THE YARD!
-
+                print_caption()
+                print u"""\a
 This is a debugging console running the Python debugger (pdb). Type ‘help’
 for a list of pdb commands, or ‘continue’ to resume normal operations.
 
@@ -318,7 +327,7 @@ if __name__ == "__main__":
                          help="ask running window manager to exit gracefully")
     (options, args) = optparser.parse_args()
     if options.version:
-        print "DIM OF THE YARD!"
+        print_caption()
         print "Version 0.1"
         exit(0)
     elif options.tagset_spec:
@@ -371,8 +380,8 @@ if __name__ == "__main__":
         except Exception:
             pass
         with EmergencyTTY():
-            print u"""DIM OF THE YARD!
-
+            print_caption()
+            print u"""\a
 Dim has caught a fatal exception, and has shut down as cleanly it can.
 This console is for post-mortem debugging only. Type ‘help' for a list
 of pdb commands, or ‘quit’ to abort.
