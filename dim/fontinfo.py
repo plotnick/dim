@@ -64,9 +64,11 @@ class FontInfo(object):
         the CHARINFO for the font's default character is returned (which
         may be None if that character is itself nonexistent or missing).
         Otherwise, the provided default is returned."""
+        # See the QueryFont entry in the X protocol reference manual.
         try:
             char = ord(char)
         except TypeError:
+            # An integer is acceptable as a character designator.
             pass
         byte1 = char >> 8
         byte2 = char & 0xff
@@ -78,15 +80,16 @@ class FontInfo(object):
                                         (max_byte2 - min_byte2 + 1)) +
                                        (byte2 - min_byte2)]
             except IndexError:
-                info = self.min_bounds
+                return self.min_bounds
         else:
-            info = default
-        if (not info or
-            (info.character_width == 0 and
-             info.left_side_bearing == 0 and
-             info.right_side_bearing == 0 and
-             info.ascent == 0 and
-             info.descent == 0)):
+            # Undefined character.
+            return self.default_char_info if default is True else default
+        if (info.character_width == 0 and
+            info.left_side_bearing == 0 and
+            info.right_side_bearing == 0 and
+            info.ascent == 0 and
+            info.descent == 0):
+            # Nonexistent character.
             return self.default_char_info if default is True else default
         return info
 
