@@ -76,19 +76,21 @@ class TestFontInfo(FontInfoTestCase):
 
     def test_default_char_info(self):
         default_char = self.fixed_info.default_char
-        default_char_info = self.fixed_info.char_info(default_char)
+        undefined_char = (self.fixed_info.max_byte1 + 1) << 8
+        default_char_info = self.fixed_info.char_info(undefined_char)
         self.assertTrue(isinstance(default_char_info, CHARINFO))
         self.assertEqual(default_char_info.character_width,
                          self.fixed_info.min_bounds.character_width)
 
-        # Test default argument handling with an undefined character.
-        c = (self.fixed_info.max_byte1 + 1) << 8
-        self.assertEqual(self.fixed_info.char_info(c), default_char_info)
-        self.assertEqual(self.fixed_info.char_info(c, True), default_char_info)
-        self.assertEqual(self.fixed_info.char_info(c, None), None)
+        # Test default argument handling
+        self.assertEqual(self.fixed_info.char_info(undefined_char, True),
+                         default_char_info)
+        self.assertEqual(self.fixed_info.char_info(undefined_char, None),
+                         None)
 
         # We assume that ASCII DEL is defined but nonexistent.
-        self.assertEqual(self.fixed_info.char_info("\177"), default_char_info)
+        self.assertEqual(self.fixed_info.char_info("\177"),
+                         default_char_info)
 
     def test_char_info(self):
         # We'll do this test with a proportional font; it's not very
