@@ -196,6 +196,7 @@ class WindowManager(EventHandler):
         """Unmanage all clients and disconnect from the server. If args
         are supplied, treat them as a command with which to replace the
         current process."""
+        log.info("Shutting down.")
         if self.conn:
             with grab_server(self.conn):
                 for client in self.clients.values():
@@ -206,6 +207,7 @@ class WindowManager(EventHandler):
         assert not self.clients
         assert not self.frames
         if args:
+            log.info("Executing command %s.", " ".join(args))
             argv = encode_argv(args)
             execvp(argv[0], argv)
 

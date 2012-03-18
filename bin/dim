@@ -52,20 +52,32 @@ def update_tagset(display, spec):
     conn.flush()
     conn.disconnect()
 
-def wm_exit(display, argv=[]):
+def wm_exit(display, argv=None):
     """Ask a running window manager to exit gracefully, optionally replacing
     it with another command."""
     conn = xcb.connect(display)
     root = conn.get_setup().roots[conn.pref_screen].root
     atoms = AtomCache(conn)
-    if argv:
-        # Change the WM_COMMAND property on the root window. We need to
-        # wait for the PropertyNotify so that we can use a valid timestamp
-        # in the client message below.
+
+    # We ask the window manager to exit by sending it a _DIM_WM_EXIT
+    # client message. If a valid timestamp is provided, the shutdown
+    # procedure will exec(3) the command found in the WM_COMMAND property
+    # on the root window. Otherwise, it will simply exit.
+    if argv is None:
+        time = Time.CurrentTime
+    else:
+        # If the user supplied a command to execute, we'll use it to
+        # replace the WM_COMMAND property. Otherwise, we'll just touch it
+        # (i.e., perform a zero-length append); since the manager records
+        # its original argv on startup, this will cause it to restart.
+        mode = PropMode.Replace if argv else PropMode.Append
+
+        # In order to provide a valid timestamp, we need to wait for the
+        # corresponding PropertyNotify after we update the property.
         conn.core.ChangeWindowAttributes(root,
                                          CW.EventMask,
                                          [EventMask.PropertyChange])
-        conn.core.ChangeProperty(PropMode.Replace, root,
+        conn.core.ChangeProperty(mode, root,
                                  atoms["WM_COMMAND"],
                                  atoms["UTF8_STRING"],
                                  *WMCommand(argv).change_property_args())
@@ -75,10 +87,8 @@ def wm_exit(display, argv=[]):
             if (isinstance(event, PropertyNotifyEvent) and
                 event.window == root and
                 event.atom == atoms["WM_COMMAND"]):
-                    time = event.time
-                    break
-    else:
-        time = Time.CurrentTime
+                time = event.time
+                break
     send_client_message(conn, root, False,
                         EventMask.SubstructureRedirect,
                         root, atoms["_DIM_WM_EXIT"],
@@ -319,9 +329,6 @@ if __name__ == "__main__":
 
     # Parse command-line options.
     def consume_remaining_args(option, opt_str, value, parser):
-        if not parser.rargs:
-            raise OptionValueError("%s option requires at least one argument" %
-                                   option)
         value = parser.rargs[:]
         del parser.rargs[:]
         setattr(parser.values, option.dest, value)
@@ -350,7 +357,10 @@ if __name__ == "__main__":
     optparser.add_option("-v", "--version", action="store_true", dest="version",
                          help="output version information and exit")
     optparser.add_option("-x", "--exit", action="store_true", dest="exit",
-                         help="ask running window manager to exit gracefully")
+                         help="ask a running window manager to exit gracefully")
+    optparser.add_option("-r", "--restart", dest="command",
+                         action="store_const", const=[],
+                         help="restart a running window manager")
     optparser.add_option("-e", "--exec", action="callback", dest="command",
                          callback=consume_remaining_args,
                          help="execute another window manager command")
@@ -365,7 +375,7 @@ if __name__ == "__main__":
     elif options.exit:
         wm_exit(options.display)
         sys.exit(0)
-    elif options.command:
+    elif options.command is not None:
         wm_exit(options.display, decode_argv(options.command))
         sys.exit(0)
 
@@ -399,7 +409,6 @@ if __name__ == "__main__":
     try:
         wm.start()
     except KeyboardInterrupt:
-        log.info("Interrupt caught; shutting down.")
         wm.shutdown()
     except Exception:
         exc_type, exc_value, traceback = sys.exc_info()

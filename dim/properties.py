@@ -666,7 +666,8 @@ class WMCommand(UTF8StringProperty):
         if isinstance(argv, (list, tuple)):
             # Assume a sequence of Unicode strings. WM_COMMAND strings are
             # null-terminated, not just null-separated.
-            super(WMCommand, self).__init__("\0".join(argv) + "\0")
+            super(WMCommand, self).__init__("".join(["%s\0" % arg
+                                                     for arg in argv]))
         else:
             # Assume an already encoded string or byte-array representation.
             super(WMCommand, self).__init__(argv)
