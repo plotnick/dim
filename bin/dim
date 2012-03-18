@@ -319,7 +319,7 @@ global_button_bindings = {
 }
 
 if __name__ == "__main__":
-    from optparse import OptionParser, OptionValueError
+    from optparse import OptionGroup, OptionParser, OptionValueError
     import logging
     import os
     import xcb
@@ -328,42 +328,67 @@ if __name__ == "__main__":
     setlocale(LC_ALL, "")
 
     # Parse command-line options.
+    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
     def consume_remaining_args(option, opt_str, value, parser):
         value = parser.rargs[:]
         del parser.rargs[:]
         setattr(parser.values, option.dest, value)
-    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
+
     optparser = OptionParser("Usage: %prog [OPTIONS] [-e COMMAND [ARG ...]]")
-    optparser.add_option("-D", "--debug", action="store_true", dest="debug",
-                         help="show debugging messages")
-    optparser.add_option("-L", "--log", action="append", dest="log",
-                         help="enable logging for the specified module")
-    optparser.add_option("-V", "--verbose", action="store_true", dest="verbose",
-                         help="be prolix, loquacious, and multiloquent")
-    optparser.add_option("-d", "--display", dest="display",
-                         help="the X server display name")
-    optparser.add_option("-f", "--focus-mode", dest="focus_mode",
-                         type="choice", choices=focus_modes.keys(),
-                         default="sloppy",
-                         help="focus mode: sloppy or click")
-    optparser.add_option("-s", "--tagset", dest="tagset_spec",
-                         help="specify a tagset expression")
-    optparser.add_option("-t", "--title-font", dest="title_font",
-                         default="fixed",
-                         help="client window title font")
-    optparser.add_option("-m", "--minibuffer-font", dest="minibuffer_font",
-                         default="10x20",
-                         help="window manager minibuffer font")
-    optparser.add_option("-v", "--version", action="store_true", dest="version",
+    optparser.set_defaults(focus_mode="sloppy",
+                           title_font="fixed",
+                           minibuffer_font="10x20")
+    optparser.add_option("--version",
+                         action="store_true", dest="version",
                          help="output version information and exit")
-    optparser.add_option("-x", "--exit", action="store_true", dest="exit",
-                         help="ask a running window manager to exit gracefully")
-    optparser.add_option("-r", "--restart", dest="command",
-                         action="store_const", const=[],
-                         help="restart a running window manager")
-    optparser.add_option("-e", "--exec", action="callback", dest="command",
-                         callback=consume_remaining_args,
-                         help="execute another window manager command")
+    optparser.add_option("--display",
+                         dest="display",
+                         help="the X server display name")
+    optparser.add_option("--focus-mode",
+                         dest="focus_mode",
+                         type="choice", choices=focus_modes.keys(),
+                         metavar="MODE",
+                         help=(("focus mode: one of %s "
+                                % ", ".join(map(str, focus_modes.keys()))) +
+                               "(default: %default)"))
+    optparser.add_option("--title-font",
+                         dest="title_font",
+                         metavar="FONT",
+                         help="client window title font (default: %default)")
+    optparser.add_option("--minibuffer-font",
+                         dest="minibuffer_font",
+                         metavar="FONT",
+                         help="minibuffer font (default: %default)")
+
+    control = optparser.add_option_group("Control Options")
+    control.add_option("-t", "--tagset",
+                       dest="tagset_spec",
+                       metavar="SPEC",
+                       help="switch to the specified tagset")
+    control.add_option("-e", "--exec",
+                       action="callback", callback=consume_remaining_args,
+                       dest="command",
+                       help="execute another window manager command; "
+                            "must be the last option provided")
+    control.add_option("-r", "--restart",
+                       action="store_const", dest="command", const=[],
+                       help="restart a running window manager")
+    control.add_option("-x", "--exit",
+                       action="store_true", dest="exit",
+                       help="ask a running window manager to exit gracefully")
+
+    debugging = optparser.add_option_group("Debugging Options")
+    debugging.add_option("-d", "--debug",
+                         action="store_true", dest="debug",
+                         help="show debugging messages")
+    debugging.add_option("-v", "--verbose",
+                         action="store_true", dest="verbose",
+                         help="be prolix, loquacious, and multiloquent")
+    debugging.add_option("-l", "--log",
+                         action="append", dest="log",
+                         metavar="MODULE",
+                         help="enable logging for the specified module")
+
     (options, args) = optparser.parse_args()
     if options.version:
         print_caption()

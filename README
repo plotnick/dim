@@ -1,3 +1,5 @@
+DIM OF THE YARD!
+
 Dim is a pure-Python window manager for the X window system written by
 Alex Plotnick <shrike@netaxs.com>. It currently runs under Python 2.6
 and 2.7, and uses xpyb, a Python wrapper around XCB, to communicate with
@@ -14,10 +16,10 @@ to start it up. If you decide you like it, you can install it via
 The main script ("bin/dim") takes a variety of options that control various
 aspects of its behavior. For instance, the default focus mode is sloppy
 focus (i.e., focus-follows-mouse except for the root window), but if you
-prefer click-to-focus, you can use the "-f click" option. If you don't
+prefer click-to-focus, you can use the "--focus-mode" option. If you don't
 like the standard "fixed" font for your window titles, you can provide
-an XLFD font name with the "-t" option. (Dim currently supports only
-core X fonts, so don't give it an Xft-style name.) The "--help" option
+an XLFD font name with the "--title-font" option. (Dim currently supports
+only core X fonts, so don't give it an Xft-style name.) The "--help" option
 gives a complete list of the available command-line options.
 
 While Dim is running, it decorates visible windows with a titlebar and a
@@ -43,7 +45,7 @@ When you tag a window, it becomes part of each of the "tag sets" named
 by the tags you've assigned. You can switch to a tagset by pressing
 "Control-Meta-Tab", and then typing the name of the tagset; again,
 return commits, and escape aborts. (You can also switch tagsets using
-the "dim" script with the "-s" option.) Thus, if you gave each window
+the "dim" script with the "-t" option.) Thus, if you gave each window
 exactly one tag and simply switched between those tagsets, you'd have a
 scheme very similar to what most window managers call "virtual desktops".
 
