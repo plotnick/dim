@@ -3,6 +3,7 @@
 from array import array
 
 import xcb
+from xcb.xproto import CHARINFO
 
 from atom import AtomCache
 
@@ -24,20 +25,26 @@ class FontInfoCache(object):
         return self.font_info[font]
 
 class FontInfo(object):
-    def __init__(self, info, atoms,
-                 attrs=("draw_direction",
-                        "min_char_or_byte2", "max_char_or_byte2",
-                        "min_byte1", "max_byte1",
-                        "all_chars_exist",
-                        "default_char",
-                        "min_bounds",
-                        "max_bounds",
-                        "font_ascent",
-                        "font_descent",
-                        "char_infos",
-                        "properties")):
-        for attr in attrs:
+    def __init__(self, info, atoms):
+        for attr in ("draw_direction",
+                     "min_char_or_byte2", "max_char_or_byte2",
+                     "min_byte1", "max_byte1",
+                     "all_chars_exist",
+                     "default_char",
+                     "min_bounds",
+                     "max_bounds",
+                     "font_ascent",
+                     "font_descent",
+                     "properties"):
             setattr(self, attr, getattr(info, attr))
+
+        # Rather than storing the list of CHARINFO instances, we'll keep
+        # only the underlying buffer, and re-construct the instances on
+        # demand. The issue here is space: in a font like the ISO-10646
+        # version of Misc-Fixed, the 65,536 CHARINFO objects consume nearly
+        # 90 megabytes of memory on a 64-bit system, which is quite a lot
+        # of overhead for 768 kilobytes of raw data.
+        self.char_infos = info.char_infos.buf()
 
         # Storing these bounds as a tuple lets us replace four attribute
         # lookups with one, which makes a measurable performance difference
@@ -56,7 +63,7 @@ class FontInfo(object):
         else:
             self.spacing = None
 
-    def char_info(self, char, default=True):
+    def char_info(self, char, default=True, charinfo_size=12):
         """Return the CHARINFO for the given character.
 
         If the given character is nonexistent or missing, then the info
@@ -64,29 +71,32 @@ class FontInfo(object):
         the CHARINFO for the font's default character is returned (which
         may be None if that character is itself nonexistent or missing).
         Otherwise, the provided default is returned."""
+        # See the QueryFont entry in the X protocol reference manual.
         try:
             char = ord(char)
         except TypeError:
+            # An integer is acceptable as a character designator.
             pass
         byte1 = char >> 8
         byte2 = char & 0xff
         (min_byte1, max_byte1, min_byte2, max_byte2) = self.index_bounds
         if (min_byte1 <= byte1 <= max_byte1 and
             min_byte2 <= byte2 <= max_byte2):
+            offset = (((byte1 - min_byte1) * (max_byte2 - min_byte2 + 1)) +
+                      (byte2 - min_byte2)) * charinfo_size
             try:
-                info = self.char_infos[((byte1 - min_byte1) *
-                                        (max_byte2 - min_byte2 + 1)) +
-                                       (byte2 - min_byte2)]
-            except IndexError:
-                info = self.min_bounds
+                info = CHARINFO(self.char_infos, offset, charinfo_size)
+            except Exception:
+                return self.min_bounds
         else:
-            info = default
-        if (not info or
-            (info.character_width == 0 and
-             info.left_side_bearing == 0 and
-             info.right_side_bearing == 0 and
-             info.ascent == 0 and
-             info.descent == 0)):
+            # Undefined character.
+            return self.default_char_info if default is True else default
+        if (info.character_width == 0 and
+            info.left_side_bearing == 0 and
+            info.right_side_bearing == 0 and
+            info.ascent == 0 and
+            info.descent == 0):
+            # Nonexistent character.
             return self.default_char_info if default is True else default
         return info
 

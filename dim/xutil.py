@@ -1,5 +1,6 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from array import array
 from contextlib import contextmanager
 from locale import getpreferredencoding
 from struct import Struct
@@ -18,7 +19,7 @@ __all__ = ["int16", "card16",
            "grab_server", "mask_events",
            "get_input_focus", "get_window_geometry",
            "query_extension", "query_pointer",
-           "select_values", "textitem16",
+           "select_values", "string16", "textitem16",
            "client_message_type", "client_message", "ClientMessage"]
 
 def int16(x):
@@ -230,6 +231,10 @@ def select_values(value_mask, values):
     """Create a value-list from the supplied possible values according to the
     bits in the given value-mask."""
     return [values[i] for i in range(len(values)) if value_mask & (1 << i)]
+
+def string16(string):
+    """Encode the given string as a list of CHAR2B values."""
+    return [array("B", char.encode("UTF-16BE")) for char in unicode(string)]
 
 def textitem16(string, pack_header=Struct("Bx").pack):
     """Given a string, yield a sequence of TEXTITEM16s suitable for embedding
