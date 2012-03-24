@@ -8,6 +8,7 @@ from os import (close, dup, dup2, execlp, execv, execvp, fork, kill,
                 openpty, ttyname, wait)
 from termios import tcgetattr, tcsetattr, ECHO, TCSADRAIN
 from traceback import print_exception
+import os
 import pdb
 import re
 import sys
@@ -40,10 +41,11 @@ def print_caption(out=None):
 
 def spawn(command):
     """Execute command (a string) in the background via a shell."""
+    shell = os.environ.get("SHELL", "/bin/sh")
     if fork():
         return wait()
     daemon(True, True)
-    execv("/bin/sh", ["/bin/sh", "-c"] + encode_argv([command]))
+    execv(shell, [shell, "-c"] + encode_argv([command]))
 
 def update_tagset(display, spec):
     """Send a tagset specification to a running window manager."""
