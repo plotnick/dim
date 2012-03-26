@@ -109,14 +109,7 @@ class InputField(Widget):
 
     @handler(KeyPressEvent)
     def handle_key_press(self, event,
-                         shift=frozenset(["shift"]),
-                         modifiers=(XK_Shift_L, XK_Shift_R,
-                                    XK_Control_L, XK_Control_R,
-                                    XK_Caps_Lock, XK_Shift_Lock,
-                                    XK_Meta_L, XK_Meta_R,
-                                    XK_Alt_L, XK_Alt_R,
-                                    XK_Super_L, XK_Super_R,
-                                    XK_Hyper_L, XK_Hyper_R)):
+                         shift=frozenset(["shift"])):
         try:
             action = self.key_bindings[event]
         except KeyError as e:
@@ -124,7 +117,7 @@ class InputField(Widget):
             # interesting modifiers are active or the key is itself a
             # modifier.
             symbol, state, press = e.args
-            if symbol in modifiers:
+            if is_modifier_key(symbol):
                 return
             modset = next(self.key_bindings.modsets(state))
             if modset and modset != shift:

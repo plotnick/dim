@@ -5,17 +5,25 @@ from keysymdef import _names, _keysyms, _legacy_codes
 
 NoSymbol = 0
 
-def is_latin1(keysym):
+def is_latin1_key(keysym):
     return keysym < 0x100
 
-def is_unicode(keysym):
+def is_unicode_key(keysym):
     return (keysym & 0xff000000) == 0x01000000
 
-def is_legacy(keysym):
+def is_legacy_key(keysym):
     return 0x100 <= keysym <= 0x20ff
 
-def is_keypad(keysym):
-    return 0xff80 <= keysym <= 0xffbd or 0x11000000 <= keysym <= 0x1100ffff
+def is_keypad_key(keysym):
+    return XK_KP_Space <= keysym <= XK_KP_Equal
+
+def is_private_keypad_key(keysym):
+    return 0x11000000 <= keysym <= 0x1100ffff
+
+def is_modifier_key(keysym):
+    return (XK_Shift_L <= keysym <= XK_Hyper_R or
+            keysym == XK_Mode_switch or
+            keysym == XK_Num_Lock)
 
 def keysym_name(keysym):
     """Return the name of the given keysym."""
@@ -31,9 +39,9 @@ def keysym_to_string(keysym):
 
     Note that this is different than the Xlib function XKeysymToString, which
     is equivalent to our keysym_name function."""
-    if is_latin1(keysym):
+    if is_latin1_key(keysym):
         return unichr(keysym)
-    elif is_unicode(keysym):
+    elif is_unicode_key(keysym):
         return unichr(keysym & 0x00ffffff)
     else:
         try:

@@ -167,7 +167,7 @@ class KeyboardMap(InputDeviceMapping):
         shift = modifiers & ModMask.Shift or shift_lock_on
 
         if (num_lock_on and
-            is_keypad(KeyboardMap.effective_keysym(keysyms, index | 1))):
+            is_keypad_key(KeyboardMap.effective_keysym(keysyms, index | 1))):
             return KeyboardMap.effective_keysym(keysyms, index | (not shift))
         elif caps_lock_on:
             return upper(KeyboardMap.effective_keysym(keysyms, index | shift))

@@ -45,7 +45,7 @@ class TestKeysym(unittest.TestCase):
         self.assertEqual(string_to_keysym("\x00"), NoSymbol)
 
         for keysym in _keysyms.values():
-            if is_unicode(keysym):
+            if is_unicode_key(keysym):
                 # For Unicode characters for which we have a keysym, that
                 # keysym should correspond directly to the character.
                 char = unichr(keysym & 0x00ffffff)
@@ -58,7 +58,7 @@ class TestKeysym(unittest.TestCase):
         self.assertEqual(keysym_to_string(XK_VoidSymbol), "")
 
         for keysym in _keysyms.values():
-            if is_unicode(keysym):
+            if is_unicode_key(keysym):
                 # For Unicode keysyms, we can be very precise: the string
                 # should be equal to the equivalent Unicode character.
                 char = unichr(keysym & 0x00ffffff)
