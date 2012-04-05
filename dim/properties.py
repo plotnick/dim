@@ -5,7 +5,6 @@
 from array import array
 from collections import defaultdict
 import logging
-import exceptions
 from operator import itemgetter
 from struct import Struct
 
@@ -114,7 +113,7 @@ class PropertyManager(object):
             if cls:
                 try:
                     value = cls.unpack(reply.value.buf())
-                except exceptions.ValueError:
+                except Exception:
                     self.log.warning("Invalid %s property value.", name)
                     value = default
             else:
