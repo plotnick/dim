@@ -391,11 +391,11 @@ class WindowManager(EventHandler):
     def handle_event(self, event):
         """Handle an event from the server. If a handler is registered for
         the window the event was reported with respect to, dispatch the
-        event to that handler."""
+        event to that handler as well."""
         handler = self.window_handlers.get(event_window(event), None)
         if handler:
             try:
-                return handler.handle_event(event)
+                handler.handle_event(event)
             except UnhandledEvent:
                 pass
         return super(WindowManager, self).handle_event(event)
