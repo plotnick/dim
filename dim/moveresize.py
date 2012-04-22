@@ -82,7 +82,13 @@ def cardinal_axis(direction):
             return i
 
 class Resistance(object):
-    def __init__(self, client, **kwargs):
+    def __init__(self, *args, **kwargs):
+        self.shared_init(*args, **kwargs)
+
+    def reinitialize(self, *args, **kwargs):
+        self.shared_init(*args, **kwargs)
+
+    def shared_init(self, client, **kwargs):
         self.client = client
 
     def resist(self, geometry, gravity=Gravity.Center):
@@ -121,8 +127,8 @@ class Resistance(object):
 class ScreenEdgeResistance(Resistance):
     """Resist moving a client's external edges past the screen edges."""
 
-    def __init__(self, client, screen_edge_resistance=40, **kwargs):
-        super(ScreenEdgeResistance, self).__init__(client, **kwargs)
+    def shared_init(self, client, screen_edge_resistance=40, **kwargs):
+        super(ScreenEdgeResistance, self).shared_init(client, **kwargs)
 
         self.screen_edge_resistance = screen_edge_resistance
         screen_geometry = client.manager.screen_geometry
@@ -153,8 +159,8 @@ class ScreenEdgeResistance(Resistance):
 class CRTCEdgeResistance(ScreenEdgeResistance):
     """Treat CRTC edges like screen edges."""
 
-    def __init__(self, client, **kwargs):
-        super(CRTCEdgeResistance, self).__init__(client, **kwargs)
+    def shared_init(self, client, **kwargs):
+        super(CRTCEdgeResistance, self).shared_init(client, **kwargs)
 
         self.crtc_edges = [dict((direction, geometry.edge(direction))
                                 for direction in cardinal_directions)
@@ -174,8 +180,8 @@ class WindowEdgeResistance(Resistance):
     """Classical edge resistance: visible windows' opposite external edges
     resist moving past one another."""
 
-    def __init__(self, client, window_edge_resistance=20, **kwargs):
-        super(WindowEdgeResistance, self).__init__(client, **kwargs)
+    def shared_init(self, client, window_edge_resistance=20, **kwargs):
+        super(WindowEdgeResistance, self).shared_init(client, **kwargs)
 
         self.window_edge_resistance = window_edge_resistance
         clients = [client
@@ -499,6 +505,11 @@ class MoveResize(WindowManager):
         self.client_update.resistance = EdgeResistance(client)
         self.client_update.button = event.detail
 
+    def update_resistance(self):
+        if not self.client_update:
+            return
+        self.client_update.resistance.reinitialize(self.client_update.client)
+
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
         if not self.client_update or event.detail != self.client_update.button:
@@ -523,3 +534,7 @@ class MoveResize(WindowManager):
         except KeyError:
             return
         action(self.client_update, event)
+
+    @handler(VisibilityNotifyEvent)
+    def handle_visibility_notify(self, event):
+        self.update_resistance()
