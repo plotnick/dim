@@ -510,6 +510,11 @@ class MoveResize(WindowManager):
             return
         self.client_update.resistance.reinitialize(self.client_update.client)
 
+    def head_geometry_changed(self, old_geometry, new_geometry):
+        super(MoveResize, self).head_geometry_changed(old_geometry,
+                                                      new_geometry)
+        self.update_resistance()
+
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):
         if not self.client_update or event.detail != self.client_update.button:

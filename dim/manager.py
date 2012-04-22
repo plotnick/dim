@@ -299,6 +299,10 @@ class WindowManager(EventHandler):
                                border_width,
                                gravity)
 
+    def head_geometry_changed(self, old_geometry, new_geometry):
+        """Called when a head or screen geometry changes."""
+        pass
+
     @property
     def current_crtc_geometry(self):
         """If RandR is available, return the geometry of the CRTC that
@@ -441,10 +445,12 @@ class WindowManager(EventHandler):
     def handle_configure_notify(self, event):
         if event.window == self.screen.root:
             # The root window size may change due to RandR.
+            old_geometry = self.screen_geometry
             self.screen_geometry = Geometry(event.x, event.y,
                                             event.width, event.height,
                                             event.border_width)
             log.debug("Root window geometry now %s.", self.screen_geometry)
+            self.head_geometry_changed(old_geometry, self.screen_geometry)
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event,
@@ -642,9 +648,12 @@ class WindowManager(EventHandler):
             if cc.window != self.screen.root:
                 return
             if cc.mode:
-                geometry = Geometry(cc.x, cc.y, cc.width, cc.height, 0)
-                log.debug("CRTC 0x%x changed: %s.", cc.crtc, geometry)
-                self.crtcs[cc.crtc] = geometry
+                new_geometry = Geometry(cc.x, cc.y, cc.width, cc.height, 0)
+                log.warning("CRTC 0x%x changed: %s.", cc.crtc, new_geometry)
+                old_geometry = self.crtcs[cc.crtc]
+                self.crtcs[cc.crtc] = new_geometry
+                self.head_geometry_changed(old_geometry, new_geometry)
             else:
                 log.debug("CRTC 0x%x disabled.", cc.crtc)
-                del self.crtcs[cc.crtc]
+                old_geometry = self.crtcs.pop(cc.crtc, None)
+                self.head_geometry_changed(old_geometry, None)
