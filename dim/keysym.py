@@ -39,15 +39,9 @@ def keysym_to_string(keysym):
 
     Note that this is different than the Xlib function XKeysymToString, which
     is equivalent to our keysym_name function."""
-    if is_latin1_key(keysym):
-        return unichr(keysym)
-    elif is_unicode_key(keysym):
-        return unichr(keysym & 0x00ffffff)
-    else:
-        try:
-            return _legacy_codes[keysym]
-        except KeyError:
-            return ""
+    return (unichr(keysym) if is_latin1_key(keysym) else
+            unichr(keysym & 0x00ffffff) if is_unicode_key(keysym) else
+            _legacy_codes.get(keysym, ""))
 
 def upper(keysym):
     """Return the corresponding uppercase keysym."""
