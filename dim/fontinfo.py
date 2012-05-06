@@ -76,7 +76,7 @@ class FontInfo(object):
             char = ord(char)
         except TypeError:
             # An integer is acceptable as a character designator.
-            pass
+            assert isinstance(char, int)
         byte1 = char >> 8
         byte2 = char & 0xff
         (min_byte1, max_byte1, min_byte2, max_byte2) = self.index_bounds
