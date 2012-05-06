@@ -69,8 +69,7 @@ class FocusPolicy(WindowManager):
         if (initial == WMState.WithdrawnState and
             final == WMState.NormalState and
             self.focus_new_windows):
-            self.__log.debug("Ensuring focus of new window 0x%x.",
-                             client.window)
+            self.__log.debug("Focusing new window 0x%x.", client.window)
             self.ensure_focus(client)
 
     def focus(self, client, time):
