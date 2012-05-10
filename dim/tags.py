@@ -24,6 +24,9 @@ __all__ = ["SpecSyntaxError", "parse_tagset_spec", "send_tagset_expr",
 
 log = logging.getLogger("tags")
 
+class TagMachineError(Exception):
+    pass
+
 class TagMachine(object):
     """A small virtual stack machine for operating on tagsets.
 
@@ -42,6 +45,7 @@ class TagMachine(object):
                             for code, name in opcodes.items())
         self.wild = wild
 
+        self.ip = iter([])
         self.stack = []
         self.push = self.stack.append
         self.pop = self.stack.pop
@@ -49,7 +53,9 @@ class TagMachine(object):
     def run(self, instructions):
         def tagset(tag):
             self.push(self.tagsets.get(tag, set()))
-        for x in instructions:
+
+        self.ip = iter(instructions)
+        for x in self.ip:
             op = self.opcodes.get(x, None)
             if op:
                 op()
@@ -73,6 +79,44 @@ class TagMachine(object):
         if self.stack:
             log.debug("Discarding %d elements from stack.", len(self.stack))
             del self.stack[:]
+
+    def quote(self):
+        self.push(next(self.ip))
+
+    def begin(self):
+        """Pull instructions off the instruction stream until a matching end
+        is found, and push a list containing the instructions so collected."""
+        l = []
+        while True:
+            try:
+                x = next(self.ip)
+            except StopIteration:
+                raise TagMachineError("invalid list")
+            op = self.opcodes.get(x, None)
+            if op == self.end:
+                break
+            elif op == self.begin:
+                self.begin()
+                x = self.pop()
+            else:
+                l.append(x)
+        self.push(l)
+
+    def end(self):
+        # List endings are actually handled in begin.
+        raise TagMachineError("unexpected list end")
+
+    def assign(self):
+        name = self.pop()
+        value = self.pop()
+        if isinstance(value, set):
+            # Tagset assignment.
+            self.tagsets[name] = set(value)
+        elif isinstance(value, list):
+            # Procedure assignment.
+            self.opcodes[name] = lambda: self.run(value)
+        else:
+            raise TagMachineError("invalid assignment")
 
     def union(self):
         self.push(self.pop() | self.pop())
@@ -135,8 +179,8 @@ class OpTokenClass(type):
         return cls
 
 class OpToken(object):
-    """For convenience and aesthetic reasons, all operators have both an
-    ASCII and a non-ASCII Unicode character representation, which are
+    """For convenience and aesthetic reasons, most operators have both
+    an ASCII and a non-ASCII Unicode character representation, which are
     treated identically by the tokenizer.
 
     They also each have a representation as an atom. The atom names must
@@ -155,6 +199,21 @@ class OpToken(object):
                 unicode(self) == other if isinstance(other, unicode) else
                 type(self) == type(other) if isinstance(other, OpToken) else
                 False)
+
+class Begin(OpToken):
+    str_symbol = "{"
+    unicode_symbol = "{"
+    atom = "_DIM_TAGSET_BEGIN"
+
+class End(OpToken):
+    str_symbol = "}"
+    unicode_symbol = "}"
+    atom = "_DIM_TAGSET_END"
+
+class Quote(OpToken):
+    str_symbol = "'"
+    unicode_symbol = "'"
+    atom = "_DIM_TAGSET_QUOTE"
 
 class Union(OpToken):
     str_symbol = "|"
@@ -459,4 +518,6 @@ class TagManager(WindowManager):
             self.tag_machine.run(self.properties.tagset_expr)
         except IndexError:
             log.warning("Stack underflow while evaluating tagset expression.")
+        except TagMachineError as e:
+            log.warning("Tag machine execution error: %s", e)
         self.ensure_focus(time=time)
