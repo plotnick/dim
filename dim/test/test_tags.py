@@ -262,10 +262,4 @@ class TestTagManager(WMTestCase):
         self.loop(self.make_mapped_test(wild))
 
 if __name__ == "__main__":
-    import logging
-    from tags import log
-
-    log.addHandler(logging.StreamHandler())
-    log.setLevel(logging.INFO)
-
     unittest.main()
