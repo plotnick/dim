@@ -98,8 +98,7 @@ class TagMachine(object):
             elif op == self.begin:
                 self.begin()
                 x = self.pop()
-            else:
-                l.append(x)
+            l.append(x)
         self.push(l)
 
     def end(self):
@@ -516,8 +515,6 @@ class TagManager(WindowManager):
             return
         try:
             self.tag_machine.run(self.properties.tagset_expr)
-        except IndexError:
-            log.warning("Stack underflow while evaluating tagset expression.")
-        except TagMachineError as e:
+        except Exception as e:
             log.warning("Tag machine execution error: %s", e)
         self.ensure_focus(time=time)
