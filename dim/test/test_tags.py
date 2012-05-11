@@ -12,7 +12,7 @@ from xcb.xproto import *
 from dim.event import *
 from dim.geometry import *
 from dim.properties import AtomList
-from dim.tags import (TagMachine, TagManager, SpecSyntaxError,
+from dim.tags import (TagMachineError, TagMachine, TagManager, SpecSyntaxError,
                       tokenize, parse_tagset_spec, send_tagset_expr)
 
 from test_manager import TestClient, WMTestCase
@@ -42,7 +42,11 @@ class TestTagMachine(unittest.TestCase):
             "square": set(self.clients[i*i] for i in range(int(sqrt(n)))),
             "prime": set(self.clients[i] for i in primes(n))
         }
-        self.opcodes = {"∪": "union",
+        self.opcodes = {"{": "begin",
+                        "}": "end",
+                        "'": "quote",
+                        "=": "assign",
+                        "∪": "union",
                         "∩": "intersection",
                         "∖": "difference",
                         "∁": "complement",
@@ -119,6 +123,44 @@ class TestTagMachine(unittest.TestCase):
         self.tvm.run(["∅", "∁"])
         self.assertEqual(self.tvm.pop(), self.all_clients)
         self.assertStackEmpty(self.tvm)
+
+    def test_list(self):
+        """Tag machine list support"""
+        self.assertRaises(StopIteration, lambda: self.tvm.run(["{"]))
+        self.assertRaises(TagMachineError, lambda: self.tvm.run(["}"]))
+
+        x, y, z, w = object(), object(), object(), object()
+        self.tvm.run(["{", x, "{", y, z, "}", w, "}"])
+        self.assertEqual(self.tvm.pop(), [x, [y, z], w])
+        self.assertStackEmpty(self.tvm)
+
+    def test_quote(self):
+        """Tag machine quote instruction"""
+        self.assertRaises(StopIteration, lambda: self.tvm.run(["'"]))
+
+        x = object()
+        self.tvm.run(["'", x])
+        self.assertEqual(self.tvm.pop(), x)
+        self.assertStackEmpty(self.tvm)
+
+    def test_assign(self):
+        """Tag machine assignment"""
+        self.assertRaises(IndexError, lambda: self.tvm.run(["="]))
+        self.assertRaises(IndexError, lambda: self.tvm.run(["'", "x", "="]))
+
+        # Tagset assignment
+        self.tvm.run(["big", "even", "∩", "'", "big-even", "="])
+        self.assertStackEmpty(self.tvm)
+        self.assertEqual(self.tagsets["big-even"],
+                         self.tagsets["big"] & self.tagsets["even"])
+
+        # Expression (alias) assignment
+        self.tvm.run(["{", "big", "odd", "∩", "}", "'", "big-odd", "="])
+        self.assertStackEmpty(self.tvm)
+        self.assertFalse("big-odd" in self.tagsets)
+        self.tvm.run(["big-odd"])
+        self.assertEqual(self.tvm.pop(),
+                         self.tagsets["big"] & self.tagsets["odd"])
 
 class TestTokenizer(unittest.TestCase):
     def test_tag(self):

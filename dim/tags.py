@@ -88,10 +88,7 @@ class TagMachine(object):
         is found, and push a list containing the instructions so collected."""
         l = []
         while True:
-            try:
-                x = next(self.ip)
-            except StopIteration:
-                raise TagMachineError("invalid list")
+            x = next(self.ip)
             op = self.opcodes.get(x, None)
             if op == self.end:
                 break
@@ -110,9 +107,11 @@ class TagMachine(object):
         value = self.pop()
         if isinstance(value, set):
             # Tagset assignment.
+            self.opcodes.pop(name, None)
             self.tagsets[name] = set(value)
         elif isinstance(value, list):
             # Procedure assignment.
+            self.tagsets.pop(name, None)
             self.opcodes[name] = lambda: self.run(value)
         else:
             raise TagMachineError("invalid assignment")
