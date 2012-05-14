@@ -103,8 +103,8 @@ class TagMachine(object):
         raise TagMachineError("unexpected list end")
 
     def assign(self):
-        name = self.pop()
         value = self.pop()
+        name = self.pop()
         if isinstance(value, set):
             # Tagset assignment.
             self.opcodes.pop(name, None)

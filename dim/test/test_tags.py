@@ -149,13 +149,13 @@ class TestTagMachine(unittest.TestCase):
         self.assertRaises(IndexError, lambda: self.tvm.run(["'", "x", "="]))
 
         # Tagset assignment
-        self.tvm.run(["big", "even", "∩", "'", "big-even", "="])
+        self.tvm.run(["'", "big-even", "big", "even", "∩", "="])
         self.assertStackEmpty(self.tvm)
         self.assertEqual(self.tagsets["big-even"],
                          self.tagsets["big"] & self.tagsets["even"])
 
         # Expression (alias) assignment
-        self.tvm.run(["{", "big", "odd", "∩", "}", "'", "big-odd", "="])
+        self.tvm.run(["'", "big-odd", "{", "big", "odd", "∩", "}", "="])
         self.assertStackEmpty(self.tvm)
         self.assertFalse("big-odd" in self.tagsets)
         self.tvm.run(["big-odd"])
