@@ -198,6 +198,14 @@ class OpToken(object):
                 type(self) == type(other) if isinstance(other, OpToken) else
                 False)
 
+    def __ne__(self, other):
+        return not (self == other)
+
+class Assign(OpToken):
+    str_symbol = "="
+    unicode_symbol = "="
+    atom = "_DIM_TAGSET_ASSIGN"
+
 class Begin(OpToken):
     str_symbol = "{"
     unicode_symbol = "{"
@@ -318,6 +326,41 @@ class BinOp(Expr):
         expr.append(self.op)
         return expr
 
+class QuotedExpr(Expr):
+    """A quoted expression."""
+
+    def __init__(self, expr):
+        self.expr = expr
+
+    def __str__(self):
+        return "'(%s)" % (self.expr,)
+
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.expr)
+
+    def postfix(self):
+        expr = [Quote()]
+        expr.extend(self.expr.postfix())
+        return expr
+
+class ListExpr(Expr):
+    """A list of sub-expressions."""
+
+    def __init__(self, expr):
+        self.expr = expr
+
+    def __str__(self):
+        return "{%s}" % (self.expr,)
+
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.expr)
+
+    def postfix(self):
+        expr = [Begin()]
+        expr.extend(self.expr.postfix())
+        expr.append(End())
+        return expr
+
 class SpecParser(object):
     """A recursive-descent parser for tagset specifications. Adapted from
     the partial grammar for the AWK language given in "The AWK Programming
@@ -349,7 +392,18 @@ class SpecParser(object):
         self.advance()
 
     def spec(self):
-        """spec → term | term [∪∖] term"""
+        """spec → expr | tag = expr"""
+        e = self.expr()
+        if self.token == "=":
+            if not isinstance(e, Tag):
+                raise SpecSyntaxError("invalid assignment lhs '%s'" % e)
+            op = self.token
+            self.advance()
+            e = BinOp(op, QuotedExpr(e), self.expr())
+        return e
+
+    def expr(self):
+        """expr → term | term [∪∖] term"""
         e = self.term()
         while self.token == "∪" or self.token == "∖":
             op = self.token
@@ -376,13 +430,19 @@ class SpecParser(object):
             return self.fact()
 
     def fact(self):
-        """fact → (spec) | tag"""
+        """fact → (expr) | {expr} | tag"""
         if self.token == "(":
             try:
                 self.eat("(")
-                return self.spec()
+                return self.expr()
             finally:
                 self.eat(")")
+        elif self.token == "{":
+            try:
+                self.eat("{")
+                return ListExpr(self.expr())
+            finally:
+                self.eat("}")
         elif isinstance(self.token, basestring):
             try:
                 return Tag(self.token)
