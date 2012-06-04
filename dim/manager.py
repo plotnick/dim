@@ -650,7 +650,7 @@ class WindowManager(EventHandler):
             if cc.mode:
                 new_geometry = Geometry(cc.x, cc.y, cc.width, cc.height, 0)
                 log.debug("CRTC 0x%x changed: %s.", cc.crtc, new_geometry)
-                old_geometry = self.crtcs[cc.crtc]
+                old_geometry = self.crtcs.get(cc.crtc)
                 self.crtcs[cc.crtc] = new_geometry
                 self.head_geometry_changed(old_geometry, new_geometry)
             else:
