@@ -7,6 +7,7 @@ from struct import Struct
 import sys
 
 from xcb.xproto import *
+import xcb.randr
 import xcb.shape
 
 from geometry import *
@@ -114,6 +115,11 @@ event_window_types = {
     VisibilityNotifyEvent: lambda e: e.window,
 
     # Extension events (only as needed).
+    xcb.randr.NotifyEvent: lambda e: \
+        (e.u.cc.window if e.subCode == xcb.randr.Notify.CrtcChange else
+         e.u.oc.window if e.subCode == xcb.randr.Notify.OutputChange else
+         e.u.op.window if e.subCode == xcb.randr.Notify.OutputProperty else
+         None),
     xcb.shape.NotifyEvent: lambda e: e.affected_window
 }
 

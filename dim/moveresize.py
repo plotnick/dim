@@ -156,23 +156,23 @@ class ScreenEdgeResistance(Resistance):
                                                                     gravity,
                                                                     direction)
 
-class CRTCEdgeResistance(ScreenEdgeResistance):
-    """Treat CRTC edges like screen edges."""
+class HeadEdgeResistance(ScreenEdgeResistance):
+    """Treat head (monitor) edges like screen edges."""
 
     def shared_init(self, client, **kwargs):
-        super(CRTCEdgeResistance, self).shared_init(client, **kwargs)
+        super(HeadEdgeResistance, self).shared_init(client, **kwargs)
 
-        self.crtc_edges = [dict((direction, geometry.edge(direction))
+        self.head_edges = [dict((direction, head.edge(direction))
                                 for direction in cardinal_directions)
-                           for geometry in client.manager.crtcs.values()]
+                           for head in client.manager.heads]
 
     def compute_resistance(self, geometry, gravity, direction):
-        for crtc_edges in self.crtc_edges:
-            resistance = self.edge_resistance(crtc_edges[direction],
+        for edges in self.head_edges:
+            resistance = self.edge_resistance(edges[direction],
                                               geometry, gravity, direction)
             if resistance:
                 return resistance
-        return super(CRTCEdgeResistance, self).compute_resistance(geometry,
+        return super(HeadEdgeResistance, self).compute_resistance(geometry,
                                                                   gravity,
                                                                   direction)
 
@@ -292,7 +292,7 @@ class AlignWindowEdges(WindowEdgeResistance):
     def cleanup(self, time):
         self.draw_guide(None, None)
 
-class EdgeResistance(AlignWindowEdges, CRTCEdgeResistance):
+class EdgeResistance(AlignWindowEdges, HeadEdgeResistance):
     pass
 
 class ClientUpdate(object):
@@ -445,6 +445,11 @@ class MoveResize(WindowManager):
                          EventMask.ButtonMotion |
                          EventMask.PointerMotionHint)
 
+    def __init__(self, **kwargs):
+        super(MoveResize, self).__init__(**kwargs)
+
+        self.heads.register_change_handler(lambda *args: self.update_resistance)
+
     def constrain_position(self, client, position):
         position = super(MoveResize, self).constrain_position(client, position)
         if self.client_update:
@@ -509,11 +514,6 @@ class MoveResize(WindowManager):
         if not self.client_update:
             return
         self.client_update.resistance.reinitialize(self.client_update.client)
-
-    def head_geometry_changed(self, old_geometry, new_geometry):
-        super(MoveResize, self).head_geometry_changed(old_geometry,
-                                                      new_geometry)
-        self.update_resistance()
 
     @handler(ButtonReleaseEvent)
     def handle_button_release(self, event):

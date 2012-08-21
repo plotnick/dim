@@ -10,7 +10,7 @@ from select import select
 
 import xcb
 from xcb.xproto import *
-import xcb.randr
+import xcb.shape
 
 from atom import AtomCache
 from bindings import KeyBindings, ButtonBindings
@@ -22,6 +22,7 @@ from event import StopPropagation, UnhandledEvent, EventHandler, handler
 from font import FontCache
 from fontinfo import FontInfoCache
 from geometry import *
+from multihead import HeadManager
 from keymap import *
 from properties import *
 from xutil import *
@@ -87,19 +88,8 @@ class WindowManager(EventHandler):
         self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
         log.debug("Screen geometry: %s.", self.screen_geometry)
 
-        self.randr = query_extension(self.conn, "RANDR", xcb.randr.key)
-        if self.randr:
-            self.randr.SelectInput(self.screen.root,
-                                   xcb.randr.NotifyMask.CrtcChange)
-            self.crtcs = dict(self.get_crtc_info(self.screen))
-            log.debug("CRTC geometries: {%s}.",
-                      ", ".join("0x%x: %s" % (crtc, geometry)
-                                for crtc, geometry in self.crtcs.items()))
-        else:
-            self.crtcs = {}
-
-        self.shape = query_extension(self.conn, "SHAPE", xcb.shape.key)
-
+        self.events = deque([]) # event queue
+        self.window_handlers = {} # event handlers, indexed by window ID
         self.clients = {} # managed clients, indexed by window ID
         self.frames = {} # client frames, indexed by window ID
         self.client_update = None # for move/resize
@@ -120,21 +110,9 @@ class WindowManager(EventHandler):
         self.properties = self.property_class(self.conn,
                                               self.screen.root,
                                               self.atoms)
-        self.events = deque([])
-        self.window_handlers = {}
+        self.heads = HeadManager(self.conn, self.screen, self)
+        self.shape = query_extension(self.conn, "SHAPE", xcb.shape.key)
         self.init_graphics()
-
-    def get_crtc_info(self, screen):
-        """Yield pairs of the form (CRTC, Geometry) for each CRTC connected
-        to the given screen."""
-        resources = self.randr.GetScreenResources(screen.root).reply()
-        timestamp = resources.config_timestamp
-        for crtc, cookie in [(crtc, self.randr.GetCrtcInfo(crtc, timestamp))
-                             for crtc in resources.crtcs]:
-            info = cookie.reply()
-            if info.status or not info.mode:
-                continue
-            yield (crtc, Geometry(info.x, info.y, info.width, info.height, 0))
 
     def init_graphics(self):
         self.black_gc = self.conn.generate_id()
@@ -299,22 +277,6 @@ class WindowManager(EventHandler):
                                border_width,
                                gravity)
 
-    def head_geometry_changed(self, old_geometry, new_geometry):
-        """Called when a head or screen geometry changes."""
-        pass
-
-    @property
-    def current_crtc_geometry(self):
-        """If RandR is available, return the geometry of the CRTC that
-        currently contains the pointer. Otherwise, return the geometry
-        of the root window."""
-        if self.crtcs:
-            pointer = query_pointer(self.conn, self.screen)
-            for geometry in self.crtcs.values():
-                if pointer in geometry:
-                    return geometry
-        return self.screen_geometry
-
     @property
     def current_focus(self):
         """Return the client that currently has the input focus."""
@@ -450,7 +412,6 @@ class WindowManager(EventHandler):
                                             event.width, event.height,
                                             event.border_width)
             log.debug("Root window geometry now %s.", self.screen_geometry)
-            self.head_geometry_changed(old_geometry, self.screen_geometry)
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event,
@@ -640,20 +601,3 @@ class WindowManager(EventHandler):
                                timestamp) <= 0):
             argv = self.properties.wm_command
         raise ExitWindowManager(*argv)
-
-    @handler(xcb.randr.NotifyEvent)
-    def handle_randr_notify(self, event):
-        if event.subCode == xcb.randr.Notify.CrtcChange:
-            cc = event.u.cc
-            if cc.window != self.screen.root:
-                return
-            if cc.mode:
-                new_geometry = Geometry(cc.x, cc.y, cc.width, cc.height, 0)
-                log.debug("CRTC 0x%x changed: %s.", cc.crtc, new_geometry)
-                old_geometry = self.crtcs.get(cc.crtc)
-                self.crtcs[cc.crtc] = new_geometry
-                self.head_geometry_changed(old_geometry, new_geometry)
-            else:
-                log.debug("CRTC 0x%x disabled.", cc.crtc)
-                old_geometry = self.crtcs.pop(cc.crtc, None)
-                self.head_geometry_changed(old_geometry, None)
