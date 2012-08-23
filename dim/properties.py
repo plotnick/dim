@@ -359,6 +359,12 @@ class PropertyValueList(PropertyValue):
     def __iter__(self):
         return iter(self.elements)
 
+    def __contains__(self, element):
+        return element in self.elements
+
+    def __add__(self, other):
+        return type(self)(list(self) + list(other))
+
     def __eq__(self, other):
         return list(self.elements) == list(other)
 

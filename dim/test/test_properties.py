@@ -96,8 +96,10 @@ class TestPropertyVaueList(unittest.TestCase):
         p = PropertyValueList(l)
         self.assertEqual(len(p), len(l))
         self.assertEqual(list(p), l)
+        self.assertEqual(list(p) + l, p + l)
         self.assertEqual(p, l)
         for i in range(len(l)):
+            self.assertTrue(p[i] in l)
             self.assertEqual(p[i], l[i])
         p[0] = 0x4321
         self.assertEqual(p[0], 0x4321)
