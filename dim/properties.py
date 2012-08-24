@@ -14,7 +14,8 @@ from geometry import *
 
 __all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
            "PropertyError", "PropertyDescriptor", "PropertyManager",
-           "ScalarPropertyValue", "PropertyValueStruct", "PropertyValueList",
+           "PropertyValue", "ScalarPropertyValue",
+           "PropertyValueStruct", "PropertyValueList",
            "WindowProperty", "AtomProperty", "AtomList",
            "StringProperty", "UTF8StringProperty",
            "WMClass", "WMColormapWindows", "WMState", "WMSizeHints", "WMHints",
