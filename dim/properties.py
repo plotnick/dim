@@ -16,7 +16,7 @@ __all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
            "PropertyError", "PropertyDescriptor", "PropertyManager",
            "PropertyValue", "ScalarPropertyValue",
            "PropertyValueStruct", "PropertyValueList",
-           "WindowProperty", "AtomProperty", "AtomList",
+           "WindowProperty", "WindowList", "AtomProperty", "AtomList",
            "StringProperty", "UTF8StringProperty",
            "WMClass", "WMColormapWindows", "WMState", "WMSizeHints", "WMHints",
            "WMCommand"]
@@ -380,6 +380,10 @@ class IntPropertyValue(ScalarPropertyValue, int):
             return super(IntPropertyValue, self).__eq__(other)
 
 class WindowProperty(IntPropertyValue):
+    property_format = 32
+    property_type = "WINDOW"
+
+class WindowList(PropertyValueList):
     property_format = 32
     property_type = "WINDOW"
 
