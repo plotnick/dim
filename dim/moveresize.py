@@ -187,7 +187,7 @@ class WindowEdgeResistance(Resistance):
         clients = [client
                    for client in client.manager.clients.values()
                    if (client is not self.client and
-                       client.properties.wm_state == WMState.NormalState and
+                       client.wm_state == WMState.NormalState and
                        client.visibility != Visibility.FullyObscured)]
         self.client_list = {}
         for direction in cardinal_directions:
@@ -391,7 +391,7 @@ class ClientResize(ClientUpdate):
     def __init__(self, *args, **kwargs):
         super(ClientResize, self).__init__(*args, **kwargs)
         self.initial_geometry = self.geometry
-        self.size_hints = self.client.properties.wm_normal_hints
+        self.size_hints = self.client.wm_normal_hints
 
         # We'll use the offset gravity representation; see comment in the
         # geometry module for details. Technically, this is anti-gravity,

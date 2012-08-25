@@ -89,20 +89,19 @@ class SimpleTitlebar(Titlebar):
         self.draw()
 
     def client_name(self):
-        return (self.client.properties.net_wm_name or
-                self.client.properties.wm_name)
+        return self.client.net_wm_name or self.client.wm_name
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
         for property_name in ("WM_NAME", "_NET_WM_NAME"):
-            self.client.properties.register_change_handler(property_name,
-                                                           self.name_changed)
+            self.client.register_property_change_handler(property_name,
+                                                         self.name_changed)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         for property_name in ("WM_NAME", "_NET_WM_NAME"):
-            self.client.properties.unregister_change_handler(property_name,
-                                                             self.name_changed)
+            self.client.unregister_property_change_handler(property_name,
+                                                           self.name_changed)
 
 class InputFieldTitlebar(InputField, Titlebar):
     event_mask = (EventMask.StructureNotify |

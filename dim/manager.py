@@ -41,10 +41,6 @@ class WMExit(ClientMessage):
     """Sent by a client that would like the window manager to shut down."""
     pass
 
-class WindowManagerProperties(PropertyManager):
-    """Track and manage properties on the root window."""
-    wm_command = PropertyDescriptor("WM_COMMAND", WMCommand, [])
-
 def compress(handler):
     """Decorator factory that wraps an event handler method with compression.
     That is, it ignores all but the last available event of the same type and
@@ -64,7 +60,7 @@ def compress(handler):
         return handler(self, event)
     return compressed_handler
 
-class WindowManager(EventHandler):
+class WindowManager(EventHandler, PropertyManager):
     """A window manager for one X screen.
 
     This class provides only the most basic window management functionality.
@@ -76,16 +72,17 @@ class WindowManager(EventHandler):
                        EventMask.SubstructureRedirect |
                        EventMask.PropertyChange)
 
-    property_class = WindowManagerProperties
+    wm_command = PropertyDescriptor("WM_COMMAND", WMCommand, [])
 
     def __init__(self, display=None, screen=None,
-                 key_bindings={}, button_bindings={}):
+                 key_bindings={}, button_bindings={}, **kwargs):
         self.conn = xcb.connect(display)
         self.screen_number = (screen
                               if screen is not None
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
-        self.screen_geometry = get_window_geometry(self.conn, self.screen.root)
+        self.window = self.screen.root
+        self.screen_geometry = get_window_geometry(self.conn, self.window)
         log.debug("Screen geometry: %s.", self.screen_geometry)
 
         self.events = deque([]) # event queue
@@ -107,12 +104,11 @@ class WindowManager(EventHandler):
         self.button_bindings = ButtonBindings(button_bindings,
                                               self.keymap,
                                               self.modmap)
-        self.properties = self.property_class(self.conn,
-                                              self.screen.root,
-                                              self.atoms)
         self.heads = HeadManager(self.conn, self.screen, self)
         self.shape = query_extension(self.conn, "SHAPE", xcb.shape.key)
         self.init_graphics()
+
+        super(WindowManager, self).__init__(**kwargs)
 
     def init_graphics(self):
         self.black_gc = self.conn.generate_id()
@@ -145,7 +141,7 @@ class WindowManager(EventHandler):
         # Stash the argument vector used to start the manager in the
         # WM_COMMAND property on the root window. We'll assume that
         # the arguments are encoded according to the current locale.
-        self.properties.wm_command = WMCommand(decode_argv())
+        self.wm_command = WMCommand(decode_argv())
 
         # Make this client a window manager by selecting (at least)
         # SubstructureRedirect events on the root window. If another client
@@ -266,7 +262,7 @@ class WindowManager(EventHandler):
         with resize is requested, only the requested geometry is required.
         If the gravity argument is supplied, it overrides the win_gravity
         field of the size hints."""
-        size_hints = client.properties.wm_normal_hints
+        size_hints = client.wm_normal_hints
         if size is None:
             size = geometry.size()
         if border_width is None:
@@ -473,8 +469,8 @@ class WindowManager(EventHandler):
         client = self.manage(event.window)
         if not client:
             return
-        if (client.properties.wm_state == WMState.WithdrawnState and
-            client.properties.wm_hints.initial_state == WMState.IconicState):
+        if (client.wm_state == WMState.WithdrawnState and
+            client.wm_hints.initial_state == WMState.IconicState):
             # Withdrawn → Iconic state transition (ICCCM §4.1.4).
             self.change_state(client,
                               WMState.WithdrawnState,
@@ -482,7 +478,7 @@ class WindowManager(EventHandler):
         else:
             # {Withdrawn, Iconic} → Normal state transition (ICCCM §4.1.4).
             self.change_state(client,
-                              client.properties.wm_state,
+                              client.wm_state,
                               WMState.NormalState)
 
     @handler(UnmapNotifyEvent)
@@ -501,7 +497,7 @@ class WindowManager(EventHandler):
         else:
             # {Normal, Iconic} → Withdrawn state transition (ICCCM §4.1.4).
             self.change_state(client,
-                              client.properties.wm_state,
+                              client.wm_state,
                               WMState.WithdrawnState)
             reparented = self.check_typed_window_event(event.window,
                                                        ReparentNotifyEvent)
@@ -544,20 +540,21 @@ class WindowManager(EventHandler):
                 break
 
         # Property notifications are dispatched to the appropriate property
-        # manager. We have one for the root window, and one for each client.
+        # manager. We act as the property manager for the root window, and
+        # each client manages the properties for its window.
         if event.window == self.screen.root:
-            properties = self.properties
+            propman = self
         else:
             client = self.get_client(event.window)
             if client:
-                properties = client.properties
+                propman = client
             else:
                 log.debug("Got PropertyNotify for unmanaged window 0x%x (%s).",
                           event.window, self.atoms.name(event.atom))
                 return
-        properties.property_changed(self.atoms.name(event.atom),
-                                    event.state == Property.Delete,
-                                    event.time)
+        propman.property_changed(self.atoms.name(event.atom),
+                                 event.state == Property.Delete,
+                                 event.time)
 
     @handler((KeyPressEvent, KeyReleaseEvent))
     def handle_key_press(self, event):
@@ -597,7 +594,7 @@ class WindowManager(EventHandler):
         argv = []
         timestamp = client_message.data.data32[0]
         if (timestamp and
-            compare_timestamps(self.properties.timestamps["WM_COMMAND"],
+            compare_timestamps(self.property_timestamps["WM_COMMAND"],
                                timestamp) <= 0):
-            argv = self.properties.wm_command
+            argv = self.wm_command
         raise ExitWindowManager(*argv)

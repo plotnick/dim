@@ -218,8 +218,8 @@ class BaseWM(TagManager, MoveResize, RaiseLower):
         def set_tags(tag_names):
             # Tag names are separated by whitespace and/or commas.
             tag_names = tag_names.replace(",", " ").split()
-            client.properties.dim_tags = AtomList(map(intern_atom, tag_names))
-        tag_names = [atom_name(tag) for tag in client.properties.dim_tags]
+            client.dim_tags = AtomList(map(intern_atom, tag_names))
+        tag_names = [atom_name(tag) for tag in client.dim_tags]
         client.decorator.read_from_user("Tags: ", " ".join(tag_names),
                                         set_tags, time=event.time)
 

@@ -16,7 +16,7 @@ import re
 from xcb.xproto import *
 
 from atom import AtomCache
-from manager import WindowManager, WindowManagerProperties
+from manager import WindowManager
 from properties import PropertyDescriptor, AtomList, WMState
 
 __all__ = ["SpecSyntaxError", "parse_tagset_spec", "send_tagset_expr",
@@ -364,11 +364,8 @@ def send_tagset_expr(conn, expr, show=True, screen=None, atoms=None):
 
 # Finally, we have a manager class that maintains the tagsets and tag machine.
 
-class TagManagerProperties(WindowManagerProperties):
-    tagset_expr = PropertyDescriptor("_DIM_TAGSET_EXPR", AtomList, [])
-
 class TagManager(WindowManager):
-    property_class = TagManagerProperties
+    tagset_expr = PropertyDescriptor("_DIM_TAGSET_EXPR", AtomList, [])
 
     def __init__(self, **kwargs):
         super(TagManager, self).__init__(**kwargs)
@@ -388,8 +385,8 @@ class TagManager(WindowManager):
                                       dict((self.atoms[code], name)
                                            for code, name in opcodes.items()),
                                       wild=self.atoms["*"])
-        self.properties.register_change_handler("_DIM_TAGSET_EXPR",
-                                                self.tagset_expr_changed)
+        self.register_property_change_handler("_DIM_TAGSET_EXPR",
+                                              self.tagset_expr_changed)
 
     def shutdown(self, *args):
         super(TagManager, self).shutdown(*args)
@@ -400,14 +397,14 @@ class TagManager(WindowManager):
         client = super(TagManager, self).manage(window)
         if client:
             self.note_tags(client)
-            client.properties.register_change_handler("_DIM_TAGS",
-                                                      self.tags_changed)
+            client.register_property_change_handler("_DIM_TAGS",
+                                                    self.tags_changed)
         return client
 
     def unmanage(self, client, **kwargs):
         self.forget_tags(client)
-        client.properties.unregister_change_handler("_DIM_TAGS",
-                                                    self.tags_changed)
+        client.unregister_property_change_handler("_DIM_TAGS",
+                                                  self.tags_changed)
         super(TagManager, self).unmanage(client, **kwargs)
 
     def change_state(self, client, initial, final):
@@ -417,19 +414,19 @@ class TagManager(WindowManager):
         # try to copy the tags of the currently focused window.
         if (initial == WMState.WithdrawnState and
             final == WMState.NormalState and
-            not client.properties.dim_tags):
+            not client.dim_tags):
             focus = self.current_focus
-            if focus and focus.properties.wm_state == WMState.NormalState:
-                tags = focus.properties.dim_tags
+            if focus and focus.wm_state == WMState.NormalState:
+                tags = focus.dim_tags
                 if tags:
                     log.debug("Auto-tagging client window 0x%x with tags [%s].",
                               client.window,
                               ", ".join(self.atoms.name(atom, "UTF-8")
                                         for atom in tags))
-                    client.properties.dim_tags = AtomList(tags[:])
+                    client.dim_tags = AtomList(tags[:])
 
     def note_tags(self, client):
-        for tag in client.properties.dim_tags:
+        for tag in client.dim_tags:
             log.debug("Adding client window 0x%x to tagset %s.",
                       client.window, self.atoms.name(tag, "UTF-8"))
             self.tagsets[tag].add(client)
@@ -437,7 +434,7 @@ class TagManager(WindowManager):
         # We'll use the client's class name (ICCCM §4.1.2.5) as an implicit
         # tag. Note that this will not show up in the client's tags list,
         # since we're adding it directly to the tagset.
-        instance, class_name = tuple(client.properties.wm_class)
+        instance, class_name = tuple(client.wm_class)
         if class_name:
             self.tagsets[self.atoms.intern(class_name, "UTF-8")].add(client)
 
@@ -456,7 +453,7 @@ class TagManager(WindowManager):
         if deleted:
             return
         try:
-            self.tag_machine.run(self.properties.tagset_expr)
+            self.tag_machine.run(self.tagset_expr)
         except IndexError:
             log.warning("Stack underflow while evaluating tagset expression.")
         self.ensure_focus(time=time)

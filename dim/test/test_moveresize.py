@@ -39,19 +39,15 @@ class MockDecorator(object):
     def message(self, message):
         pass
 
-class MockProperties(object):
-    def __init__(self, size_hints):
-        self.wm_normal_hints = size_hints
-
 class MockClient(object):
     def __init__(self, test, geometry, size_hints=WMSizeHints()):
         self.test = test
         self.absolute_geometry = self.frame_geometry = self.geometry = geometry
         self.screen = None
         self.window = 0
+        self.wm_normal_hints = size_hints
         self.manager = MockManager()
         self.decorator = MockDecorator()
-        self.properties = MockProperties(size_hints)
 
     def absolute_to_frame_geometry(self, geometry):
         return geometry

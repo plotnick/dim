@@ -22,7 +22,19 @@ class WMChangeState(ClientMessage):
     """Sent by a client that would like its state changed (ICCCM §4.1.4)."""
     pass
 
-class ClientProperties(PropertyManager):
+class Client(EventHandler, PropertyManager):
+    """Represents a managed, top-level client window."""
+
+    client_event_mask = (EventMask.EnterWindow |
+                         EventMask.FocusChange |
+                         EventMask.PropertyChange |
+                         EventMask.StructureNotify)
+
+    frame_event_mask = (EventMask.SubstructureRedirect |
+                        EventMask.SubstructureNotify |
+                        EventMask.EnterWindow |
+                        EventMask.VisibilityChange)
+
     # ICCCM properties
     wm_name = PropertyDescriptor("WM_NAME", StringProperty, "")
     wm_icon_name = PropertyDescriptor("WM_ICON_NAME", StringProperty, "")
@@ -43,20 +55,7 @@ class ClientProperties(PropertyManager):
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])
 
-class Client(EventHandler):
-    """Represents a managed, top-level client window."""
-
-    client_event_mask = (EventMask.EnterWindow |
-                         EventMask.FocusChange |
-                         EventMask.PropertyChange |
-                         EventMask.StructureNotify)
-
-    frame_event_mask = (EventMask.SubstructureRedirect |
-                        EventMask.SubstructureNotify |
-                        EventMask.EnterWindow |
-                        EventMask.VisibilityChange)
-
-    def __init__(self, conn, manager, window, geometry):
+    def __init__(self, conn, manager, window, geometry, **kwargs):
         self.conn = conn
         self.manager = manager
         self.window = window
@@ -66,7 +65,6 @@ class Client(EventHandler):
         self.cursors = manager.cursors
         self.fonts = manager.fonts
         self.keymap = manager.keymap
-        self.properties = ClientProperties(self.conn, self.window, self.atoms)
         self.transients = []
         self.decorator = manager.decorator(self)
         self.decorated = False
@@ -75,6 +73,8 @@ class Client(EventHandler):
         self.focus_override = None
         self.visibility = None
         self.log = logging.getLogger("client.0x%x" % self.window)
+
+        super(Client, self).__init__(**kwargs)
 
         # Set the client's border width to 0, but save the current value
         # so that we can restore it if and when we reparent the client
@@ -128,7 +128,7 @@ class Client(EventHandler):
 
         # If this window is a transient for another, establish a link
         # between them.
-        transient_for = self.properties.wm_transient_for
+        transient_for = self.wm_transient_for
         if transient_for:
             other = self.manager.get_client(transient_for, True)
             if other:
@@ -147,7 +147,7 @@ class Client(EventHandler):
 
     def send_protocol_message(self, message, time):
         """Send a protocol message to the client (ICCCM §4.2.8)."""
-        if message in self.properties.wm_protocols:
+        if message in self.wm_protocols:
             send_client_message(self.conn, self.window, False, 0,
                                 self.window, self.atoms["WM_PROTOCOLS"],
                                 32, [message, time, 0, 0, 0])
@@ -190,7 +190,7 @@ class Client(EventHandler):
         """Compute the frame geometry given a client-requested geometry."""
         return geometry.resize(geometry.size() + self.offset.size(),
                                self.decorator.border_width,
-                               self.properties.wm_normal_hints.win_gravity)
+                               self.wm_normal_hints.win_gravity)
 
     def absolute_to_frame_geometry(self, geometry):
         """Convert an absolute client window geometry to a frame geometry."""
@@ -221,7 +221,7 @@ class Client(EventHandler):
         if width is not None or height is not None:
             # Resize requests must respect the window gravity.
             size = Rectangle(width or geometry.width, height or geometry.height)
-            gravity = self.properties.wm_normal_hints.win_gravity
+            gravity = self.wm_normal_hints.win_gravity
             geometry = geometry.resize(size, None, gravity)
         if border_width is not None:
             # We do not honor border width change requests, but we record them
@@ -306,7 +306,7 @@ class Client(EventHandler):
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. Returns true if the client
         accepts the focus offer or is already focused, and false otherwise."""
-        if self.properties.wm_state != WMState.NormalState:
+        if self.wm_state != WMState.NormalState:
             return False
 
         if time is None:
@@ -352,8 +352,8 @@ class Client(EventHandler):
         else:
             # See ICCCM §4.1.7.
             self.focus_time = None
-            if (self.properties.wm_hints.flags & WMHints.InputHint == 0 or
-                self.properties.wm_hints.input):
+            if (self.wm_hints.flags & WMHints.InputHint == 0 or
+                self.wm_hints.input):
                 self.focus_time = set_input_focus(self.window, time)
             if self.send_protocol_message(self.atoms["WM_TAKE_FOCUS"], time):
                 self.log.debug("Taking input focus at time %d.", time)
@@ -394,7 +394,7 @@ class Client(EventHandler):
                 self.log.debug("Reparenting back to root window 0x%x.",
                                self.screen.root)
                 size = self.geometry.size()
-                gravity = self.properties.wm_normal_hints.win_gravity
+                gravity = self.wm_normal_hints.win_gravity
                 geometry = self.frame_geometry.resize(size, bw, gravity)
                 with self.disable_structure_notify():
                     try:
@@ -414,8 +414,8 @@ class Client(EventHandler):
     def normalize(self):
         """Transition to the Normal state."""
         self.log.debug("Entering Normal state.")
-        self.properties.wm_state = WMState(WMState.NormalState)
-        self.properties.request_properties()
+        self.wm_state = WMState(WMState.NormalState)
+        self.request_properties()
         if not self.decorated:
             try:
                 self.decorator.decorate()
@@ -439,7 +439,7 @@ class Client(EventHandler):
     def iconify(self):
         """Transition to the Iconic state."""
         self.log.debug("Entering Iconic state.")
-        self.properties.wm_state = WMState(WMState.IconicState)
+        self.wm_state = WMState(WMState.IconicState)
         self.unmap()
 
         # Iconify any windows that are transient for this one.
@@ -451,7 +451,7 @@ class Client(EventHandler):
     def withdraw(self):
         """Transition to the Withdrawn state."""
         self.log.debug("Entering Withdrawn state.")
-        self.properties.wm_state = WMState(WMState.WithdrawnState)
+        self.wm_state = WMState(WMState.WithdrawnState)
 
     def delete(self, time=Time.CurrentTime):
         """Ask the client to delete its top-level window."""
@@ -460,7 +460,7 @@ class Client(EventHandler):
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
         if event.window == self.window:
-            transient_for = self.properties.wm_transient_for
+            transient_for = self.wm_transient_for
             if transient_for:
                 other = self.manager.get_client(transient_for, True)
                 if other:
