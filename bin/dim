@@ -21,6 +21,7 @@ from dim.color import RGBi
 from dim.daemon import daemon
 from dim.decorator import TitlebarConfig, TitlebarDecorator
 from dim.event import handler
+from dim.ewmh import EWMHManager
 from dim.focus import SloppyFocus, ClickToFocus
 from dim.keysym import *
 from dim.minibuffer import *
@@ -165,7 +166,7 @@ class TrivialTTY(EmergencyTTY):
     def close(self):
         pass
 
-class BaseWM(TagManager, MoveResize, RaiseLower):
+class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
     def __init__(self,
                  titlebar_bindings={},
                  title_font="fixed",

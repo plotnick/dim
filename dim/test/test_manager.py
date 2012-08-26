@@ -16,7 +16,7 @@ from dim.event import *
 from dim.geometry import *
 from dim.keymap import *
 from dim.manager import WindowManager, compress
-from dim.properties import WindowProperty, WMState, WMSizeHints, WMHints
+from dim.properties import *
 from dim.xutil import *
 
 ms = 1e-3 # one millisecond; useful for sleep times
@@ -89,6 +89,23 @@ class TestClient(EventHandler, Thread):
     def destroy(self):
         self.conn.core.DestroyWindowChecked(self.window).check()
 
+    def getprop(self, name, value_type):
+        assert issubclass(value_type, PropertyValue)
+        reply = self.conn.core.GetProperty(False,
+                                           self.window,
+                                           self.atoms[name],
+                                           self.atoms[value_type.property_type],
+                                           0, 0xffffffff).reply()
+        return value_type.unpack(reply.value.buf())
+
+    def setprop(self, name, value):
+        assert isinstance(value, PropertyValue)
+        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
+                                             self.atoms[name],
+                                             self.atoms[value.property_type],
+                                             *value.change_property_args()).check()
+
+
     def resize(self, size, border_width):
         assert isinstance(size, Rectangle)
         self.conn.core.ConfigureWindowChecked(self.window,
@@ -123,26 +140,15 @@ class TestClient(EventHandler, Thread):
 
     @property
     def wm_state(self):
-        reply = self.conn.core.GetProperty(False, self.window,
-                                           self.atoms["WM_STATE"],
-                                           self.atoms["WM_STATE"],
-                                           0, 0xffffffff).reply()
-        return WMState.unpack(reply.value.buf())
+        return self.getprop("WM_STATE", WMState)
 
     @property
     def wm_hints(self):
-        reply = self.conn.core.GetProperty(False, self.window,
-                                           self.atoms["WM_HINTS"],
-                                           self.atoms["WM_HINTS"],
-                                           0, 0xffffffff).reply()
-        return WMHints.unpack(reply.value.buf())
+        return self.getprop("WM_HINTS", WMHints)
 
     @wm_hints.setter
     def wm_hints(self, wm_hints):
-        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
-                                             self.atoms["WM_HINTS"],
-                                             self.atoms["WM_HINTS"],
-                                             *wm_hints.change_property_args()).check()
+        self.setprop("WM_HINTS", wm_hints)
 
     def run(self, max_timeouts=100):
         """A simple client event loop."""
@@ -277,6 +283,18 @@ class WMTestCase(unittest.TestCase):
             assert not client.is_alive(), "client thread is still alive"
         self.conn.flush()
         self.conn.disconnect()
+
+    def getprop(self, window, name, value_type):
+        assert issubclass(value_type, PropertyValue)
+        reply = self.conn.core.GetProperty(False,
+                                           window,
+                                           self.atoms[name],
+                                           self.atoms[value_type.property_type],
+                                           0, 0xffffffff).reply()
+        return value_type.unpack(reply.value.buf())
+
+    def get_root_property(self, name, value_type):
+        return self.getprop(self.screen.root, name, value_type)
 
     def kill_wm(self):
         """Ask the window manager to exit."""
@@ -515,19 +533,11 @@ class TransientTestClient(TestClient):
 
     @property
     def transient_for(self):
-        reply = self.conn.core.GetProperty(False, self.window,
-                                           self.atoms["WM_TRANSIENT_FOR"],
-                                           self.atoms["WINDOW"],
-                                           0, 1)
-        return WindowProperty.unpack(reply.value.buf())
+        return self.getprop("WM_TRANSIENT_FOR", WindowProperty)
 
     @transient_for.setter
     def transient_for(self, window):
-        window = WindowProperty(window)
-        self.conn.core.ChangePropertyChecked(PropMode.Replace, self.window,
-                                             self.atoms["WM_TRANSIENT_FOR"],
-                                             self.atoms["WINDOW"],
-                                             *window.change_property_args()).check()
+        self.setprop("WM_TRANSIENT_FOR", WindowProperty(window))
 
 class TestWMTransient(WMTestCase):
     def setUp(self):
