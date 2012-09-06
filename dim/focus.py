@@ -284,7 +284,7 @@ class ClickToFocus(FocusPolicy):
 
             # The above may release passive button grabs established by
             # our global button bindings, so we'll re-establish those here.
-            self.button_bindings.establish_grabs(client.frame)
+            client.establish_grabs(button_bindings=self.button_bindings)
             return True
         else:
             return False

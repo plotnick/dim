@@ -159,6 +159,14 @@ class Client(EventHandler, PropertyManager):
             return True
         return False
 
+    def establish_grabs(self, key_bindings=None, button_bindings=None):
+        """Establish grabs for the given bindings."""
+        # Subclasses may override this method to, e.g., inhibit bindings.
+        if key_bindings:
+            key_bindings.establish_grabs(self.frame)
+        if button_bindings:
+            button_bindings.establish_grabs(self.frame)
+
     @property
     def geometry(self):
         """Return the client window geometry relative to its parent's origin."""

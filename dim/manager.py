@@ -223,9 +223,9 @@ class WindowManager(EventHandler, PropertyManager):
         if not geometry:
             return None
         client = self.client(self.conn, self, window, self.place(geometry))
+        client.establish_grabs(key_bindings=self.key_bindings,
+                               button_bindings=self.button_bindings)
         self.frames[client.frame] = client
-        self.key_bindings.establish_grabs(client.frame)
-        self.button_bindings.establish_grabs(client.frame)
         self.clients[window] = client
         return client
 
@@ -420,8 +420,8 @@ class WindowManager(EventHandler, PropertyManager):
     def update_for_changed_mapping(self):
         """Update for changed keyboard, modifier, or pointer mapping."""
         for client in self.clients.values():
-            self.key_bindings.establish_grabs(client.frame)
-            self.button_bindings.establish_grabs(client.frame)
+            client.establish_grabs(key_bindings=self.key_bindings,
+                                   button_bindings=self.button_bindings)
 
     @handler(ConfigureNotifyEvent)
     def handle_configure_notify(self, event):
