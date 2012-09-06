@@ -330,6 +330,12 @@ if __name__ == "__main__":
     # Initialize locale.
     setlocale(LC_ALL, "")
 
+    # Execute user code.
+    try:
+        execfile(os.path.expanduser("~/.dim.py"))
+    except IOError:
+        pass
+
     # Parse command-line options.
     focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
     def consume_remaining_args(option, opt_str, value, parser):
