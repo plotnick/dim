@@ -74,8 +74,12 @@ class WindowManager(EventHandler, PropertyManager):
 
     wm_command = PropertyDescriptor("WM_COMMAND", WMCommand, [])
 
+    client_selectors = []
+
     def __init__(self, display=None, screen=None,
-                 key_bindings={}, button_bindings={}, **kwargs):
+                 key_bindings={}, button_bindings={},
+                 default_client_class=Client,
+                 **kwargs):
         self.conn = xcb.connect(display)
         self.screen_number = (screen
                               if screen is not None
@@ -84,6 +88,10 @@ class WindowManager(EventHandler, PropertyManager):
         self.window = self.screen.root
         self.screen_geometry = get_window_geometry(self.conn, self.window)
         log.debug("Screen geometry: %s.", self.screen_geometry)
+
+        assert issubclass(default_client_class, Client), \
+            "invalid default client class"
+        self.default_client_class = default_client_class
 
         self.events = deque([]) # event queue
         self.window_handlers = {} # event handlers, indexed by window ID
@@ -214,7 +222,7 @@ class WindowManager(EventHandler, PropertyManager):
         geometry = get_window_geometry(self.conn, window)
         if not geometry:
             return None
-        client = Client(self.conn, self, window, self.place(geometry))
+        client = self.client(self.conn, self, window, self.place(geometry))
         self.frames[client.frame] = client
         self.key_bindings.establish_grabs(client.frame)
         self.button_bindings.establish_grabs(client.frame)
@@ -297,6 +305,22 @@ class WindowManager(EventHandler, PropertyManager):
     def decorator(self, client):
         """Return a decorator for the given client."""
         return Decorator(self.conn, client)
+
+    def client(self, *args, **kwargs):
+        """Return a client instance for the given window."""
+        # We'll always start with an instance of the default client class,
+        # but we might then change the new client's class based on a selector.
+        # The reason we don't just instantiate the selected class in the
+        # first place is that it's much easier to write selectors that
+        # accept a Client instance instead of (say) a raw window.
+        client = self.default_client_class(*args, **kwargs)
+        for selector in reversed(self.client_selectors):
+            cls = selector(client)
+            if cls:
+                client.__class__ = cls
+                client.update_instance_for_different_class(*args, **kwargs)
+                break
+        return client
 
     def event_loop(self):
         """The main event loop of the window manager."""
@@ -598,3 +622,20 @@ class WindowManager(EventHandler, PropertyManager):
                                timestamp) <= 0):
             argv = self.wm_command
         raise ExitWindowManager(*argv)
+
+def client_selector(f, wm_class=WindowManager):
+    """Register the given function as a client selector function for the
+    given manager class.
+
+    Selectors are functions of one argument. They receive a Client instance
+    (or an instance of a subclass of Client, depending on the value of
+    wm_class.default_client_class), and should return either None,
+    indicating that the default class is sufficient, or a subclass of
+    Client that should be used instead. The given Client instance will
+    have been fully initialized before being passed to the selector,
+    so selectors may use whatever methods and attributes they wish.
+
+    Selectors are called in least- to most-recently registered order.
+    The first one that returns a true value wins."""
+    wm_class.client_selectors.append(f)
+    return f

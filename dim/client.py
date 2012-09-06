@@ -134,6 +134,11 @@ class Client(EventHandler, PropertyManager):
             if other:
                 other.transients.append(self.window)
 
+    def update_instance_for_different_class(self, *args, **kwargs):
+        """Perform any necessary post-class-change updates. Receives the
+        complete set of initialization arguments."""
+        pass
+
     @contextmanager
     def disable_structure_notify(self):
         """A context manager that de-selectes StructureNotify on this client
