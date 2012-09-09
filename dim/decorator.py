@@ -7,7 +7,6 @@ import logging
 from xcb.xproto import *
 import xcb.shape
 
-from client import *
 from geometry import *
 from titlebar import *
 

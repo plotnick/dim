@@ -167,6 +167,8 @@ class TrivialTTY(EmergencyTTY):
         pass
 
 class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
+    default_decorator_class = TitlebarDecorator
+
     def __init__(self,
                  titlebar_bindings={},
                  title_font="fixed",
@@ -197,10 +199,11 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
                                                   bg_color=RGBi(1.0, 1.0, 1.0),
                                                   font=self.minibuffer_font)
 
-    def decorator(self, client):
-        return TitlebarDecorator(self.conn, client,
-                                 focused_config=self.focused_config,
-                                 unfocused_config=self.unfocused_config)
+    def make_decorator(self, cls, client, **kwargs):
+        return cls(self.conn, client,
+                   focused_config=self.focused_config,
+                   unfocused_config=self.unfocused_config,
+                   **kwargs)
 
     @staticmethod
     @event_mask(MoveResize.move_window.event_mask)

@@ -55,7 +55,7 @@ class Client(EventHandler, PropertyManager):
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])
 
-    def __init__(self, conn, manager, window, geometry, **kwargs):
+    def __init__(self, conn, manager, window, **kwargs):
         self.conn = conn
         self.manager = manager
         self.window = window
@@ -65,16 +65,28 @@ class Client(EventHandler, PropertyManager):
         self.cursors = manager.cursors
         self.fonts = manager.fonts
         self.keymap = manager.keymap
-        self.transients = []
-        self.decorator = manager.decorator(self)
+
+        super(Client, self).__init__(**kwargs)
+
+    def update_instance_for_different_class(self, *args, **kwargs):
+        """Perform any necessary post-class-change updates. Receives the
+        complete set of initialization arguments."""
+        pass
+
+    def frame(self, decorator, geometry):
+        """Construct a frame for the client.
+
+        This method is responsible for all non-trivial client initialization.
+        (We can't do it in __init__ because neither the final client class
+        nor the decorator class will have been fully determined yet.)"""
+        self.decorator = decorator
         self.decorated = False
+        self.transients = []
         self.shaped = False
         self.focus_time = None
         self.focus_override = None
         self.visibility = None
         self.log = logging.getLogger("client.0x%x" % self.window)
-
-        super(Client, self).__init__(**kwargs)
 
         # Set the client's border width to 0, but save the current value
         # so that we can restore it if and when we reparent the client
@@ -133,11 +145,6 @@ class Client(EventHandler, PropertyManager):
             other = self.manager.get_client(transient_for, True)
             if other:
                 other.transients.append(self.window)
-
-    def update_instance_for_different_class(self, *args, **kwargs):
-        """Perform any necessary post-class-change updates. Receives the
-        complete set of initialization arguments."""
-        pass
 
     @contextmanager
     def disable_structure_notify(self):
