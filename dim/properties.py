@@ -88,15 +88,15 @@ class PropertyManager(object):
     __metaclass__ = PropertyManagerClass
 
     def __init__(self, conn=None, window=None, atoms=None, **kwargs):
-        if conn:
-            self.conn = conn
-        else:
-            assert self.conn, "no connection"
-        if window:
-            self.window = window
-        else:
-            assert self.window, "no window"
-        self.atoms = atoms or AtomCache(self.conn)
+        # The values for the following attributes can either be supplied
+        # as keyword arguments, or they may be inherited. Either way, they
+        # must end up initialized.
+        if conn: self.conn = conn
+        if window: self.window = window
+        if atoms: self.atoms = atoms
+        assert self.conn, "no connection"
+        assert self.window, "no window"
+        assert self.window, "no atom cache"
 
         self.property_values = {} # cached property values
         self.property_cookies = {} # pending property request cookies
