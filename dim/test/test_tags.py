@@ -149,18 +149,21 @@ class TestTagMachine(unittest.TestCase):
         self.assertRaises(IndexError, lambda: self.tvm.run(["'", "x", "="]))
 
         # Tagset assignment
+        big_even = self.tagsets["big"] & self.tagsets["even"]
         self.tvm.run(["'", "big-even", "big", "even", "∩", "="])
+        self.assertEqual(self.tvm.pop(), big_even)
         self.assertStackEmpty(self.tvm)
-        self.assertEqual(self.tagsets["big-even"],
-                         self.tagsets["big"] & self.tagsets["even"])
+        self.assertEqual(self.tagsets["big-even"], big_even)
 
         # Expression (alias) assignment
+        big_odd = self.tagsets["big"] & self.tagsets["odd"]
         self.tvm.run(["'", "big-odd", "{", "big", "odd", "∩", "}", "="])
+        self.assertEqual(self.tvm.pop(), big_odd)
         self.assertStackEmpty(self.tvm)
         self.assertFalse("big-odd" in self.tagsets)
         self.tvm.run(["big-odd"])
-        self.assertEqual(self.tvm.pop(),
-                         self.tagsets["big"] & self.tagsets["odd"])
+        self.assertEqual(self.tvm.pop(), big_odd)
+        self.assertStackEmpty(self.tvm)
 
 class TestTokenizer(unittest.TestCase):
     def test_tag(self):

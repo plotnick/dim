@@ -50,17 +50,17 @@ class TagMachine(object):
         self.push = self.stack.append
         self.pop = self.stack.pop
 
-    def run(self, instructions):
-        def tagset(tag):
-            self.push(self.tagsets.get(tag, set()))
+    def tagset(self, tag):
+        self.push(self.tagsets.get(tag, set()))
 
+    def run(self, instructions):
         self.ip = iter(instructions)
         for x in self.ip:
             op = self.opcodes.get(x, None)
             if op:
                 op()
             else:
-                tagset(x)
+                self.tagset(x)
         if self.stack:
             log.debug("Tagset stack: %r.", self.stack)
 
@@ -109,10 +109,12 @@ class TagMachine(object):
             # Tagset assignment.
             self.opcodes.pop(name, None)
             self.tagsets[name] = set(value)
+            self.tagset(name)
         elif isinstance(value, list):
             # Procedure assignment.
             self.tagsets.pop(name, None)
             self.opcodes[name] = lambda: self.run(value)
+            self.run(value)
         else:
             raise TagMachineError("invalid assignment")
 
