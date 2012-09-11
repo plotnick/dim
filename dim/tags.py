@@ -494,6 +494,10 @@ class TagManager(WindowManager):
 
         self.tagsets = defaultdict(set) # sets of clients, indexed by tag
         opcodes = {None: "nop",
+                   "_DIM_TAGSET_BEGIN": "begin",
+                   "_DIM_TAGSET_END": "end",
+                   "_DIM_TAGSET_QUOTE": "quote",
+                   "_DIM_TAGSET_ASSIGN": "assign",
                    "_DIM_TAGSET_UNION": "union",
                    "_DIM_TAGSET_INTERSECTION": "intersection",
                    "_DIM_TAGSET_DIFFERENCE": "difference",
