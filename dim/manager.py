@@ -222,7 +222,7 @@ class WindowManager(EventHandler, PropertyManager):
         if not geometry:
             return None
 
-        client = self.make_client(self.conn, window)
+        client = self.make_client(window)
         decorator = self.make_decorator(self.select_decorator_class(client),
                                         client)
         client.frame(decorator, self.place(geometry))
@@ -305,20 +305,20 @@ class WindowManager(EventHandler, PropertyManager):
                                      InputFocus.PointerRoot,
                                      time)
 
-    def make_client(self, conn, window, **kwargs):
-        """Return a client instance for the given window."""
+    def make_client(self, window, **kwargs):
+        """Construct and return a client instance for the given window."""
         # We'll always start with an instance of the default client class,
         # but we might then change the new client's class based on a selector.
         # The reason we don't just instantiate the selected class in the
         # first place is that it's much easier to write selectors that
         # accept a Client instance instead of (say) a raw window.
-        client = self.default_client_class(conn, self, window, **kwargs)
+        client = self.default_client_class(self.conn, self, window, **kwargs)
         for selector in reversed(self.client_selectors):
             cls = selector(client)
             if cls:
                 client.__class__ = cls
-                client.update_instance_for_different_class(conn, self, window,
-                                                           **kwargs)
+                client.update_instance_for_different_class(self.conn, self,
+                                                           window, **kwargs)
                 break
         return client
 
