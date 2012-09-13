@@ -58,23 +58,23 @@ class TestTagMachine(unittest.TestCase):
     def assertStackEmpty(self, tvm):
         self.assertRaises(IndexError, tvm.pop)
 
+    def assertStackEqual(self, tvm, *values):
+        for x in values:
+            self.assertEqual(tvm.pop(), x)
+        self.assertStackEmpty(tvm)
+
     def test_stack_ops(self):
         """Tag machine stack operations"""
         x, y = object(), object()
         self.tvm.push(x)
         self.tvm.push(y)
-        self.assertEqual(self.tvm.pop(), y)
-        self.assertEqual(self.tvm.pop(), x)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, y, x)
 
         self.tvm.push(x)
         self.tvm.push(y)
         self.tvm.swap()
         self.tvm.dup()
-        self.assertEqual(self.tvm.pop(), x)
-        self.assertEqual(self.tvm.pop(), x)
-        self.assertEqual(self.tvm.pop(), y)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, x, x, y)
 
         self.tvm.push(x)
         self.tvm.push(y)
@@ -86,43 +86,34 @@ class TestTagMachine(unittest.TestCase):
     def test_tags(self):
         """Tag machine tags"""
         self.tvm.run(["square"])
-        self.assertEqual(self.tvm.pop(), self.tagsets["square"])
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, self.tagsets["square"])
 
         self.tvm.all_tags()
-        self.assertEqual(self.tvm.pop(), self.all_clients - self.tagless)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, self.all_clients - self.tagless)
 
         self.tvm.all_clients()
-        self.assertEqual(self.tvm.pop(), self.all_clients)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, self.all_clients)
 
     def test_set_ops(self):
         """Tag machine set operations"""
         self.tvm.run(["even", "prime", "∩"])
-        self.assertEqual(self.tvm.pop(), set([2]))
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, set([2]))
 
         self.tvm.run(["even", "odd", "∪", "prime", "∩"])
-        self.assertEqual(self.tvm.pop(), self.tagsets["prime"])
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, self.tagsets["prime"])
 
         self.tvm.run(["big", "prime", "∖"])
-        self.assertEqual(self.tvm.pop(),
+        self.assertStackEqual(self.tvm,
                          self.tagsets["big"] - self.tagsets["prime"])
-        self.assertStackEmpty(self.tvm)
 
         self.tvm.run(["even", "∁"])
-        self.assertEqual(self.tvm.pop(), self.tagsets["odd"] | self.tagless)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, self.tagsets["odd"] | self.tagless)
 
         self.tvm.run(["square", "∅", "∩"])
-        self.assertEqual(self.tvm.pop(), set())
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, set())
 
         self.tvm.run(["∅", "∁"])
-        self.assertEqual(self.tvm.pop(), self.all_clients)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, self.all_clients)
 
     def test_list(self):
         """Tag machine list support"""
@@ -131,8 +122,7 @@ class TestTagMachine(unittest.TestCase):
 
         x, y, z, w = object(), object(), object(), object()
         self.tvm.run(["{", x, "{", y, z, "}", w, "}"])
-        self.assertEqual(self.tvm.pop(), [x, [y, z], w])
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, [x, [y, z], w])
 
     def test_quote(self):
         """Tag machine quote instruction"""
@@ -140,8 +130,7 @@ class TestTagMachine(unittest.TestCase):
 
         x = object()
         self.tvm.run(["'", x])
-        self.assertEqual(self.tvm.pop(), x)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, x)
 
     def test_assign(self):
         """Tag machine assignment"""
@@ -151,19 +140,16 @@ class TestTagMachine(unittest.TestCase):
         # Tagset assignment
         big_even = self.tagsets["big"] & self.tagsets["even"]
         self.tvm.run(["'", "big-even", "big", "even", "∩", "="])
-        self.assertEqual(self.tvm.pop(), big_even)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, big_even)
         self.assertEqual(self.tagsets["big-even"], big_even)
 
         # Expression (alias) assignment
         big_odd = self.tagsets["big"] & self.tagsets["odd"]
         self.tvm.run(["'", "big-odd", "{", "big", "odd", "∩", "}", "="])
-        self.assertEqual(self.tvm.pop(), big_odd)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, big_odd)
         self.assertFalse("big-odd" in self.tagsets)
         self.tvm.run(["big-odd"])
-        self.assertEqual(self.tvm.pop(), big_odd)
-        self.assertStackEmpty(self.tvm)
+        self.assertStackEqual(self.tvm, big_odd)
 
 class TestTokenizer(unittest.TestCase):
     def test_tag(self):
