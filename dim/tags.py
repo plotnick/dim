@@ -113,7 +113,7 @@ class TagMachine(object):
     def current_set(self):
         self.push(set(client
                       for client in self.clients.values()
-                      if client.properties.wm_state == WMState.NormalState))
+                      if client.wm_state == WMState.NormalState))
 
 # Sequences of tag machine instructions will generally be provided by the
 # user in the form of infix expressions which we call tagset specifications.
