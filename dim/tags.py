@@ -38,12 +38,14 @@ class TagMachine(object):
     are taken to be tagset names, the contents of which are implicitly
     pushed onto the stack."""
 
-    def __init__(self, clients, tagsets, opcodes={}, wild=None):
+    def __init__(self, clients, tagsets, opcodes={}, wild=None,
+                 default_tagset=lambda tag: []):
         self.clients = clients
         self.tagsets = tagsets
         self.opcodes = dict((code, getattr(self, name))
                             for code, name in opcodes.items())
         self.wild = wild
+        self.default_tagset = default_tagset
 
         self.ip = iter([])
         self.stack = []
@@ -51,7 +53,7 @@ class TagMachine(object):
         self.pop = self.stack.pop
 
     def tagset(self, tag):
-        self.push(self.tagsets.get(tag, set()))
+        self.push(self.tagsets.get(tag) or set(self.default_tagset(tag)))
 
     def run(self, instructions):
         self.ip = iter(instructions)
@@ -510,7 +512,8 @@ class TagManager(WindowManager):
         self.tag_machine = TagMachine(self.clients, self.tagsets,
                                       dict((self.atoms[code], name)
                                            for code, name in opcodes.items()),
-                                      wild=self.atoms["*"])
+                                      wild=self.atoms["*"],
+                                      default_tagset=self.default_tagset)
         self.properties.register_change_handler("_DIM_TAGSET_EXPR",
                                                 self.tagset_expr_changed)
 
@@ -551,18 +554,18 @@ class TagManager(WindowManager):
                                         for atom in tags))
                     client.properties.dim_tags = AtomList(tags[:])
 
+    def default_tagset(self, tag):
+        """Use the client's class name (ICCCM §4.1.2.5) as an implicit tag."""
+        for client in self.clients.values():
+            instance, class_name = tuple(client.properties.wm_class)
+            if class_name and self.atoms.intern(class_name, "UTF-8") == tag:
+                yield client
+
     def note_tags(self, client):
         for tag in client.properties.dim_tags:
             log.debug("Adding client window 0x%x to tagset %s.",
                       client.window, self.atoms.name(tag, "UTF-8"))
             self.tagsets[tag].add(client)
-
-        # We'll use the client's class name (ICCCM §4.1.2.5) as an implicit
-        # tag. Note that this will not show up in the client's tags list,
-        # since we're adding it directly to the tagset.
-        instance, class_name = tuple(client.properties.wm_class)
-        if class_name:
-            self.tagsets[self.atoms.intern(class_name, "UTF-8")].add(client)
 
     def forget_tags(self, client):
         for tagset in self.tagsets.values():

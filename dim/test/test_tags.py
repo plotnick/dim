@@ -53,7 +53,9 @@ class TestTagMachine(unittest.TestCase):
                         "*": "all_tags",
                         ".": "current_set",
                         "∅": "empty_set"}
-        self.tvm = TagMachine(self.clients, self.tagsets, self.opcodes)
+        self.default_tagset_values = ["de", "fault"]
+        self.tvm = TagMachine(self.clients, self.tagsets, self.opcodes,
+                              default_tagset=self.default_tagset)
 
     def assertStackEmpty(self, tvm):
         self.assertRaises(IndexError, tvm.pop)
@@ -62,6 +64,11 @@ class TestTagMachine(unittest.TestCase):
         for x in values:
             self.assertEqual(tvm.pop(), x)
         self.assertStackEmpty(tvm)
+
+    def default_tagset(self, tag):
+        if tag == "default":
+            return self.default_tagset_values
+        return []
 
     def test_stack_ops(self):
         """Tag machine stack operations"""
@@ -93,6 +100,14 @@ class TestTagMachine(unittest.TestCase):
 
         self.tvm.all_clients()
         self.assertStackEqual(self.tvm, self.all_clients)
+
+    def test_default_tags(self):
+        """Tag machine default tagset support"""
+        self.tvm.run(["foo"])
+        self.assertStackEqual(self.tvm, set([]))
+
+        self.tvm.run(["default"])
+        self.assertStackEqual(self.tvm, set(self.default_tagset_values))
 
     def test_set_ops(self):
         """Tag machine set operations"""
