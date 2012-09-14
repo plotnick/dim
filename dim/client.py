@@ -59,6 +59,7 @@ class Client(EventHandler, PropertyManager):
         self.cursors = manager.cursors
         self.fonts = manager.fonts
         self.keymap = manager.keymap
+        self.log = logging.getLogger("client.0x%x" % self.window)
 
         super(Client, self).__init__(**kwargs)
 
@@ -79,11 +80,12 @@ class Client(EventHandler, PropertyManager):
         pass
 
     def frame(self, decorator, geometry):
-        """Construct a frame for the client.
+        """Construct a frame for the client and reparent it.
 
         This method is responsible for all non-trivial client initialization.
-        (We can't do it in __init__ because neither the final client class
-        nor the decorator class will have been fully determined yet.)"""
+        We can't do it in __init__ because neither the final client class
+        nor the decorator class will have been fully determined yet."""
+        assert decorator, "can't frame with a null decorator"
         self.decorator = decorator
         self.decorated = False
         self.transients = []
@@ -91,7 +93,6 @@ class Client(EventHandler, PropertyManager):
         self.focus_time = None
         self.focus_override = None
         self.visibility = None
-        self.log = logging.getLogger("client.0x%x" % self.window)
 
         # Set the client's border width to 0, but save the current value
         # so that we can restore it if and when we reparent the client
@@ -150,6 +151,78 @@ class Client(EventHandler, PropertyManager):
             other = self.manager.get_client(transient_for, True)
             if other:
                 other.transients.append(self.window)
+
+    def unframe(self, destroyed=False, reparented=False):
+        """Remove decorations and the frame from the client window,
+        and (maybe) reparent it back to the root window."""
+        self.undecorate()
+        if not destroyed:
+            bw = self.border_width
+            self.conn.core.ConfigureWindow(self.window,
+                                           ConfigWindow.BorderWidth,
+                                           [bw])
+            if not reparented:
+                self.log.debug("Reparenting back to root window 0x%x.",
+                               self.screen.root)
+                size = self.geometry.size()
+                gravity = self.wm_normal_hints.win_gravity
+                geometry = self.frame_geometry.resize(size, bw, gravity)
+                with self.disable_structure_notify():
+                    try:
+                        self.conn.core.ReparentWindowChecked(self.window,
+                                                             self.screen.root,
+                                                             geometry.x,
+                                                             geometry.y).check()
+                    except BadWindow:
+                        pass
+                    else:
+                        self.conn.core.ChangeSaveSet(SetMode.Delete,
+                                                     self.window)
+        self.conn.core.DestroyWindow(self.frame)
+        self.frame = None
+
+    def decorate(self):
+        """Apply decoration."""
+        if not self.decorated:
+            try:
+                self.decorator.decorate()
+            except (BadWindow, BadDrawable) as e:
+                self.log.warning("Received %s (%d) while applying decoration.",
+                                 e.__class__.__name__, e.args[0].major_opcode)
+            else:
+                self.decorated = True
+        if self.manager.current_focus is self:
+            self.decorator.focus()
+
+    def undecorate(self):
+        """Remove decoration."""
+        if self.decorated:
+            try:
+                self.decorator.undecorate()
+            except (BadWindow, BadDrawable) as e:
+                self.log.warning("Received %s (%d) while removing decoration.",
+                                 e.__class__.__name__, e.args[0].major_opcode)
+            else:
+                self.decorated = False
+
+    def redecorate(self, decorator):
+        """Replace the current decorator with another and return both
+        the old decorator and the old absolute geometry. May change
+        the client geometry to match the new decorator's requirements."""
+        assert decorator, "can't redecorate with a null decorator"
+        self.undecorate()
+        old_decorator, old_geometry = self.decorator, self.absolute_geometry
+        self.decorator = decorator
+        self.offset = self.decorator.compute_client_offset()
+        self.frame_geometry = self.compute_frame_geometry(old_geometry)
+        if self.geometry.position() != self.offset.position():
+            self.conn.core.ConfigureWindow(self.window,
+                                           ConfigWindow.X | ConfigWindow.Y,
+                                           [int16(self.offset.x),
+                                            int16(self.offset.y)])
+            self.geometry = self.geometry.move(self.offset.position())
+        self.decorate()
+        return old_decorator, old_geometry
 
     @contextmanager
     def disable_structure_notify(self):
@@ -284,11 +357,13 @@ class Client(EventHandler, PropertyManager):
             frame_value_mask |= (ConfigWindow.X |
                                  ConfigWindow.Y |
                                  ConfigWindow.Width |
-                                 ConfigWindow.Height)
+                                 ConfigWindow.Height |
+                                 ConfigWindow.BorderWidth)
             frame_value_list += [int16(self.frame_geometry.x),
                                  int16(self.frame_geometry.y),
                                  card16(self.frame_geometry.width),
-                                 card16(self.frame_geometry.height)]
+                                 card16(self.frame_geometry.height),
+                                 card16(self.frame_geometry.border_width)]
         if stack_mode is not None:
             if sibling is not None:
                 frame_value_mask |= ConfigWindow.Sibling
@@ -299,9 +374,10 @@ class Client(EventHandler, PropertyManager):
                                        frame_value_mask,
                                        frame_value_list)
 
-        # If we change the window configuration, the client will receive
-        # a real ConfigureNotify from the server; otherwise, we'll send a
-        # synthetic one. See ICCCM §4.1.5 for details.
+        # Update the window size. If we actually change the window
+        # configuration, the client will receive a real ConfigureNotify
+        # from the server; otherwise, we'll send a synthetic one.
+        # See ICCCM §4.1.5 for details.
         if self.geometry.size() != geometry.size():
             self.conn.core.ConfigureWindow(self.window,
                                            (ConfigWindow.Width |
@@ -415,59 +491,12 @@ class Client(EventHandler, PropertyManager):
         with self.disable_structure_notify():
             self.conn.core.UnmapWindow(self.window)
 
-    def undecorate(self, destroyed=False, reparented=False):
-        """Remove all decorations from the client window, and (maybe)
-        reparent it back to the root window."""
-        if self.decorated:
-            try:
-                self.decorator.undecorate()
-            except (BadWindow, BadDrawable) as e:
-                self.log.info("Received %s (%d) while removing decoration.",
-                              e.__class__.__name__,
-                              e.args[0].major_opcode)
-            else:
-                self.decorated = False
-
-        if not destroyed:
-            bw = self.border_width
-            self.conn.core.ConfigureWindow(self.window,
-                                           ConfigWindow.BorderWidth,
-                                           [bw])
-            if not reparented:
-                self.log.debug("Reparenting back to root window 0x%x.",
-                               self.screen.root)
-                size = self.geometry.size()
-                gravity = self.wm_normal_hints.win_gravity
-                geometry = self.frame_geometry.resize(size, bw, gravity)
-                with self.disable_structure_notify():
-                    try:
-                        self.conn.core.ReparentWindowChecked(self.window,
-                                                             self.screen.root,
-                                                             geometry.x,
-                                                             geometry.y).check()
-                    except BadWindow:
-                        pass
-                    else:
-                        self.conn.core.ChangeSaveSet(SetMode.Delete,
-                                                     self.window)
-
-        self.conn.core.DestroyWindow(self.frame)
-        self.frame = None
-
     def normalize(self):
         """Transition to the Normal state."""
         self.log.debug("Entering Normal state.")
         self.wm_state = WMState.NormalState
         self.request_properties()
-        if not self.decorated:
-            try:
-                self.decorator.decorate()
-            except (BadWindow, BadDrawable) as e:
-                self.log.info("Received %s (%d) while applying decoration.",
-                              e.__class__.__name__,
-                              e.args[0].major_opcode)
-            else:
-                self.decorated = True
+        self.decorate()
         self.map()
 
         # Map any windows that are transient for this one.

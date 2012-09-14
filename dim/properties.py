@@ -14,7 +14,7 @@ from atom import AtomCache
 from event import EventHandlerClass
 from geometry import *
 
-__all__ = ["INT32", "CARD32", "PIXMAP", "WINDOW",
+__all__ = ["INT16", "INT32", "CARD16", "CARD32", "PIXMAP", "WINDOW",
            "PropertyError", "PropertyDescriptor", "PropertyManager",
            "PropertyValue", "ScalarPropertyValue",
            "PropertyValueStruct", "PropertyValueList",
@@ -29,7 +29,9 @@ type_codes = {8: "B", 16: "H", 32: "I"}
 # The following type codes are not meant to be exhaustive; they're only
 # what's needed to make our property field definitions look more like the
 # specifications given in the ICCCM.
+INT16 = "h"
 INT32 = "i"
+CARD16 = "H"
 CARD32 = "I"
 PIXMAP = CARD32
 WINDOW = CARD32

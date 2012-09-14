@@ -241,7 +241,7 @@ class WindowManager(EventHandler, PropertyManager):
         except KeyError:
             # The client could have been reparented.
             pass
-        client.undecorate(**kwargs)
+        client.unframe(**kwargs)
         return client
 
     def change_state(self, client, initial, final):
@@ -288,6 +288,10 @@ class WindowManager(EventHandler, PropertyManager):
         return geometry.resize(size_hints.constrain_window_size(size),
                                border_width,
                                gravity)
+
+    def fullscreen_geometry(self, client):
+        """Compute and return a fullscreen geometry for the given client."""
+        return self.heads.client_head_geometry(client)
 
     @property
     def current_focus(self):
