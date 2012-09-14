@@ -104,13 +104,6 @@ class PropertyManager(object):
         self.property_change_handlers = defaultdict(set)
         self.__log = logging.getLogger("properties.0x%x" % self.window)
 
-    def iter_properties(self):
-        """Iterate over (name, value) pairs of managed properties. If no value
-        is cached for a given property, None will appear as the corresponding
-        value."""
-        return ((name, self.property_values.get(name, None))
-                for name in self.properties)
-
     def get_property(self, name, type=None, default=None):
         """Fetch the value of a property on the window."""
         # Check the value cache.
