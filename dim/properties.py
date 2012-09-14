@@ -63,6 +63,9 @@ class PropertyDescriptor(object):
     def __delete__(self, instance):
         instance.delete_property(self.name)
 
+    def __iter__(self):
+        yield (self.name, self.value_class)
+
 class PropertyManagerClass(EventHandlerClass):
     # We derive from EventHandlerClass only so that we produce a metaclass
     # compatible with that of EventHandler.
@@ -79,7 +82,7 @@ class PropertyManagerClass(EventHandlerClass):
                 cls.properties.update(superclass.properties)
         for attr in namespace.values():
             if isinstance(attr, PropertyDescriptor):
-                cls.properties[attr.name] = attr.value_class
+                cls.properties.update(attr)
         return cls
 
 class PropertyManager(object):

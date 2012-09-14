@@ -19,8 +19,10 @@ class EWMHCapability(WindowManager):
     net_supported = PropertyDescriptor("_NET_SUPPORTED", AtomList, [])
 
     def start(self):
+        properties = (set(self.properties) |
+                      set(self.default_client_class.properties))
         self.net_supported = AtomList([AtomProperty(self.atoms[name])
-                                       for name, _ in self.iter_properties()
+                                       for name in sorted(properties)
                                        if name.startswith("_NET")])
         super(EWMHCapability, self).start()
 
