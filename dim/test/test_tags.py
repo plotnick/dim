@@ -27,6 +27,16 @@ def primes(n):
                                            1),
                       range(2, n)))
 
+class IntTagMachine(TagMachine):
+    """Just like a regular tag machine, but with special support for integers
+    as clients."""
+
+    def current_set(self):
+        # We'll consider even numbers to be "normal" for no particular reason.
+        self.push(set(client
+                      for client in self.clients.values()
+                      if client % 2 == 0))
+
 class TestTagMachine(unittest.TestCase):
     def setUp(self):
         n = 100
@@ -54,8 +64,8 @@ class TestTagMachine(unittest.TestCase):
                         ".": "current_set",
                         "∅": "empty_set"}
         self.default_tagset_values = ["de", "fault"]
-        self.tvm = TagMachine(self.clients, self.tagsets, self.opcodes,
-                              default_tagset=self.default_tagset)
+        self.tvm = IntTagMachine(self.clients, self.tagsets, self.opcodes,
+                                 default_tagset=self.default_tagset)
 
     def assertStackEmpty(self, tvm):
         self.assertRaises(IndexError, tvm.pop)
@@ -100,6 +110,9 @@ class TestTagMachine(unittest.TestCase):
 
         self.tvm.all_clients()
         self.assertStackEqual(self.tvm, self.all_clients)
+
+        self.tvm.current_set()
+        self.assertStackEqual(self.tvm, self.tagsets["even"])
 
     def test_default_tags(self):
         """Tag machine default tagset support"""
