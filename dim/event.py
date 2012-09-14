@@ -69,9 +69,9 @@ class EventHandler(object):
             for handler in handlers:
                 try:
                     handler(self, event)
-                    handled = True
                 except StopPropagation:
                     return
+                handled = True
         if not handled:
             return self.unhandled_event(event)
 
