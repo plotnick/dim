@@ -49,6 +49,13 @@ class Minibuffer(InputField):
             self.history = self.shared_history[self.prompt]
         self.history_index = len(self.history)
 
+        # In order to support recursive minibuffers, we'll push ourselves
+        # onto our manager's minibuffer stack, creating it if necessary.
+        try:
+            self.manager.minibuffers += [self]
+        except AttributeError:
+            self.manager.minibuffers = [self]
+
     def create_window(self, **kwargs):
         if not kwargs.get("geometry"):
             # Center the window along the bottom edge of the screen, taking
@@ -63,10 +70,29 @@ class Minibuffer(InputField):
         return super(Minibuffer, self).create_window(**kwargs)
 
     def map(self, time=Time.CurrentTime):
+        # Unmap the previous minibuffer, if any.
+        if len(self.manager.minibuffers) > 1:
+            self.manager.minibuffers[-2].unmap(time)
+
         super(Minibuffer, self).map()
         self.conn.core.GrabKeyboard(False, self.window, time,
                                     GrabMode.Sync, # queue pointer events
                                     GrabMode.Async)
+
+    def unmap(self, time=Time.CurrentTime):
+        self.conn.core.UngrabKeyboard(time)
+        super(Minibuffer, self).unmap()
+
+    def destroy(self, time=Time.CurrentTime):
+        super(Minibuffer, self).destroy()
+
+        # If we were the top-most minibuffer on the stack, map the next one
+        # as we pop ourselves off.
+        stack = self.manager.minibuffers
+        i = stack.index(self)
+        if i == len(stack) - 1:
+            stack[i - 1].map(time)
+        del stack[i]
 
     def draw(self):
         # Fill with the background color.
