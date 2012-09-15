@@ -459,7 +459,7 @@ if __name__ == "__main__":
             print_caption()
             print u"""\a
 Dim has caught a fatal exception, and has shut down as cleanly it can.
-This console is for post-mortem debugging only. Type ‘help' for a list
+This console is for post-mortem debugging only. Type ‘help’ for a list
 of pdb commands, ‘run’ to restart, or ‘quit’ to abort.
 
 The window manager instance is in the ‘wm’ variable, and the exception
