@@ -24,6 +24,9 @@ __all__ = ["SpecSyntaxError", "parse_tagset_spec", "send_tagset_expr",
 
 log = logging.getLogger("tags")
 
+class TagMachineError(Exception):
+    pass
+
 class TagMachine(object):
     """A small virtual stack machine for operating on tagsets.
 
@@ -35,26 +38,31 @@ class TagMachine(object):
     are taken to be tagset names, the contents of which are implicitly
     pushed onto the stack."""
 
-    def __init__(self, clients, tagsets, opcodes={}, wild=None):
+    def __init__(self, clients, tagsets, opcodes={}, wild=None,
+                 default_tagset=lambda tag: []):
         self.clients = clients
         self.tagsets = tagsets
         self.opcodes = dict((code, getattr(self, name))
                             for code, name in opcodes.items())
         self.wild = wild
+        self.default_tagset = default_tagset
 
+        self.ip = iter([])
         self.stack = []
         self.push = self.stack.append
         self.pop = self.stack.pop
 
+    def tagset(self, tag):
+        self.push(self.tagsets.get(tag) or set(self.default_tagset(tag)))
+
     def run(self, instructions):
-        def tagset(tag):
-            self.push(self.tagsets.get(tag, set()))
-        for x in instructions:
+        self.ip = iter(instructions)
+        for x in self.ip:
             op = self.opcodes.get(x, None)
             if op:
                 op()
             else:
-                tagset(x)
+                self.tagset(x)
         if self.stack:
             log.debug("Tagset stack: %r.", self.stack)
 
@@ -73,6 +81,44 @@ class TagMachine(object):
         if self.stack:
             log.debug("Discarding %d elements from stack.", len(self.stack))
             del self.stack[:]
+
+    def quote(self):
+        self.push(next(self.ip))
+
+    def begin(self):
+        """Pull instructions off the instruction stream until a matching end
+        is found, and push a list containing the instructions so collected."""
+        l = []
+        while True:
+            x = next(self.ip)
+            op = self.opcodes.get(x, None)
+            if op == self.end:
+                break
+            elif op == self.begin:
+                self.begin()
+                x = self.pop()
+            l.append(x)
+        self.push(l)
+
+    def end(self):
+        # List endings are actually handled in begin.
+        raise TagMachineError("unexpected list end")
+
+    def assign(self):
+        value = self.pop()
+        name = self.pop()
+        if isinstance(value, set):
+            # Tagset assignment.
+            self.opcodes.pop(name, None)
+            self.tagsets[name] = set(value)
+            self.tagset(name)
+        elif isinstance(value, list):
+            # Procedure assignment.
+            self.tagsets.pop(name, None)
+            self.opcodes[name] = lambda: self.run(value)
+            self.run(value)
+        else:
+            raise TagMachineError("invalid assignment")
 
     def union(self):
         self.push(self.pop() | self.pop())
@@ -135,8 +181,8 @@ class OpTokenClass(type):
         return cls
 
 class OpToken(object):
-    """For convenience and aesthetic reasons, all operators have both an
-    ASCII and a non-ASCII Unicode character representation, which are
+    """For convenience and aesthetic reasons, most operators have both
+    an ASCII and a non-ASCII Unicode character representation, which are
     treated identically by the tokenizer.
 
     They also each have a representation as an atom. The atom names must
@@ -155,6 +201,29 @@ class OpToken(object):
                 unicode(self) == other if isinstance(other, unicode) else
                 type(self) == type(other) if isinstance(other, OpToken) else
                 False)
+
+    def __ne__(self, other):
+        return not (self == other)
+
+class Assign(OpToken):
+    str_symbol = "="
+    unicode_symbol = "="
+    atom = "_DIM_TAGSET_ASSIGN"
+
+class Begin(OpToken):
+    str_symbol = "{"
+    unicode_symbol = "{"
+    atom = "_DIM_TAGSET_BEGIN"
+
+class End(OpToken):
+    str_symbol = "}"
+    unicode_symbol = "}"
+    atom = "_DIM_TAGSET_END"
+
+class Quote(OpToken):
+    str_symbol = "'"
+    unicode_symbol = "'"
+    atom = "_DIM_TAGSET_QUOTE"
 
 class Union(OpToken):
     str_symbol = "|"
@@ -261,6 +330,41 @@ class BinOp(Expr):
         expr.append(self.op)
         return expr
 
+class QuotedExpr(Expr):
+    """A quoted expression."""
+
+    def __init__(self, expr):
+        self.expr = expr
+
+    def __str__(self):
+        return "'(%s)" % (self.expr,)
+
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.expr)
+
+    def postfix(self):
+        expr = [Quote()]
+        expr.extend(self.expr.postfix())
+        return expr
+
+class ListExpr(Expr):
+    """A list of sub-expressions."""
+
+    def __init__(self, expr):
+        self.expr = expr
+
+    def __str__(self):
+        return "{%s}" % (self.expr,)
+
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.expr)
+
+    def postfix(self):
+        expr = [Begin()]
+        expr.extend(self.expr.postfix())
+        expr.append(End())
+        return expr
+
 class SpecParser(object):
     """A recursive-descent parser for tagset specifications. Adapted from
     the partial grammar for the AWK language given in "The AWK Programming
@@ -292,7 +396,18 @@ class SpecParser(object):
         self.advance()
 
     def spec(self):
-        """spec → term | term [∪∖] term"""
+        """spec → expr | tag = expr"""
+        e = self.expr()
+        if self.token == "=":
+            if not isinstance(e, Tag):
+                raise SpecSyntaxError("invalid assignment lhs '%s'" % e)
+            op = self.token
+            self.advance()
+            e = BinOp(op, QuotedExpr(e), self.expr())
+        return e
+
+    def expr(self):
+        """expr → term | term [∪∖] term"""
         e = self.term()
         while self.token == "∪" or self.token == "∖":
             op = self.token
@@ -319,13 +434,19 @@ class SpecParser(object):
             return self.fact()
 
     def fact(self):
-        """fact → (spec) | tag"""
+        """fact → (expr) | {expr} | tag"""
         if self.token == "(":
             try:
                 self.eat("(")
-                return self.spec()
+                return self.expr()
             finally:
                 self.eat(")")
+        elif self.token == "{":
+            try:
+                self.eat("{")
+                return ListExpr(self.expr())
+            finally:
+                self.eat("}")
         elif isinstance(self.token, basestring):
             try:
                 return Tag(self.token)
@@ -372,6 +493,10 @@ class TagManager(WindowManager):
 
         self.tagsets = defaultdict(set) # sets of clients, indexed by tag
         opcodes = {None: "nop",
+                   "_DIM_TAGSET_BEGIN": "begin",
+                   "_DIM_TAGSET_END": "end",
+                   "_DIM_TAGSET_QUOTE": "quote",
+                   "_DIM_TAGSET_ASSIGN": "assign",
                    "_DIM_TAGSET_UNION": "union",
                    "_DIM_TAGSET_INTERSECTION": "intersection",
                    "_DIM_TAGSET_DIFFERENCE": "difference",
@@ -384,7 +509,8 @@ class TagManager(WindowManager):
         self.tag_machine = TagMachine(self.clients, self.tagsets,
                                       dict((self.atoms[code], name)
                                            for code, name in opcodes.items()),
-                                      wild=self.atoms["*"])
+                                      wild=self.atoms["*"],
+                                      default_tagset=self.default_tagset)
         self.register_property_change_handler("_DIM_TAGSET_EXPR",
                                               self.tagset_expr_changed)
 
@@ -425,18 +551,18 @@ class TagManager(WindowManager):
                                         for atom in tags))
                     client.dim_tags = AtomList(tags[:])
 
+    def default_tagset(self, tag):
+        """Use the client's class name (ICCCM §4.1.2.5) as an implicit tag."""
+        for client in self.clients.values():
+            instance, class_name = tuple(client.wm_class)
+            if class_name and self.atoms.intern(class_name, "UTF-8") == tag:
+                yield client
+
     def note_tags(self, client):
         for tag in client.dim_tags:
             log.debug("Adding client window 0x%x to tagset %s.",
                       client.window, self.atoms.name(tag, "UTF-8"))
             self.tagsets[tag].add(client)
-
-        # We'll use the client's class name (ICCCM §4.1.2.5) as an implicit
-        # tag. Note that this will not show up in the client's tags list,
-        # since we're adding it directly to the tagset.
-        instance, class_name = tuple(client.wm_class)
-        if class_name:
-            self.tagsets[self.atoms.intern(class_name, "UTF-8")].add(client)
 
     def forget_tags(self, client):
         for tagset in self.tagsets.values():
