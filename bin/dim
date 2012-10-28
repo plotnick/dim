@@ -46,7 +46,9 @@ def spawn(command):
     if fork():
         return wait()
     daemon(True, True)
-    execv(shell, [shell, "-c"] + encode_argv([command]))
+    command = [shell, "-c"] + encode_argv([command])
+    log.info("Spawning command: %s.", command)
+    execv(shell, command)
 
 def update_tagset(display, spec):
     """Send a tagset specification to a running window manager."""
