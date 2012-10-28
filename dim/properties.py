@@ -466,6 +466,14 @@ class WMClass(StringProperty):
         yield s[0:i]
         yield s[i + 1:j]
 
+    @property
+    def instance_name(self):
+        return tuple(self)[0]
+
+    @property
+    def class_name(self):
+        return tuple(self)[1]
+
 class WMColormapWindows(PropertyValueList):
     """A representation of the WM_COLORMAP_WINDOWS property (ICCCM §4.1.2.8)"""
     property_format = 32
