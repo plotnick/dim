@@ -331,16 +331,16 @@ class Client(EventHandler, PropertyManager):
 
         if time is None:
             # FocusIn events don't contain a timestamp, so the handler for
-            # those events use None as the time argument. No other callers
+            # those events uses None as the time argument. No other callers
             # should do that, so if we're here, we know that we have the
             # focus, and can tell our decorator to indicate that fact.
             self.decorator.focus()
 
-            # If we have a focus time, then we're receiving the focus due
-            # to an earlier call to this method, and we can just return. If
-            # not, then we were previously unfocused and are now receiving
-            # the focus via some other mechanism (possibly in PointerRoot
-            # mode), and so we'll make a new focus offer.
+            # If we have a last-focus time, then we're receiving the focus
+            # due to an earlier call to this method, and we can just return.
+            # If not, then we were previously unfocused and are just now
+            # receiving the focus via some other mechanism (possibly in
+            # PointerRoot mode), and so we'll make a new focus offer.
             if self.focus_time is not None:
                 return True
             time = Time.CurrentTime
