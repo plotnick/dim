@@ -41,7 +41,7 @@ class Client(EventHandler, PropertyManager):
     wm_normal_hints = PropertyDescriptor("WM_NORMAL_HINTS",
                                          WMSizeHints, WMSizeHints())
     wm_hints = PropertyDescriptor("WM_HINTS", WMHints, WMHints())
-    wm_class = PropertyDescriptor("WM_CLASS", WMClass, (None, None))
+    wm_class = PropertyDescriptor("WM_CLASS", WMClass, WMClass())
     wm_transient_for = PropertyDescriptor("WM_TRANSIENT_FOR", WindowProperty)
     wm_protocols = PropertyDescriptor("WM_PROTOCOLS", AtomList, [])
     wm_state = PropertyDescriptor("WM_STATE", WMState, WMState())

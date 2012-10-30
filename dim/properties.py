@@ -456,6 +456,9 @@ class WMClass(StringProperty):
     property_format = 8
     property_type = "STRING"
 
+    def __init__(self, elements="\0\0"):
+        super(WMClass, self).__init__(elements)
+
     def __iter__(self):
         """Yield the instance name followed by the class name."""
         # The WM_CLASS property contains two consecutive null-terminated
