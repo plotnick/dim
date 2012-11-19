@@ -40,13 +40,19 @@ def print_caption(out=None):
     else:
         print >> out, "DIM OF THE YARD!"
 
-def spawn(command):
+def spawn(command, interactive=False):
     """Execute command (a string) in the background via a shell."""
     shell = os.environ.get("SHELL", "/bin/sh")
     if fork():
         return wait()
     daemon(True, True)
-    command = [shell, "-c"] + encode_argv([command])
+
+    # We assume that a few standard (POSIX) options are accepted by the shell:
+    #   -i (force shell to behave interactively)
+    #   -c (execute the command which follows)
+    command = (([shell]) +
+               (["-i"] if interactive else []) +
+               (["-c"] + encode_argv([command])))
     log.info("Spawning command: %s.", command)
     execv(shell, command)
 
@@ -231,7 +237,7 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
 
     def shell_command(self, event):
         def execute(command):
-            spawn(command)
+            spawn(command, interactive=True)
             dismiss()
         def dismiss():
             minibuffer.destroy()
