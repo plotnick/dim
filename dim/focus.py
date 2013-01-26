@@ -23,10 +23,9 @@ class FocusPolicy(WindowManager):
 
     __log = logging.getLogger("focus")
 
-    def __init__(self, focus_new_windows=True, **kwargs):
+    def __init__(self, **kwargs):
         super(FocusPolicy, self).__init__(**kwargs)
 
-        self.focus_new_windows = focus_new_windows
         self.focus_list = deque() # most-recently focused first
 
         # Create a default focus window. We'll give the input focus to this
@@ -62,15 +61,6 @@ class FocusPolicy(WindowManager):
         except exceptions.ValueError:
             pass
         return super(FocusPolicy, self).unmanage(client, **kwargs)
-
-    def change_state(self, client, initial, final):
-        super(FocusPolicy, self).change_state(client, initial, final)
-
-        if (initial == WMState.WithdrawnState and
-            final == WMState.NormalState and
-            self.focus_new_windows):
-            self.__log.debug("Focusing new window 0x%x.", client.window)
-            self.ensure_focus(client)
 
     def focus(self, client, time):
         """Offer the input focus to a client. If the offer is accepted,
@@ -193,6 +183,18 @@ class FocusPolicy(WindowManager):
                 break
         else:
             self.focus_default_window(time)
+
+class FocusNewWindows(FocusPolicy):
+    """Give newly-normalized windows the focus immediately."""
+
+    __log = logging.getLogger("focus.new")
+
+    def change_state(self, client, initial, final):
+        super(FocusPolicy, self).change_state(client, initial, final)
+
+        if initial == WMState.WithdrawnState and final == WMState.NormalState:
+            self.__log.debug("Focusing new window 0x%x.", client.window)
+            self.ensure_focus(client)
 
 class SloppyFocus(FocusPolicy):
     """Let the input focus follow the pointer, except that if the pointer

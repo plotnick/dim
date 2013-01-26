@@ -22,7 +22,7 @@ from dim.daemon import daemon
 from dim.decorator import TitlebarConfig, TitlebarDecorator
 from dim.event import handler
 from dim.ewmh import EWMHManager
-from dim.focus import SloppyFocus, ClickToFocus
+from dim.focus import FocusNewWindows, SloppyFocus, ClickToFocus
 from dim.keysym import *
 from dim.minibuffer import *
 from dim.moveresize import MoveResize
@@ -348,7 +348,6 @@ if __name__ == "__main__":
         pass
 
     # Parse command-line options.
-    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
     def consume_remaining_args(option, opt_str, value, parser):
         value = parser.rargs[:]
         del parser.rargs[:]
@@ -364,21 +363,33 @@ if __name__ == "__main__":
     optparser.add_option("--display",
                          dest="display",
                          help="the X server display name")
-    optparser.add_option("--focus-mode",
+
+    focus_modes = {"sloppy": SloppyFocus, "click": ClickToFocus}
+    focusopts = optparser.add_option_group("Focus Options")
+    focusopts.add_option("--focus-mode",
                          dest="focus_mode",
                          type="choice", choices=focus_modes.keys(),
                          metavar="MODE",
                          help=(("focus mode: one of %s "
                                 % ", ".join(map(str, focus_modes.keys()))) +
                                "(default: %default)"))
-    optparser.add_option("--title-font",
-                         dest="title_font",
-                         metavar="FONT",
-                         help="client window title font (default: %default)")
-    optparser.add_option("--minibuffer-font",
-                         dest="minibuffer_font",
-                         metavar="FONT",
-                         help="minibuffer font (default: %default)")
+    focusopts.add_option("--focus-new",
+                         action="store_true", dest="focus_new",
+                         default=True,
+                         help="focus newly-created windows (default: %default)")
+    focusopts.add_option("--no-focus-new",
+                         action="store_false", dest="focus_new",
+                         help="don't give focus to newly-created windows")
+
+    fontopts = optparser.add_option_group("Font Options")
+    fontopts.add_option("--title-font",
+                        dest="title_font",
+                        metavar="FONT",
+                        help="client window title font (default: %default)")
+    fontopts.add_option("--minibuffer-font",
+                        dest="minibuffer_font",
+                        metavar="FONT",
+                        help="minibuffer font (default: %default)")
 
     control = optparser.add_option_group("Control Options")
     control.add_option("-t", "--tagset",
@@ -442,7 +453,11 @@ if __name__ == "__main__":
 
     # Construct a window manager class by mixing in the selected focus policy.
     log.debug("Using %s focus policy.", options.focus_mode)
-    wm_class = type("WM", (focus_modes[options.focus_mode], BaseWM), {})
+    wm_class = type("WM",
+                    tuple(([focus_modes[options.focus_mode]]) +
+                          ([FocusNewWindows] if options.focus_new else []) +
+                          ([BaseWM])),
+                    {})
 
     # Instantiate the window manager and start it up.
     wm = wm_class(display=options.display,
