@@ -314,6 +314,7 @@ and modify (carefully, please!) internal data structures.
 
     def start_focus_cycle_next(self, event):
         CycleFocus(manager=self,
+                   config=self.minibuffer_config,
                    event=event,
                    forward=True,
                    focus_list=self.focus_list,
@@ -321,6 +322,7 @@ and modify (carefully, please!) internal data structures.
 
     def start_focus_cycle_prev(self, event):
         CycleFocus(manager=self,
+                   config=self.minibuffer_config,
                    event=event,
                    forward=False,
                    focus_list=self.focus_list,

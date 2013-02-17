@@ -11,7 +11,7 @@ from event import *
 from geometry import *
 from keysym import *
 from properties import WMState
-from widget import Widget
+from minibuffer import Minibuffer
 
 __all__ = ["CycleFocus"]
 
@@ -44,7 +44,7 @@ class ModalKeyBindingMap(KeyBindingMap):
                 symbol = self.ensure_symbol(key)
                 yield ((self.modifiers, abs(symbol), symbol > 0), value)
 
-class CycleFocus(Widget):
+class CycleFocus(Minibuffer):
     """Cycle through the visible windows and give the user the opportunity
     to choose one as the current keyboard focus.
 
@@ -79,7 +79,7 @@ class CycleFocus(Widget):
 
         self.focus_list = tuple(focus_list)
         self.initial_focus = self.focus_list[0]
-        self.i = 0
+        self.target_index = 0
         self.map(event.time)
         self.cycle_focus(event, 1 if forward else -1)
 
@@ -87,23 +87,7 @@ class CycleFocus(Widget):
     def target(self):
         """Return the currently indicated client in this focus cycle.
         This is not necessarily the currently focused client."""
-        return self.focus_list[self.i]
-
-    def create_window(self, **kwargs):
-        if "geometry" not in kwargs:
-            # Put the window just out of view.
-            kwargs["geometry"] = Geometry(-1, -1, 1, 1, 0)
-        return super(CycleFocus, self).create_window(**kwargs)
-
-    def map(self, time=Time.CurrentTime):
-        super(CycleFocus, self).map()
-        self.conn.core.GrabKeyboard(False, self.window, time,
-                                    GrabMode.Sync, # queue pointer events
-                                    GrabMode.Async)
-
-    def unmap(self, time=Time.CurrentTime):
-        self.conn.core.UngrabKeyboard(time)
-        super(CycleFocus, self).unmap()
+        return self.focus_list[self.target_index]
 
     def cycle_focus_next(self, event):
         self.cycle_focus(event, 1)
@@ -114,12 +98,16 @@ class CycleFocus(Widget):
     def cycle_focus(self, event, incr):
         self.target.decorator.unfocus()
         while True:
-            self.i = (self.i + incr) % len(self.focus_list)
+            self.target_index = ((self.target_index + incr) %
+                                 len(self.focus_list))
             if self.target.wm_state == WMState.NormalState:
                 try:
                     self.target.decorator.focus()
                 except BadWindow:
                     continue
+                self.buffer[:] = unicode(self.target.net_wm_name or
+                                         self.target.wm_name)
+                self.draw()
                 return True
 
     def end_focus_cycle(self, event, client):

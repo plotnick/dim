@@ -72,26 +72,27 @@ class InputField(Widget):
         super(InputField, self).draw()
 
         y = self.config.baseline
+        f = self.config.font_info
         def draw_string(x, string):
             text_items = list(textitem16(string))
             self.conn.core.PolyText16(self.window, self.config.fg_gc,
                                       x, y,
                                       len(text_items), "".join(text_items))
-            return self.config.font_info.text_width(string)
+            return f.text_width(string)
         if self.prompt:
             x += draw_string(x, self.prompt)
         if self.buffer:
             x += draw_string(x, self.buffer)
-
-        # Draw an xor rectangle as a cursor.
-        c = self.buffer.point
-        n = len(self.buffer)
-        x -= self.config.font_info.text_width(self.buffer[c:])
-        w = self.config.font_info.text_width(" " if c >= n else self.buffer[c])
-        a = self.config.font_info.font_ascent
-        d = self.config.font_info.font_descent
-        self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
-                                         1, [x, y - a, w, a + d])
+        if self.prompt:
+            # Draw an xor rectangle as a cursor.
+            c = self.buffer.point
+            n = len(self.buffer)
+            w = f.text_width(" " if c >= n else self.buffer[c])
+            a = f.font_ascent
+            d = f.font_descent
+            x -= f.text_width(self.buffer[c:])
+            self.conn.core.PolyFillRectangle(self.window, self.config.xor_gc,
+                                             1, [x, y - a, w, a + d])
 
     def flash(self):
         # Draw an xor rectangle over the entire top-level window, excepting
