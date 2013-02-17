@@ -18,6 +18,7 @@ from xcb.xproto import *
 from dim.atom import AtomCache
 from dim.bindings import *
 from dim.color import RGBi
+from dim.cycle import CycleFocus
 from dim.daemon import daemon
 from dim.decorator import TitlebarConfig, TitlebarDecorator
 from dim.event import handler
@@ -311,12 +312,28 @@ and modify (carefully, please!) internal data structures.
     def terminal(self, event):
         spawn("xterm")
 
+    def start_focus_cycle_next(self, event):
+        CycleFocus(manager=self,
+                   event=event,
+                   forward=True,
+                   focus_list=self.focus_list,
+                   key_bindings=focus_cycle_bindings)
+
+    def start_focus_cycle_prev(self, event):
+        CycleFocus(manager=self,
+                   event=event,
+                   forward=False,
+                   focus_list=self.focus_list,
+                   key_bindings=focus_cycle_bindings)
+
 titlebar_button_bindings = {
     1: BaseWM.raise_and_move,
     2: BaseWM.change_tags
 }
 
 global_key_bindings = {
+    ("control", "meta", XK_Next): BaseWM.start_focus_cycle_next,
+    ("control", "meta", XK_Prior): BaseWM.start_focus_cycle_prev,
     ("control", "meta", XK_Return): BaseWM.terminal,
     ("control", "meta", XK_Tab): BaseWM.change_tagset,
     ("control", "meta", XK_Escape): BaseWM.delete_window,
@@ -330,6 +347,19 @@ global_button_bindings = {
     ("meta", 3): MoveResize.resize_window,
     ("shift", "meta", 1): RaiseLower.raise_window,
     ("shift", "meta", 3): RaiseLower.lower_window
+}
+
+# Focus cycle bindings use an implicit modifier set given by whichever
+# modifiers are logically down when the cycle starts (i.e., the modifiers
+# specified in the bindings of BaseWM.start_focus_cycle_* above). The
+# special key None designates the release of the last held modifier.
+focus_cycle_bindings = {
+    XK_Next: CycleFocus.cycle_focus_next,
+    XK_Prior: CycleFocus.cycle_focus_prev,
+    XK_Up: CycleFocus.raise_target_window,
+    XK_Down: CycleFocus.lower_target_window,
+    XK_Escape: CycleFocus.abort_focus_cycle,
+    None: CycleFocus.accept_focus
 }
 
 if __name__ == "__main__":
