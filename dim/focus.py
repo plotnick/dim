@@ -120,9 +120,7 @@ class FocusPolicy(WindowManager):
 
     @handler((FocusInEvent, FocusOutEvent))
     def handle_focus_event(self, event):
-        if (event.mode == NotifyMode.Grab or
-            event.mode == NotifyMode.Ungrab or
-            event.detail == NotifyDetail.Inferior or
+        if (event.detail == NotifyDetail.Inferior or
             event.detail == NotifyDetail.Pointer):
             return
         client = self.get_client(event.event)
