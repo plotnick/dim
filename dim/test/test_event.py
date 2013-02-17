@@ -85,7 +85,11 @@ class TestEventHandler(unittest.TestCase):
     def test_stop_propagation(self):
         """Stop propagation"""
         handler = BazHandler()
-        bar = BarEvent(); handler.handle_event(bar)
+        bar = BarEvent();
+        try:
+            handler.handle_event(bar)
+        except StopPropagation:
+            pass
         self.assertEqual(bar.handled_by, [BazHandler])
 
     def test_super_handler(self):

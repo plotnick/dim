@@ -54,9 +54,8 @@ class EventHandler(object):
     def handle_event(self, event):
         """Dispatch an event to all handlers registered for that type.
 
-        Handlers are run in method resolution order. If any handler raises
-        a StopPropagation exception, no further handlers are invoked. If no
-        handlers are found, the unhandled_event method is called.
+        Handlers are run in method resolution order. If no handlers are
+        found, the unhandled_event method is called.
 
         Subclasses may, but generally should not, override this method."""
         event_class = type(event)
@@ -67,10 +66,7 @@ class EventHandler(object):
             except (AttributeError, KeyError):
                 continue
             for handler in handlers:
-                try:
-                    handler(self, event)
-                except StopPropagation:
-                    return
+                handler(self, event)
                 handled = True
         if not handled:
             return self.unhandled_event(event)
