@@ -68,6 +68,17 @@ class Client(EventHandler, PropertyManager):
 
         super(Client, self).__init__(**kwargs)
 
+    def __eq__(self, other):
+        if isinstance(other, Client):
+            return self.window == other.window
+        elif isinstance(other, int):
+            return self.window == other
+        else:
+            return NotImplemented
+
+    def __int__(self):
+        return self.window
+
     def update_instance_for_different_class(self, *args, **kwargs):
         """Perform any necessary post-class-change updates. Receives the
         complete set of initialization arguments."""

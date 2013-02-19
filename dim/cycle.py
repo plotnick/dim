@@ -111,9 +111,12 @@ class CycleFocus(Minibuffer):
                 return True
 
     def end_focus_cycle(self, event, client):
+        # We must send the ensure-focus message first so that we can
+        # correctly ignore the FocusIn and FocusOut events generated
+        # due to the ungrabbing.
+        self.manager.ensure_focus(client)
         self.unmap(event.time)
         self.destroy()
-        self.manager.ensure_focus(client)
 
     def accept_focus(self, event):
         self.__log.debug("Client 0x%x selected.", self.target.window)

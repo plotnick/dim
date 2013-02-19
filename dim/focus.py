@@ -27,6 +27,7 @@ class FocusPolicy(WindowManager):
         super(FocusPolicy, self).__init__(**kwargs)
 
         self.focus_list = deque() # most-recently focused first
+        self.pending_focus = None # from an EnsureFocus message
 
         # Create a default focus window. We'll give the input focus to this
         # window when no client window has it so that global key bindings
@@ -124,16 +125,22 @@ class FocusPolicy(WindowManager):
             event.detail == NotifyDetail.Pointer):
             return
         client = self.get_client(event.event)
-        if client:
-            self.__log.debug("Client window 0x%x got %s (%s, %s).",
-                             client.window,
-                             event.__class__.__name__,
-                             notify_detail_name(event),
-                             notify_mode_name(event))
-            if isinstance(event, FocusInEvent):
-                self.focus(client, None)
-            else:
-                self.unfocus(client)
+        if not client:
+            return
+        self.__log.debug("Client window 0x%x got %s (%s, %s).",
+                         client.window, event.__class__.__name__,
+                         notify_detail_name(event), notify_mode_name(event))
+        if isinstance(event, FocusInEvent):
+            if self.pending_focus:
+                if client.window == self.pending_focus:
+                    self.pending_focus = None
+                else:
+                    self.__log.debug("Ignoring FocusIn pending focus of 0x%x.",
+                                     self.pending_focus)
+                    return
+            self.focus(client, None)
+        else:
+            self.unfocus(client)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
@@ -179,8 +186,10 @@ class FocusPolicy(WindowManager):
 
         for client in choose_focus_client():
             if self.focus(client, time):
+                self.pending_focus = client
                 break
         else:
+            self.pending_focus = None
             self.focus_default_window(time)
 
 class FocusNewWindows(FocusPolicy):
