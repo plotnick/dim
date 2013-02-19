@@ -125,10 +125,11 @@ class FocusPolicy(WindowManager):
             return
         client = self.get_client(event.event)
         if client:
-            self.__log.debug("Client window 0x%x got %s (%s).",
+            self.__log.debug("Client window 0x%x got %s (%s, %s).",
                              client.window,
                              event.__class__.__name__,
-                             notify_detail_name(event))
+                             notify_detail_name(event),
+                             notify_mode_name(event))
             if isinstance(event, FocusInEvent):
                 self.focus(client, None)
             else:

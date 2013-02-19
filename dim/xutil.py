@@ -15,7 +15,7 @@ from geometry import *
 __all__ = ["int16", "card16",
            "decode_argv", "encode_argv",
            "compare_timestamps", "sequence_number", "is_synthetic_event",
-           "event_window", "notify_detail_name",
+           "event_window", "notify_detail_name", "notify_mode_name",
            "configure_notify", "send_client_message",
            "grab_server", "mask_events",
            "get_input_focus", "get_window_geometry",
@@ -137,6 +137,13 @@ def notify_detail_name(event, detail={0: "Ancestor",
                                       7: "None"}):
     """Return a string naming the detail code of the given event."""
     return detail[event.detail]
+
+def notify_mode_name(event, modes={0: "Normal",
+                                   1: "Grab",
+                                   2: "Ungrab",
+                                   3: "WhileGrabbed"}):
+    """Return a string naming the mode of the given event."""
+    return modes[event.mode]
 
 def configure_notify(connection, window, x, y, width, height, border_width,
                      above_sibling=Window._None,
