@@ -126,7 +126,7 @@ class CycleFocus(Minibuffer):
         self.end_focus_cycle(event, self.initial_focus)
 
     def raise_target_window(self, event):
-        self.target.configure(stack_mode=StackMode.TopIf)
+        self.target.configure(sibling=self.window, stack_mode=StackMode.Below)
 
     def lower_target_window(self, event):
         self.target.configure(stack_mode=StackMode.BottomIf)
