@@ -72,7 +72,6 @@ class CycleFocus(Minibuffer):
             self.key_bindings = KeyBindings(binding_map,
                                             self.manager.keymap,
                                             self.manager.modmap)
-            self.key_bindings.establish_grabs(self.window)
         else:
             self.__log.error("Focus cycle must be initiated by a key-press.")
             return
