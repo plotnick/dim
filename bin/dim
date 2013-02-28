@@ -358,6 +358,8 @@ global_button_bindings = {
 focus_cycle_bindings = {
     XK_Next: CycleFocus.cycle_focus_next,
     XK_Prior: CycleFocus.cycle_focus_prev,
+    XK_Right: CycleFocus.cycle_focus_next,
+    XK_Left: CycleFocus.cycle_focus_prev,
     XK_Up: CycleFocus.raise_target_window,
     XK_Down: CycleFocus.lower_target_window,
     XK_Escape: CycleFocus.abort_focus_cycle,
