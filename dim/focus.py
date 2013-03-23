@@ -242,6 +242,7 @@ class SloppyFocus(FocusPolicy):
         if (event.mode != NotifyMode.Normal or
             event.detail == NotifyDetail.Inferior or
             sequence_number(event) == self.last_modify_serial or
+            self.check_typed_window_event(event.event, LeaveNotifyEvent) or
             self.client_update):
             return
         self.focus(self.get_client(event.event), event.time)
