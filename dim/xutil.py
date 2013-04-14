@@ -221,7 +221,7 @@ def get_window_geometry(connection, window):
     cookie = connection.core.GetGeometry(window)
     try:
         reply = cookie.reply()
-    except BadWindow:
+    except BadDrawable:
         return None
     return Geometry(reply.x, reply.y,
                     reply.width, reply.height,
