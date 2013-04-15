@@ -536,20 +536,34 @@ class TagManager(WindowManager):
     def change_state(self, client, initial, final):
         super(TagManager, self).change_state(client, initial, final)
 
-        # If a newly-normalized client doesn't have any tags yet,
-        # try to copy the tags of the currently focused window.
-        if (initial == WMState.WithdrawnState and
-            final == WMState.NormalState and
-            not client.dim_tags):
-            focus = self.current_focus
-            if focus and focus.wm_state == WMState.NormalState:
-                tags = focus.dim_tags
-                if tags:
-                    log.debug("Auto-tagging client window 0x%x with tags [%s].",
-                              client.window,
-                              ", ".join(self.atoms.name(atom, "UTF-8")
-                                        for atom in tags))
-                    client.dim_tags = AtomList(tags[:])
+        if initial == WMState.WithdrawnState and final == WMState.NormalState:
+            tags = self.auto_tag(client)
+            if tags:
+                log.debug("Auto-tagging client window 0x%x with tags [%s].",
+                          client.window,
+                          ", ".join(self.atoms.name(atom, "UTF-8")
+                                    for atom in tags))
+                client.dim_tags = AtomList(tags)
+
+    def auto_tag(self, client):
+        """Return a list of tags which should be applied to the new client."""
+        # We use a few simple heuristics to choose the default tags.
+        # (1) If there are existing tags, don't apply any new ones.
+        # (2) Try to copy the tags of the currently focused window.
+        # (3) If there is no current focus, examine the the last tagset
+        # expression; if it begins with a valid tag name but there aren't
+        # any windows so tagged, return that. The idea here is that if the
+        # user switches to a new tag, the next window created should be
+        # tagged thus.
+        if client.dim_tags:
+            return None
+        elif (self.current_focus and
+              self.current_focus.wm_state == WMState.NormalState):
+            return self.current_focus.dim_tags[:]
+        elif (self.tagset_expr and
+              self.tagset_expr[0] not in self.tag_machine.opcodes and
+              not self.tagsets.get(self.tagset_expr[0])):
+            return [self.tagset_expr[0]]
 
     def default_tagset(self, tag):
         """Use the client's class name (ICCCM §4.1.2.5) as an implicit tag."""
