@@ -536,7 +536,7 @@ class TagManager(WindowManager):
     def change_state(self, client, initial, final):
         super(TagManager, self).change_state(client, initial, final)
 
-        if initial == WMState.WithdrawnState and final == WMState.NormalState:
+        if (initial, final) == (WMState.WithdrawnState, WMState.NormalState):
             tags = self.auto_tag(client)
             if tags:
                 log.debug("Auto-tagging client window 0x%x with tags [%s].",

@@ -200,7 +200,7 @@ class FocusNewWindows(FocusPolicy):
     def change_state(self, client, initial, final):
         super(FocusPolicy, self).change_state(client, initial, final)
 
-        if initial == WMState.WithdrawnState and final == WMState.NormalState:
+        if (initial, final) == (WMState.WithdrawnState, WMState.NormalState):
             self.__log.debug("Focusing new window 0x%x.", client.window)
             self.ensure_focus(client)
 
