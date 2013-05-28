@@ -186,7 +186,9 @@ class FocusPolicy(WindowManager):
 
         for client in choose_focus_client():
             if self.focus(client, time):
-                self.pending_focus = client
+                self.pending_focus = (client
+                                      if client != self.current_focus
+                                      else None)
                 break
         else:
             self.pending_focus = None
