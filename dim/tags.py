@@ -566,10 +566,12 @@ class TagManager(WindowManager):
             return [self.tagset_expr[0]]
 
     def default_tagset(self, tag):
-        """Use the client's class name (ICCCM §4.1.2.5) as an implicit tag."""
+        """Yield client for the given tag, which does not name a tagset.
+        We treat the client's class and instance names (ICCCM §4.1.2.5)
+        as implicit tags."""
         for client in self.clients.values():
-            instance, class_name = tuple(client.wm_class)
-            if class_name and self.atoms.intern(class_name, "UTF-8") == tag:
+            if any(x and self.atoms.intern(x, "UTF-8") == tag
+                   for x in client.wm_class):
                 yield client
 
     def note_tags(self, client):
