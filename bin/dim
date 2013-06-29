@@ -512,7 +512,7 @@ if __name__ == "__main__":
             wm.shutdown()
         except Exception:
             pass
-        with EmergencyTTY():
+        with EmergencyTTY() as tty:
             print_caption()
             print u"""\a
 Dim has caught a fatal exception, and has shut down as cleanly it can.
@@ -527,4 +527,5 @@ that delivered the fatal blow is in the ‘exc_value’ variable.
                 pdb.post_mortem(traceback)
             except pdb.Restart:
                 log.info("Restarting: %s", " ".join(sys.argv))
+                tty.close() # since we don't unwind after the exec
                 execvp(sys.argv[0], sys.argv)
