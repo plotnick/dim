@@ -358,8 +358,13 @@ class Client(EventHandler, PropertyManager):
 
         # We might be called more than once in response to some request,
         # so we'll only update the focus if the timestamp is newer than
-        # the last-focus time for this client.
-        if self.focus_time and compare_timestamps(self.focus_time, time) >= 0:
+        # the last-focus time for this client. But since the wraparound
+        # time for X timestamps is only about 49.7 days, and it's entirely
+        # possible to have an active window that hasn't been focused in
+        # that time, we'll only consider last-focus times that are within
+        # a minute (60000 ms) of the requested time.
+        if (self.focus_time and
+            0 <= compare_timestamps(self.focus_time, time) < 60000):
             return True
 
         def set_input_focus(window, time):
