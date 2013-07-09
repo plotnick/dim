@@ -52,7 +52,7 @@ class NetClientList(EWMHCapability):
         super(NetClientList, self).start()
 
     def manage(self, window, adopted=False):
-        client = super(NetClientList, self).manage(window)
+        client = super(NetClientList, self).manage(window, adopted)
         if client:
             self.net_client_list += [WindowProperty(client.window)]
         return client

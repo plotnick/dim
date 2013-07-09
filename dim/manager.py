@@ -225,7 +225,7 @@ class WindowManager(EventHandler, PropertyManager):
         client = self.make_client(window)
         decorator = self.make_decorator(self.select_decorator_class(client),
                                         client)
-        client.frame(decorator, self.place(geometry))
+        client.frame(decorator, self.place(client, geometry, adopted))
         client.establish_grabs(key_bindings=self.key_bindings,
                                button_bindings=self.button_bindings)
         self.frames[client.frame] = client
@@ -253,12 +253,17 @@ class WindowManager(EventHandler, PropertyManager):
         elif final == WMState.WithdrawnState:
             client.withdraw()
 
-    def place(self, geometry):
-        """Determine a suitable geometry for a client window. This may, but
-        need not, utilize the geometry the client requested."""
+    def place(self, client, geometry, adopted=False):
+        """Determine and return a suitable geometry for a client window.
+
+        By default, the requested size is always used. If a non-trivial
+        position which is on-screen is requested, it is used as well;
+        otherwise, the upper left corner of the head currently containing
+        the pointer is used."""
         return (geometry
-                if geometry & self.screen_geometry
-                else geometry.move(Position(0, 0)))
+                if (adopted or
+                    (geometry.position() and geometry & self.screen_geometry))
+                else geometry.move(self.heads.current_head_geometry.position()))
 
     def constrain_position(self, client, position):
         """Compute and return a new position for the given client's frame

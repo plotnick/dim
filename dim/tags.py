@@ -520,7 +520,7 @@ class TagManager(WindowManager):
             assert not tagset
 
     def manage(self, window, adopted=False):
-        client = super(TagManager, self).manage(window)
+        client = super(TagManager, self).manage(window, adopted)
         if client:
             self.note_tags(client)
             client.register_property_change_handler("_DIM_TAGS",
