@@ -253,7 +253,7 @@ class TestTagManager(WMTestCase):
         self.all_clients = []
 
     def send_tagset_expr(self, expr):
-        send_tagset_expr(self.conn, expr)
+        send_tagset_expr(self.conn, expr, show=True, atoms=self.atoms)
         self.conn.flush()
 
     def make_client(self, tags):

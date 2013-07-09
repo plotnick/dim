@@ -459,29 +459,31 @@ def parse_tagset_spec(spec):
     """Tokenize and parse a tagset specification."""
     return SpecParser().parse(tokenize(spec)).postfix()
 
+def intern_tagset_expr(conn, expr, atoms=None,
+                       aliases={"*": "_DIM_ALL_TAGS",
+                                ".": "_DIM_CURRENT_SET",
+                                "∅": "_DIM_EMPTY_SET",
+                                "0": "_DIM_EMPTY_SET"}):
+    def intern(x, atoms=atoms or AtomCache(conn)):
+        return atoms.intern(x.atom
+                            if isinstance(x, OpToken)
+                            else aliases.get(x, x),
+                            "UTF-8")
+    return map(intern, expr)
+
 def send_tagset_expr(conn, expr, show=True, screen=None, atoms=None):
     """Given a tag machine expression, encode it as a list of atoms and
     send it to the window manager via a property on the root window."""
-    def atom(x,
-             atoms=atoms if atoms else AtomCache(conn),
-             aliases={"*": "_DIM_ALL_TAGS",
-                      ".": "_DIM_CURRENT_SET",
-                      "∅": "_DIM_EMPTY_SET",
-                      "0": "_DIM_EMPTY_SET"}):
-        if isinstance(x, OpToken):
-            x = x.atom
-        else:
-            x = aliases.get(x, x)
-        return atoms.intern(x, "UTF-8")
     if show:
         expr += ["_DIM_TAGSET_SHOW"]
+    expr = intern_tagset_expr(conn, expr, atoms)
     screen = conn.pref_screen if screen is None else screen
     root = conn.get_setup().roots[screen].root
     conn.core.ChangeProperty(PropMode.Replace,
                              root,
-                             atom("_DIM_TAGSET_EXPR"),
-                             atom("ATOM"),
-                             *AtomList(map(atom, expr)).change_property_args())
+                             atoms.intern("_DIM_TAGSET_EXPR"),
+                             atoms.intern("ATOM"),
+                             *AtomList(expr).change_property_args())
 
 # Finally, we have a manager class that maintains the tagsets and tag machine.
 
