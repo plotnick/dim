@@ -376,6 +376,7 @@ if __name__ == "__main__":
     setlocale(LC_ALL, "")
 
     # Execute user code.
+    def pre_start_hook(wm): pass
     try:
         execfile(os.path.expanduser("~/.dim.py"))
     except IOError:
@@ -501,6 +502,7 @@ if __name__ == "__main__":
                   title_font=options.title_font,
                   minibuffer_font=options.minibuffer_font)
     try:
+        pre_start_hook(wm)
         wm.start()
     except KeyboardInterrupt:
         wm.shutdown()
