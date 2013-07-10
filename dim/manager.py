@@ -437,6 +437,12 @@ class WindowManager(EventHandler, PropertyManager):
                     w = self.parents.get(w, None)
         return self.clients.get(window, None)
 
+    def find_clients(self, test=lambda x: False):
+        """Yield clients that satisfy the given test."""
+        for client in self.clients.values():
+            if test(client):
+                yield client
+
     def update_for_changed_mapping(self):
         """Update for changed keyboard, modifier, or pointer mapping."""
         for client in self.clients.values():
