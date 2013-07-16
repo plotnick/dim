@@ -12,6 +12,7 @@ from geometry import *
 from keysym import *
 from properties import WMState
 from minibuffer import Minibuffer
+from xutil import *
 
 __all__ = ["CycleFocus"]
 
@@ -132,6 +133,11 @@ class CycleFocus(Minibuffer):
 
     def lower_target_window(self, event):
         self.target.configure(stack_mode=StackMode.BottomIf)
+
+    def warp_to_target(self, event):
+        x, y = self.target.geometry.size() // 2
+        self.conn.core.WarpPointer(Window._None, self.target.window,
+                                   0, 0, 0, 0, int16(x), int16(y))
 
     @handler((KeyPressEvent, KeyReleaseEvent))
     def handle_key_event(self, event):

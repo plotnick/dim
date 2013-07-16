@@ -362,6 +362,7 @@ focus_cycle_bindings = {
     XK_Left: CycleFocus.cycle_focus_prev,
     XK_Up: CycleFocus.raise_target_window,
     XK_Down: CycleFocus.lower_target_window,
+    XK_Return: CycleFocus.warp_to_target,
     XK_Escape: CycleFocus.abort_focus_cycle,
     None: CycleFocus.accept_focus
 }
