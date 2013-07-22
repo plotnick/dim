@@ -263,7 +263,7 @@ class WindowManager(EventHandler, PropertyManager):
         return (geometry
                 if (adopted or
                     (geometry.position() and geometry & self.screen_geometry))
-                else geometry.move(self.heads.current_head_geometry.position()))
+                else geometry.move(self.heads.focus_head_geometry.position()))
 
     def constrain_position(self, client, position):
         """Compute and return a new position for the given client's frame

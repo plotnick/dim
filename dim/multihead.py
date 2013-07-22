@@ -11,6 +11,7 @@ import xcb.xinerama
 
 from event import EventHandler, handler
 from geometry import *
+from properties import WMState
 from xutil import query_extension, query_pointer
 
 class HeadManager(object):
@@ -52,15 +53,43 @@ class HeadManager(object):
         """Return an iterator over the set of current head geometries."""
         return iter([self.manager.screen_geometry])
 
+    def client_head_geometry(self, client):
+        """Return the geometry of the head currently containing a client."""
+        if not client or client.wm_state != WMState.NormalState:
+            return None # not considered to be on any head
+
+        # What counts as `containing a window'? We use a simple heuristic:
+        # if there's a head that contains the midpoint of the visible portion
+        # of the window, use that; otherwise, look for any non-trivial
+        # intersection with the window.
+        geometry = client.frame_geometry
+        visible = self.manager.screen_geometry & geometry
+        if visible:
+            point = visible.midpoint()
+            for head in self:
+                if point in head:
+                    return head
+        for head in self:
+            if geometry & head:
+                return head
+
     @property
-    def current_head_geometry(self):
+    def pointer_head_geometry(self):
         """Return the geometry of the head currently containing the pointer."""
         pointer = query_pointer(self.conn, self.screen)
-        for geometry in self:
-            if pointer in geometry:
-                return geometry
+        for head in self:
+            if pointer in head:
+                return head
         self.log.warning("Can't find head containing pointer.")
         return self.manager.screen_geometry
+
+    @property
+    def focus_head_geometry(self):
+        """Return the geometry of the head containing the current focus.
+        If there isn't a visible current focus, fall back to the head
+        containing the pointer."""
+        return (self.client_head_geometry(self.manager.current_focus) or
+                self.pointer_head_geometry)
 
 class RandRManager(HeadManager, EventHandler):
     """Support multiple heads and root window geometry changes using the

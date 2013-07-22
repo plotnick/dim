@@ -60,7 +60,7 @@ class Minibuffer(InputField):
         if not kwargs.get("geometry"):
             # Center the window along the bottom edge of the screen, taking
             # 80% of the available width.
-            screen_geometry = self.manager.heads.current_head_geometry
+            screen_geometry = self.manager.heads.focus_head_geometry
             w = int(screen_geometry.width * 0.8)
             h = self.config.height
             x = screen_geometry.x + (screen_geometry.width - w) // 2
