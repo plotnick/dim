@@ -75,23 +75,23 @@ Rectangle.__add__ = Rectangle.__radd__ = make_tuple_adder(add)
 Rectangle.__sub__ = make_tuple_adder(sub)
 Rectangle.__mul__ = Rectangle.__rmul__ = multiply_tuple
 Rectangle.__floordiv__ = floor_divide_tuple
-Rectangle.__nonzero__ = lambda self: self.width != 0 or self.height != 0
+Rectangle.__nonzero__ = lambda self: self.width > 0 and self.height > 0
 Rectangle.__str__ = lambda self: "%ux%u" % self
 Rectangle.__unicode__ = lambda self: u"%u×%u" % self
 
 Geometry = namedtuple("Geometry", "x, y, width, height, border_width")
 Geometry.__add__ = Geometry.__radd__ = make_geometry_adder(add)
 Geometry.__sub__ = make_geometry_adder(sub)
-Geometry.__nonzero__ = lambda self: \
-    (self.x != 0 or self.y != 0 or
-     self.width != 0 or self.height != 0 or
-     self.border_width != 0)
+Geometry.__nonzero__ = lambda self: self.size().__nonzero__()
 Geometry.__and__ = Geometry.__rand__ = lambda self, other: \
-    (point_in_rect(other, self) if isinstance(other, Position) else
-     (point_in_rect(other.position(), self) or
-      point_in_rect(other.position() + other.size(), self) or
-      point_in_rect(self.position(), other) or
-      point_in_rect(self.position() + self.size(), other))
+    ((other if point_in_rect(other, self) else None)
+     if isinstance(other, Position) else
+     (lambda x, y:
+          Geometry(x, y,
+                   min(self.x + self.width, other.x + other.width) - x,
+                   min(self.y + self.height, other.y + other.height) - y,
+                   0)) \
+         (max(self.x, other.x), (max(self.y, other.y))) or None
      if isinstance(other, Geometry) else NotImplemented)
 Geometry.__contains__ = lambda self, other: \
     (point_in_rect(other, self) if isinstance(other, Position) else
@@ -110,6 +110,8 @@ Geometry.resize = lambda self, size, border_width=None, gravity=Gravity.NorthWes
     resize_with_gravity(self, size, border_width, gravity)
 Geometry.reborder = lambda self, border_width: \
     self._replace(border_width=border_width)
+Geometry.midpoint = lambda self: \
+    self.position() + self.size() // 2
 Geometry.right_edge = lambda self: \
     self.x + self.width + 2 * self.border_width
 Geometry.bottom_edge = lambda self: \

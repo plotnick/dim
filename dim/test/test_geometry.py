@@ -79,13 +79,20 @@ class TestGeometryClasses(unittest.TestCase):
 
     def test_intersection(self):
         g = Geometry(x=0, y=0, width=10, height=10, border_width=0)
-        self.assertIntersecting(Position(0, 0), g)
-        self.assertIntersecting(Position(5, 5), g)
-        self.assertNonIntersecting(Position(10, 10), g)
-        self.assertIntersecting(g, g)
-        self.assertIntersecting(Geometry(9, 9, 5, 5, 0), g)
-        self.assertIntersecting(Geometry(0, 0, 1, 1, 0), g)
-        self.assertNonIntersecting(Geometry(-10, -10, 5, 5, 0), g)
+        self.assertEqual(g, g & g) # self-intersection
+
+        # Point & Geometry
+        p = Position(0, 0); self.assertEqual(g & p, p)
+        p = Position(5, 5); self.assertEqual(g & p, p)
+        p = Position(10, 10); self.assertFalse(g & p)
+
+        # Geometry & Geometry
+        self.assertEqual(g & g.move(Position(5, 5)), Geometry(5, 5, 5, 5, 0))
+        self.assertEqual(g & g.move(Position(-5, -5)), Geometry(0, 0, 5, 5, 0))
+        self.assertEqual(g & Geometry(9, 9, 5, 5, 0), Geometry(9, 9, 1, 1, 0))
+        self.assertEqual(g & Geometry(0, 0, 1, 1, 0), Geometry(0, 0, 1, 1, 0))
+        self.assertEqual(g & Geometry(5, 5, 5, 5, 0), Geometry(5, 5, 5, 5, 0))
+        self.assertFalse(g & Geometry(-10, -10, 5, 5, 0))
 
     def test_contains(self):
         g = Geometry(x=0, y=0, width=10, height=10, border_width=0)
