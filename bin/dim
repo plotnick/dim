@@ -312,21 +312,22 @@ and modify (carefully, please!) internal data structures.
     def terminal(self, event):
         spawn("xterm")
 
+    def start_focus_cycle(self, event, direction):
+        return CycleFocus(manager=self,
+                          config=self.minibuffer_config,
+                          event=event,
+                          direction=direction,
+                          focus_list=self.focus_list,
+                          key_bindings=focus_cycle_bindings)
+
     def start_focus_cycle_next(self, event):
-        CycleFocus(manager=self,
-                   config=self.minibuffer_config,
-                   event=event,
-                   forward=True,
-                   focus_list=self.focus_list,
-                   key_bindings=focus_cycle_bindings)
+        self.start_focus_cycle(event, +1)
 
     def start_focus_cycle_prev(self, event):
-        CycleFocus(manager=self,
-                   config=self.minibuffer_config,
-                   event=event,
-                   forward=False,
-                   focus_list=self.focus_list,
-                   key_bindings=focus_cycle_bindings)
+        self.start_focus_cycle(event, -1)
+
+    def start_focus_cycle_warp(self, event):
+        self.start_focus_cycle(event, 0).warp_to_target()
 
 titlebar_button_bindings = {
     1: BaseWM.raise_and_move,
@@ -336,6 +337,7 @@ titlebar_button_bindings = {
 global_key_bindings = {
     ("control", "meta", XK_Next): BaseWM.start_focus_cycle_next,
     ("control", "meta", XK_Prior): BaseWM.start_focus_cycle_prev,
+    ("control", "meta", XK_Home): BaseWM.start_focus_cycle_warp,
     ("control", "meta", XK_Return): BaseWM.terminal,
     ("control", "meta", XK_Tab): BaseWM.change_tagset,
     ("control", "meta", XK_Escape): BaseWM.delete_window,
@@ -362,7 +364,7 @@ focus_cycle_bindings = {
     XK_Left: CycleFocus.cycle_focus_prev,
     XK_Up: CycleFocus.raise_target_window,
     XK_Down: CycleFocus.lower_target_window,
-    XK_Return: CycleFocus.warp_to_target,
+    XK_Home: CycleFocus.warp_to_target,
     XK_Escape: CycleFocus.abort_focus_cycle,
     None: CycleFocus.accept_focus
 }

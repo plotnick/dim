@@ -51,9 +51,20 @@ class CycleFocus(Minibuffer):
 
     The cycling consists of activating the focus decoration on successive
     clients without actually offering the focus. The currently indicated
-    client is called the target. If a target is selected, we offer the
-    focus to that client. If the cycle is aborted, we return focus to
-    whichever client which had the focus before the cycle started."""
+    client is called the target. During cycling, we decorate the target as
+    focused (even though it is not) and display its title in the minibuffer.
+
+    During cycling, the various event handlers may be used to cycle to
+    the next/previous target, accept (focus) the current target, or abort
+    the whole cycle. The clients which are eligible to appear in the cycle
+    and their order are entirely determined the manager's focus list, but
+    we skip any clients not in the Normal state. If the cycle is aborted,
+    we return focus to whichever client which had the focus before the cycle
+    started.
+
+    A few other miscellaneous actions are available as conveniences during
+    cycling: the user may raise/lower the target window, or warp the pointer
+    into it."""
 
     override_redirect = True
     event_mask = (EventMask.ButtonPress |
@@ -63,7 +74,7 @@ class CycleFocus(Minibuffer):
 
     __log = logging.getLogger("cycle")
 
-    def __init__(self, event=None, focus_list=[], forward=True, key_bindings={},
+    def __init__(self, event=None, focus_list=[], direction=+1, key_bindings={},
                  **kwargs):
         super(CycleFocus, self).__init__(**kwargs)
 
@@ -79,9 +90,9 @@ class CycleFocus(Minibuffer):
 
         self.focus_list = tuple(focus_list)
         self.initial_focus = self.focus_list[0]
-        self.target_index = 0
+        self.target_index = 0 # into focus list
         self.map(event.time)
-        self.cycle_focus(event, 1 if forward else -1)
+        self.cycle_focus(direction)
 
     @property
     def target(self):
@@ -89,13 +100,7 @@ class CycleFocus(Minibuffer):
         This is not necessarily the currently focused client."""
         return self.focus_list[self.target_index]
 
-    def cycle_focus_next(self, event):
-        self.cycle_focus(event, 1)
-
-    def cycle_focus_prev(self, event):
-        self.cycle_focus(event, -1)
-
-    def cycle_focus(self, event, incr):
+    def cycle_focus(self, incr):
         self.target.decorator.unfocus()
         while True:
             self.target_index = ((self.target_index + incr) %
@@ -110,31 +115,37 @@ class CycleFocus(Minibuffer):
                 self.draw()
                 return True
 
-    def end_focus_cycle(self, event, client):
+    def end_focus_cycle(self, client, time):
         # We must send the ensure-focus message first so that we can
         # correctly ignore the FocusIn and FocusOut events generated
         # due to the ungrabbing.
         self.manager.ensure_focus(client)
-        self.unmap(event.time)
+        self.unmap(time)
         self.destroy()
+
+    def cycle_focus_next(self, event=None):
+        self.cycle_focus(+1)
+
+    def cycle_focus_prev(self, event=None):
+        self.cycle_focus(-1)
 
     def accept_focus(self, event):
         self.__log.debug("Client 0x%x selected.", self.target.window)
-        self.end_focus_cycle(event, self.target)
+        self.end_focus_cycle(self.target, event.time)
 
     def abort_focus_cycle(self, event):
         self.__log.debug("Focus cycle aborted.")
         if self.target != self.initial_focus:
             self.target.decorator.unfocus()
-        self.end_focus_cycle(event, self.initial_focus)
+        self.end_focus_cycle(self.initial_focus, event.time)
 
-    def raise_target_window(self, event):
+    def raise_target_window(self, event=None):
         self.target.configure(sibling=self.window, stack_mode=StackMode.Below)
 
-    def lower_target_window(self, event):
+    def lower_target_window(self, event=None):
         self.target.configure(stack_mode=StackMode.BottomIf)
 
-    def warp_to_target(self, event):
+    def warp_to_target(self, event=None):
         x, y = self.target.geometry.size() // 2
         self.conn.core.WarpPointer(Window._None, self.target.window,
                                    0, 0, 0, 0, int16(x), int16(y))
