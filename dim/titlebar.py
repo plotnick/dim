@@ -75,7 +75,7 @@ class SimpleTitlebar(Titlebar):
         super(SimpleTitlebar, self).draw()
 
         if not self.title:
-            self.title = self.client_name()
+            self.title = self.client.title
         width = self.geometry.width - 2 * self.margin
         title = self.config.font_info.truncate(unicode(self.title), width)
         text_items = list(textitem16(title))
@@ -83,25 +83,18 @@ class SimpleTitlebar(Titlebar):
                                   self.margin, self.config.baseline,
                                   len(text_items), "".join(text_items))
 
-    def name_changed(self, window, *args):
+    def client_title_changed(self, window, *args):
         assert window is self.client.window
-        self.title = self.client_name()
+        self.title = self.client.title
         self.draw()
-
-    def client_name(self):
-        return self.client.net_wm_name or self.client.wm_name
 
     @handler(MapNotifyEvent)
     def handle_map_notify(self, event):
-        for property_name in ("WM_NAME", "_NET_WM_NAME"):
-            self.client.register_property_change_handler(property_name,
-                                                         self.name_changed)
+        self.client.register_title_change_handler(self.client_title_changed)
 
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
-        for property_name in ("WM_NAME", "_NET_WM_NAME"):
-            self.client.unregister_property_change_handler(property_name,
-                                                           self.name_changed)
+        self.client.unregister_title_change_handler(self.client_title_changed)
 
 class InputFieldTitlebar(InputField, Titlebar):
     event_mask = (EventMask.StructureNotify |

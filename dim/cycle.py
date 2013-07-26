@@ -110,8 +110,7 @@ class CycleFocus(Minibuffer):
                     self.target.decorator.focus()
                 except BadWindow:
                     continue
-                self.buffer[:] = unicode(self.target.net_wm_name or
-                                         self.target.wm_name)
+                self.buffer[:] = unicode(self.target.title)
                 self.draw()
                 return True
 

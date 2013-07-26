@@ -186,6 +186,21 @@ class Client(EventHandler, PropertyManager):
             button_bindings.establish_grabs(self.frame)
 
     @property
+    def title(self):
+        """Return a title for this client suitable for display in a titlebar."""
+        return self.net_wm_name or self.wm_name
+
+    def register_title_change_handler(self, handler):
+        """Register the given handler to be called when the title changes."""
+        for name in ("WM_NAME", "_NET_WM_NAME"):
+            self.register_property_change_handler(name, handler)
+
+    def unregister_title_change_handler(self, handler):
+        """Unregister the given title change handler."""
+        for name in ("WM_NAME", "_NET_WM_NAME"):
+            self.unregister_property_change_handler(name, handler)
+
+    @property
     def geometry(self):
         """Return the client window geometry relative to its parent's origin."""
         if self._geometry is None:
