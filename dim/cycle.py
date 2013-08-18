@@ -76,6 +76,16 @@ class CycleFocus(Minibuffer):
 
     def __init__(self, event=None, focus_list=[], direction=+1, key_bindings={},
                  **kwargs):
+        # A focus cycle can only exist if there are clients through which to
+        # cycle. This assumption, besides seeming logical enough, dramatically
+        # simplifies both the code and the interface, since we can then assume
+        # that there's always a target client.
+        focus_list = [client for client in focus_list
+                             if client.wm_state == WMState.NormalState]
+        if not focus_list:
+            self.__log.debug("Not starting empty focus cycle.")
+            return
+
         super(CycleFocus, self).__init__(**kwargs)
 
         if isinstance(event, KeyPressEvent):
@@ -102,9 +112,9 @@ class CycleFocus(Minibuffer):
 
     def cycle_focus(self, incr):
         self.target.decorator.unfocus()
-        while True:
-            self.target_index = ((self.target_index + incr) %
-                                 len(self.focus_list))
+        n = len(self.focus_list)
+        for i in range(n):
+            self.target_index = ((self.target_index + incr) % n)
             if self.target.wm_state == WMState.NormalState:
                 try:
                     self.target.decorator.focus()
