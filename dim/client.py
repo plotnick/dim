@@ -465,7 +465,7 @@ class Client(EventHandler, PropertyManager):
     def normalize(self):
         """Transition to the Normal state."""
         self.log.debug("Entering Normal state.")
-        self.wm_state = WMState(WMState.NormalState)
+        self.wm_state = WMState.NormalState
         self.request_properties()
         if not self.decorated:
             try:
@@ -490,7 +490,7 @@ class Client(EventHandler, PropertyManager):
     def iconify(self):
         """Transition to the Iconic state."""
         self.log.debug("Entering Iconic state.")
-        self.wm_state = WMState(WMState.IconicState)
+        self.wm_state = WMState.IconicState
         self.unmap()
 
         # Iconify any windows that are transient for this one.
@@ -502,7 +502,7 @@ class Client(EventHandler, PropertyManager):
     def withdraw(self):
         """Transition to the Withdrawn state."""
         self.log.debug("Entering Withdrawn state.")
-        self.wm_state = WMState(WMState.WithdrawnState)
+        self.wm_state = WMState.WithdrawnState
 
     def delete(self, time=Time.CurrentTime):
         """Ask the client to delete its top-level window."""

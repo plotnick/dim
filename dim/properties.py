@@ -46,7 +46,9 @@ class PropertyDescriptor(object):
         assert issubclass(cls, PropertyValue), "invalid property value class"
         self.name = name
         self.value_class = cls
-        self.default = default
+        self.default = (None if default is None
+                             else default if isinstance(default, PropertyValue)
+                             else cls(default))
 
     def __get__(self, instance, owner):
         return instance.get_property(self.name,
@@ -58,7 +60,8 @@ class PropertyDescriptor(object):
         if current_value is None or current_value != value:
             instance.set_property(self.name,
                                   self.value_class.property_type,
-                                  value)
+                                  value if isinstance(value, PropertyValue)
+                                        else self.value_class(value))
 
     def __delete__(self, instance):
         instance.delete_property(self.name)

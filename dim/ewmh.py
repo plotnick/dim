@@ -21,9 +21,9 @@ class EWMHCapability(WindowManager):
     def start(self):
         properties = (set(self.properties) |
                       set(self.default_client_class.properties))
-        self.net_supported = AtomList([AtomProperty(self.atoms[name])
-                                       for name in sorted(properties)
-                                       if name.startswith("_NET")])
+        self.net_supported = [self.atoms[name]
+                              for name in sorted(properties)
+                              if name.startswith("_NET")]
         super(EWMHCapability, self).start()
 
 class CheckWindowProperties(PropertyManager):
@@ -39,10 +39,10 @@ class NetSupportingWMCheck(EWMHCapability, FocusPolicy):
         # We'll use the default focus window as the supporting WM check
         # window. This is the only reason we inherit from FocusPolicy.
         window = self.default_focus_window
-        self.net_supporting_wm_check = WindowProperty(window)
+        self.net_supporting_wm_check = window
         window_properties = CheckWindowProperties(self.conn, window, self.atoms)
         window_properties.net_wm_name = "Dim"
-        window_properties.net_supporting_wm_check = WindowProperty(window)
+        window_properties.net_supporting_wm_check = window
 
         super(NetSupportingWMCheck, self).start()
 
@@ -56,13 +56,13 @@ class NetClientList(EWMHCapability):
     def manage(self, window, adopted=False):
         client = super(NetClientList, self).manage(window, adopted)
         if client:
-            self.net_client_list += [WindowProperty(client.window)]
+            self.net_client_list += [client.window]
         return client
 
     def unmanage(self, client, **kwargs):
-        self.net_client_list = WindowList([window
-                                           for window in self.net_client_list
-                                           if window != client.window])
+        self.net_client_list = [window
+                                for window in self.net_client_list
+                                if window != client.window]
         super(NetClientList, self).unmanage(client, **kwargs)
 
 
