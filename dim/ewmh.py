@@ -7,6 +7,7 @@ import logging
 import xcb
 from xcb.xproto import *
 
+from client import Client
 from event import EventHandlerClass
 from focus import FocusPolicy
 from manager import WindowManager
@@ -78,7 +79,29 @@ class NetActiveWindow(EWMHCapability, FocusPolicy):
             else:
                 self.net_active_window = self.current_focus.window
 
+class NetWMNameClient(Client):
+    net_wm_name = PropertyDescriptor("_NET_WM_NAME", UTF8StringProperty, "")
+    net_wm_icon_name = PropertyDescriptor("_NET_WM_ICON_NAME",
+                                          UTF8StringProperty, "")
+
+    @property
+    def title(self):
+        return self.net_wm_name or super(NetWMNameClient, self).title
+
+    def register_title_change_handler(self, handler):
+        super(NetWMNameClient, self).register_title_change_handler(handler)
+        self.register_property_change_handler("_NET_WM_NAME", handler)
+
+    def unregister_title_change_handler(self, handler):
+        super(NetWMNameClient, self).unregister_title_change_handler(handler)
+        self.unregister_property_change_handler("_NET_WM_NAME", handler)
+
+# Top-level classes: combine all of the above.
+
+class EWMHClient(NetWMNameClient):
+    pass
+
 class EWMHManager(NetSupportingWMCheck,
                   NetClientList,
                   NetActiveWindow):
-    pass
+    default_client_class = EWMHClient

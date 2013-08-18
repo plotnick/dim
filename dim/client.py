@@ -46,12 +46,6 @@ class Client(EventHandler, PropertyManager):
     wm_protocols = PropertyDescriptor("WM_PROTOCOLS", AtomList, [])
     wm_state = PropertyDescriptor("WM_STATE", WMState, WMState())
 
-    # EWMH properties
-    net_wm_name = PropertyDescriptor("_NET_WM_NAME",
-                                     UTF8StringProperty, "")
-    net_wm_icon_name = PropertyDescriptor("_NET_WM_ICON_NAME",
-                                          UTF8StringProperty, "")
-
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])
 
@@ -188,17 +182,15 @@ class Client(EventHandler, PropertyManager):
     @property
     def title(self):
         """Return a title for this client suitable for display in a titlebar."""
-        return self.net_wm_name or self.wm_name
+        return self.wm_name
 
     def register_title_change_handler(self, handler):
         """Register the given handler to be called when the title changes."""
-        for name in ("WM_NAME", "_NET_WM_NAME"):
-            self.register_property_change_handler(name, handler)
+        self.register_property_change_handler("WM_NAME", handler)
 
     def unregister_title_change_handler(self, handler):
         """Unregister the given title change handler."""
-        for name in ("WM_NAME", "_NET_WM_NAME"):
-            self.unregister_property_change_handler(name, handler)
+        self.unregister_property_change_handler("WM_NAME", handler)
 
     @property
     def geometry(self):
