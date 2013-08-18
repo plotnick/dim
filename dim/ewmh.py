@@ -65,6 +65,20 @@ class NetClientList(EWMHCapability):
                                 if window != client.window]
         super(NetClientList, self).unmanage(client, **kwargs)
 
+class NetActiveWindow(EWMHCapability, FocusPolicy):
+    net_active_window = PropertyDescriptor("_NET_ACTIVE_WINDOW", WindowProperty)
 
-class EWMHManager(NetSupportingWMCheck, NetClientList):
+    def focus(self, *args, **kwargs):
+        try:
+            return super(NetActiveWindow, self).focus(*args, **kwargs)
+        finally:
+            if (not self.current_focus or
+                self.current_focus is self.default_focus_window):
+                self.net_active_window = Window._None
+            else:
+                self.net_active_window = self.current_focus.window
+
+class EWMHManager(NetSupportingWMCheck,
+                  NetClientList,
+                  NetActiveWindow):
     pass
