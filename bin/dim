@@ -369,6 +369,14 @@ focus_cycle_bindings = {
     None: CycleFocus.accept_focus
 }
 
+# We take the defaults for some command-line options from this global variable
+# so that user code may easily override them.
+default_options = {
+    "focus_mode": "sloppy",
+    "title_font": "fixed",
+    "minibuffer_font": "10x20"
+}
+
 if __name__ == "__main__":
     from optparse import OptionGroup, OptionParser, OptionValueError
     import logging
@@ -392,9 +400,7 @@ if __name__ == "__main__":
         setattr(parser.values, option.dest, value)
 
     optparser = OptionParser("Usage: %prog [OPTIONS] [-e COMMAND [ARG ...]]")
-    optparser.set_defaults(focus_mode="sloppy",
-                           title_font="fixed",
-                           minibuffer_font="10x20")
+    optparser.set_defaults(**default_options)
     optparser.add_option("--version",
                          action="store_true", dest="version",
                          help="output version information and exit")
