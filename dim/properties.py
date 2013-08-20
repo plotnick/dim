@@ -347,7 +347,8 @@ class PropertyValueStruct(PropertyValue):
         return (self.property_format, len(self.fields), self.pack())
 
 class PropertyValueList(PropertyValue):
-    """Base class for representations of list-like X property values."""
+    """Base class for representations of list-like X property values.
+    Instances should be treated as immutable."""
 
     __metaclass__ = PropertyValueClass
 
@@ -368,9 +369,6 @@ class PropertyValueList(PropertyValue):
 
     def __getitem__(self, index):
         return self.elements[index]
-
-    def __setitem__(self, index, value):
-        self.elements[index] = value
 
     def __len__(self):
         return len(self.elements)

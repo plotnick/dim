@@ -101,8 +101,6 @@ class TestPropertyVaueList(unittest.TestCase):
         for i in range(len(l)):
             self.assertTrue(p[i] in l)
             self.assertEqual(p[i], l[i])
-        p[0] = 0x4321
-        self.assertEqual(p[0], 0x4321)
 
     def test_string_property(self):
         s = u"foö"
