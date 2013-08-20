@@ -134,7 +134,9 @@ class NetWMStateChange(object):
     disable methods that actually enact the state changes. We try to ensure
     that those methods are never called spuriously: i.e., if the client is
     already in state X, we will not call enable(X). This relieves the
-    underlying methods of the burden of being idempotent."""
+    underlying methods of the burden of being idempotent. State changes
+    may also be rejected, so enable and disable should return boolean
+    success values."""
 
     # Valid actions in a _NET_WM_STATE client message.
     _NET_WM_STATE_REMOVE = 0
@@ -160,16 +162,14 @@ class NetWMStateChange(object):
         return state in self.client.net_wm_state
 
     def remove(self, state, source):
-        if self.in_state(state):
-            self.disable(state, source)
+        if self.in_state(state) and self.disable(state, source):
             self.log.debug("Removing EWMH state %s.", self.atoms.name(state))
             self.client.net_wm_state = [atom
                                         for atom in self.client.net_wm_state
                                         if atom != state]
 
     def add(self, state, source):
-        if not self.in_state(state):
-            self.enable(state, source)
+        if not self.in_state(state) and self.enable(state, source):
             self.log.debug("Adding EWMH state %s.", self.atoms.name(state))
             self.client.net_wm_state += [state]
 
@@ -182,29 +182,29 @@ class NetWMStateChange(object):
 @net_wm_state("_NET_WM_STATE_FULLSCREEN")
 class NetWMStateFullscreen(NetWMStateChange):
     def enable(self, state, source):
-        self.client.fullscreen()
+        return self.client.fullscreen()
 
     def disable(self, state, source):
-        self.client.unfullscreen()
+        return self.client.unfullscreen()
 
 class NetWMStateMaximized(NetWMStateChange):
     vertical = horizontal = True
 
     def enable(self, state, source):
-        self.client.maximize(vertical=self.vertical,
-                             horizontal=self.horizontal)
+        return self.client.maximize(vertical=self.vertical,
+                                    horizontal=self.horizontal)
 
     def disable(self, state, source):
-        self.client.unmaximize(vertical=self.vertical,
-                               horizontal=self.horizontal)
+        return self.client.unmaximize(vertical=self.vertical,
+                                      horizontal=self.horizontal)
 
 @net_wm_state("_NET_WM_STATE_MAXIMIZED_VERT")
 class NetWMStateMaximizedVert(NetWMStateMaximized):
-    vertical, horizontal = True, False
+    vertical, horizontal = True, None
 
 @net_wm_state("_NET_WM_STATE_MAXIMIZED_HORZ")
 class NetWMStateMaximizedHorz(NetWMStateMaximized):
-    vertical, horizontal = False, True
+    vertical, horizontal = None, True
 
 class FullscreenDecorator(Decorator):
     """A trivial decorator for fullscreen windows."""
@@ -227,6 +227,19 @@ class NetWMStateClient(Client):
     dim_saved_geometry = PropertyDescriptor("_DIM_SAVED_GEOMETRY",
                                             GeometryProperty)
 
+    def __init__(self, *args, **kwargs):
+        super(NetWMStateClient, self).__init__(*args, **kwargs)
+
+        self.saved_decorator = None
+
+    def frame(self, decorator, geometry):
+        if self.is_fullscreen():
+            self.log.debug("Restoring fullscreen mode.")
+            assert decorator, "need a decorator to save"
+            self.saved_decorator = decorator
+            decorator = FullscreenDecorator(self.conn, self)
+        super(NetWMStateClient, self).frame(decorator, geometry)
+
     @classmethod
     def net_supported_extras(cls):
         return net_wm_state_classes.keys()
@@ -234,81 +247,109 @@ class NetWMStateClient(Client):
     def in_net_wm_state(self, name):
         return self.atoms[name] in self.net_wm_state
 
-    def frame(self, decorator, geometry):
-        if self.in_net_wm_state("_NET_WM_STATE_FULLSCREEN"):
-            self.log.debug("Restoring fullscreen mode.")
-            assert decorator, "Need decorator to save."
-            self.saved_decorator = decorator
-            decorator = FullscreenDecorator(self.conn, self)
-        super(NetWMStateClient, self).frame(decorator, geometry)
+    def is_fullscreen(self):
+        return self.in_net_wm_state("_NET_WM_STATE_FULLSCREEN")
+
+    def is_maximized_horizontally(self):
+        return self.in_net_wm_state("_NET_WM_STATE_MAXIMIZED_HORZ")
+
+    def is_maximized_vertically(self):
+        return self.in_net_wm_state("_NET_WM_STATE_MAXIMIZED_VERT")
+
+    def is_maximized(self):
+        return (self.is_maximized_horizontally() or
+                self.is_maximized_vertically())
 
     def fullscreen(self):
         """Fill the screen with the trivially-decorated client window."""
         decorator = FullscreenDecorator(self.conn, self)
-        self.saved_decorator, self.saved_geometry = self.redecorate(decorator)
-        self.configure(self.manager.fullscreen_geometry(self),
-                       stack_mode=StackMode.TopIf)
-        assert self.absolute_geometry == self.frame_geometry
+        self.saved_decorator, old_geometry = self.redecorate(decorator)
+        if not self.saved_geometry:
+            self.saved_geometry = old_geometry
+        try:
+            return self.configure(self.manager.fullscreen_geometry(self),
+                                  stack_mode=StackMode.TopIf)
+        finally:
+            assert self.absolute_geometry == self.frame_geometry
+            self.manager.ensure_focus(self)
 
     def unfullscreen(self):
         """Restore the non-fullscreen geometry."""
-        self.redecorate(self.saved_decorator)
-        self.configure(self.saved_geometry)
-        self.saved_decorator = self.saved_geometry = None
-
-    @property
-    def maximized_horizontally(self):
-        return self.in_net_wm_state("_NET_WM_STATE_MAXIMIZED_HORZ")
-
-    @property
-    def maximized_vertically(self):
-        return self.in_net_wm_state("_NET_WM_STATE_MAXIMIZED_VERT")
-
-    @property
-    def maximized(self):
-        return self.maximized_horizontally or self.maximized_vertically
+        if self.saved_decorator:
+            self.redecorate(self.saved_decorator)
+            self.saved_decorator = None
+        if self.is_maximized():
+            return self.maximize(check_fullscreen=False)
+        else:
+            try:
+                return self.configure(self.saved_geometry)
+            finally:
+                self.saved_geometry = None
 
     @staticmethod
     def maxmessage(positive, horizontal, vertical):
         return ("%simizing %s." %
                 ("Max" if positive else "Unmax",
-                 ", ".join(filter(None, [horizontal and "horizontally",
-                                         vertical and "vertically"]))))
+                 "completely" if horizontal and vertical else
+                 "horizontally" if horizontal else
+                 "vertically" if vertical else
+                 "trivially"))
 
-    def maximize(self, horizontal=True, vertical=True):
+    def maximize(self, horizontal=None, vertical=None, check_fullscreen=True):
         """Fill the screen horizontally, vertically, or completely with the
-        decorated client window."""
+        decorated client window. If either of the horizontal or vertical
+        arguments are None, they default to the current corresponding state.
+
+        Maximization requests in fullscreen mode are honored, but trivially.
+        When we leave fullscreen mode, we'll restore the saved geometry
+        according to the current maximization state. The last argument,
+        check_fullscreen, is used only by unfullscreen in this context."""
+        if check_fullscreen and self.is_fullscreen():
+            return True
+
+        horizontal = (self.is_maximized_horizontally()
+                      if horizontal is None else horizontal)
+        vertical = (self.is_maximized_vertically()
+                    if vertical is None else vertical)
         self.log.debug(self.maxmessage(True, horizontal, vertical))
+
         if not self.saved_geometry:
             self.saved_geometry = self.absolute_geometry
 
-        frame = self.frame_geometry
+        frame = self.absolute_to_frame_geometry(self.saved_geometry)
         max = (self.manager.fullscreen_geometry(self) -
                Rectangle(2 * frame.border_width, 2 * frame.border_width))
         if horizontal:
             frame = Geometry(max.x, frame.y, max.width, frame.height, 0)
         if vertical:
             frame = Geometry(frame.x, max.y, frame.width, max.height, 0)
-        self.configure(self.frame_to_absolute_geometry(frame))
+        return self.configure(self.frame_to_absolute_geometry(frame))
 
     def unmaximize(self, horizontal=True, vertical=True):
+        """Revert to the saved geometry horizontally, vertically,
+        or completely."""
+        # Trivially honor request in fullscreen mode.
+        if self.is_fullscreen():
+            return True
+
         self.log.debug(self.maxmessage(False, horizontal, vertical))
         if not self.saved_geometry:
             self.log.warning("No saved geometry to restore.")
-            return
+            return False
         frame = self.frame_geometry
         saved = self.absolute_to_frame_geometry(self.saved_geometry)
         if horizontal:
             frame = Geometry(saved.x, frame.y, saved.width, frame.height, 0)
         if vertical:
             frame = Geometry(frame.x, saved.y, frame.width, saved.height, 0)
-        self.configure(self.frame_to_absolute_geometry(frame))
-
-        if ((horizontal and self.maximized_horizontally and
-             not self.maximized_vertically) or
-            (vertical and self.maximized_vertically and
-             not self.maximized_horizontally)):
-            self.saved_geometry = None
+        try:
+            return self.configure(self.frame_to_absolute_geometry(frame))
+        finally:
+            # Clear the saved geometry, but only if nobody needs it.
+            if ((horizontal and vertical) or
+                (horizontal and not self.is_maximized_vertically()) or
+                (vertical and not self.is_maximized_horizontally())):
+                self.saved_geometry = None
 
     @property
     def saved_geometry(self):
@@ -321,8 +362,10 @@ class NetWMStateClient(Client):
     def saved_geometry(self, geometry):
         """Update or erase the saved geometry."""
         if geometry:
+            self.log.debug("Saving geometry %s.", geometry)
             self.dim_saved_geometry = GeometryProperty(*geometry)
         else:
+            self.log.debug("Clearing saved geometry.")
             del self.dim_saved_geometry
 
     @handler(NetWMState)
