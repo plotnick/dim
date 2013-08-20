@@ -11,7 +11,7 @@ from client import Client
 from decorator import Decorator
 from event import handler
 from focus import FocusPolicy
-from geometry import Geometry
+from geometry import Position, Rectangle, Geometry
 from manager import WindowManager
 from properties import *
 from xutil import *
@@ -112,7 +112,7 @@ class NetWMState(ClientMessage):
     pass
 
 # _NET_WM_STATE contains a list of (mostly) independent hints; we'll use a
-# separate class for each one.
+# separate class for each one (or set of closely related states).
 net_wm_state_classes = {}
 def net_wm_state(state_name):
     """A class decorator factory that registers a state change class."""
@@ -121,55 +121,90 @@ def net_wm_state(state_name):
         return cls
     return register_state_class
 
-# Valid actions in a _NET_WM_STATE client message.
-_NET_WM_STATE_REMOVE = 0
-_NET_WM_STATE_ADD = 1
-_NET_WM_STATE_TOGGLE = 2
-
 class NetWMStateChange(object):
+    """Changes to the _NET_WM_STATE property take one of three basic forms:
+    remove, add, or toggle a state or set of (at most two) states. In almost
+    all cases, only one state is changed at a time; the notable counterexample
+    is horizontal and vertical maximization, which are often changed together.
+    But handling state changes either one at a time or as a set adds
+    considerable complexity for minimal gain (viz., slightly more efficient
+    maximization), so we simply don't bother.
+
+    This class only does dispatch; subclasses should define enable and
+    disable methods that actually enact the state changes. We try to ensure
+    that those methods are never called spuriously: i.e., if the client is
+    already in state X, we will not call enable(X). This relieves the
+    underlying methods of the burden of being idempotent."""
+
+    # Valid actions in a _NET_WM_STATE client message.
+    _NET_WM_STATE_REMOVE = 0
+    _NET_WM_STATE_ADD = 1
+    _NET_WM_STATE_TOGGLE = 2
+
     def __init__(self, manager, client, action, state, source):
         self.manager = manager
         self.client = client
         self.log = client.log
         self.atoms = manager.atoms
 
-        action = {_NET_WM_STATE_REMOVE: self.remove,
-                  _NET_WM_STATE_ADD: self.add,
-                  _NET_WM_STATE_TOGGLE: self.toggle}.get(action)
-        if action:
-            action(state, source)
+        method = {self._NET_WM_STATE_REMOVE: self.remove,
+                  self._NET_WM_STATE_ADD: self.add,
+                  self._NET_WM_STATE_TOGGLE: self.toggle}.get(action)
+        if method:
+            method(state, source)
         else:
             self.log.warning("Bad action %d in _NET_WM_STATE client message.",
                              action)
 
-    def add(self, state, source):
-        self.log.debug("Adding EWMH state %s.", self.atoms.name(state))
-        if state not in self.client.net_wm_state:
-            self.client.net_wm_state += [state]
+    def in_state(self, state):
+        return state in self.client.net_wm_state
 
     def remove(self, state, source):
-        self.log.debug("Removing EWMH state %s.", self.atoms.name(state))
-        self.client.net_wm_state = [atom
-                                    for atom in self.client.net_wm_state
-                                    if atom != state]
+        if self.in_state(state):
+            self.disable(state, source)
+            self.log.debug("Removing EWMH state %s.", self.atoms.name(state))
+            self.client.net_wm_state = [atom
+                                        for atom in self.client.net_wm_state
+                                        if atom != state]
+
+    def add(self, state, source):
+        if not self.in_state(state):
+            self.enable(state, source)
+            self.log.debug("Adding EWMH state %s.", self.atoms.name(state))
+            self.client.net_wm_state += [state]
 
     def toggle(self, state, source):
-        if state in self.client.net_wm_state:
+        if self.in_state(state):
             self.remove(state, source)
         else:
             self.add(state, source)
 
 @net_wm_state("_NET_WM_STATE_FULLSCREEN")
 class NetWMStateFullscreen(NetWMStateChange):
-    def add(self, state, source):
-        if state not in self.client.net_wm_state:
-            self.client.fullscreen()
-            super(NetWMStateFullscreen, self).add(state, source)
+    def enable(self, state, source):
+        self.client.fullscreen()
 
-    def remove(self, state, source):
-        if state in self.client.net_wm_state:
-            self.client.unfullscreen()
-            super(NetWMStateFullscreen, self).remove(state, source)
+    def disable(self, state, source):
+        self.client.unfullscreen()
+
+class NetWMStateMaximized(NetWMStateChange):
+    vertical = horizontal = True
+
+    def enable(self, state, source):
+        self.client.maximize(vertical=self.vertical,
+                             horizontal=self.horizontal)
+
+    def disable(self, state, source):
+        self.client.unmaximize(vertical=self.vertical,
+                               horizontal=self.horizontal)
+
+@net_wm_state("_NET_WM_STATE_MAXIMIZED_VERT")
+class NetWMStateMaximizedVert(NetWMStateMaximized):
+    vertical, horizontal = True, False
+
+@net_wm_state("_NET_WM_STATE_MAXIMIZED_HORZ")
+class NetWMStateMaximizedHorz(NetWMStateMaximized):
+    vertical, horizontal = False, True
 
 class FullscreenDecorator(Decorator):
     """A trivial decorator for fullscreen windows."""
@@ -196,8 +231,11 @@ class NetWMStateClient(Client):
     def net_supported_extras(cls):
         return net_wm_state_classes.keys()
 
+    def in_net_wm_state(self, name):
+        return self.atoms[name] in self.net_wm_state
+
     def frame(self, decorator, geometry):
-        if self.atoms["_NET_WM_STATE_FULLSCREEN"] in self.net_wm_state:
+        if self.in_net_wm_state("_NET_WM_STATE_FULLSCREEN"):
             self.log.debug("Restoring fullscreen mode.")
             assert decorator, "Need decorator to save."
             self.saved_decorator = decorator
@@ -219,6 +257,60 @@ class NetWMStateClient(Client):
         self.saved_decorator = self.saved_geometry = None
 
     @property
+    def maximized_horizontally(self):
+        return self.in_net_wm_state("_NET_WM_STATE_MAXIMIZED_HORZ")
+
+    @property
+    def maximized_vertically(self):
+        return self.in_net_wm_state("_NET_WM_STATE_MAXIMIZED_VERT")
+
+    @property
+    def maximized(self):
+        return self.maximized_horizontally or self.maximized_vertically
+
+    @staticmethod
+    def maxmessage(positive, horizontal, vertical):
+        return ("%simizing %s." %
+                ("Max" if positive else "Unmax",
+                 ", ".join(filter(None, [horizontal and "horizontally",
+                                         vertical and "vertically"]))))
+
+    def maximize(self, horizontal=True, vertical=True):
+        """Fill the screen horizontally, vertically, or completely with the
+        decorated client window."""
+        self.log.debug(self.maxmessage(True, horizontal, vertical))
+        if not self.saved_geometry:
+            self.saved_geometry = self.absolute_geometry
+
+        frame = self.frame_geometry
+        max = (self.manager.fullscreen_geometry(self) -
+               Rectangle(2 * frame.border_width, 2 * frame.border_width))
+        if horizontal:
+            frame = Geometry(max.x, frame.y, max.width, frame.height, 0)
+        if vertical:
+            frame = Geometry(frame.x, max.y, frame.width, max.height, 0)
+        self.configure(self.frame_to_absolute_geometry(frame))
+
+    def unmaximize(self, horizontal=True, vertical=True):
+        self.log.debug(self.maxmessage(False, horizontal, vertical))
+        if not self.saved_geometry:
+            self.log.warning("No saved geometry to restore.")
+            return
+        frame = self.frame_geometry
+        saved = self.absolute_to_frame_geometry(self.saved_geometry)
+        if horizontal:
+            frame = Geometry(saved.x, frame.y, saved.width, frame.height, 0)
+        if vertical:
+            frame = Geometry(frame.x, saved.y, frame.width, saved.height, 0)
+        self.configure(self.frame_to_absolute_geometry(frame))
+
+        if ((horizontal and self.maximized_horizontally and
+             not self.maximized_vertically) or
+            (vertical and self.maximized_vertically and
+             not self.maximized_horizontally)):
+            self.saved_geometry = None
+
+    @property
     def saved_geometry(self):
         """Retrieve the saved geometry."""
         g = self.dim_saved_geometry
@@ -237,9 +329,7 @@ class NetWMStateClient(Client):
     def handle_state_change(self, client_message):
         # A state change message consists of an action (add, remove, toggle),
         # one or two states, and a source indication (application or user).
-        # The dual states are really only there to support simultaneous
-        # horizontal & vertical maximization, but since we support those
-        # independently, we don't care.
+        # We always treat the states as independent.
         action, first, second, source, _ = client_message.data.data32
         for atom in first, second:
             if atom:
