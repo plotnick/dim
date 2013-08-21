@@ -1,6 +1,49 @@
 # -*- mode: Python; coding: utf-8 -*-
 
-"""Support for the Extended Window Manager Hints (EWMH) specification."""
+"""Support for the Extended Window Manager Hints (EWMH) specification:
+<http://standards.freedesktop.org/wm-spec/wm-spec-latest.html>.
+
+The EWMH specification defines a set of extensions to the ICCCM targeted
+at users and implementors of so-called "desktop environments" for the
+X window system (e.g., GNOME and KDE). It defines a number of "hints"
+(in the generic sense of the ICCCM) and simple protocols, all of which
+are named by atoms whose names start with the prefix "_NET". (Why not
+"_EWMH"? Dunno. Maybe nobody could remember how to spell it.)
+
+One of its core features is an extended set of client states which go
+beyond the simple Withdrawn/Iconic/Normal triplet defined by the ICCCM.
+For example, it defines states for horizontal and vertical maximization,
+fullscreen mode, shading & hiding, &c. We implement some, but not all,
+of these states, and treat them as basically independent of the ICCCM states.
+
+The specification also defines a largish set of hints and protocols related
+to virtual desktops, pagers, taskbars, and other related features of many
+modern (i.e., post-TWM) X window managers and desktop environments. Many of
+these are simply inapplicable to Dim in its current form (e.g., tags are not
+virtual desktops), and so we make no attempt to support them. There are also
+a host of other hints that we don't support simply because we haven't gotten
+around to implementing them.
+
+In particular, we should attach to the move/resize module and implement the
+hints _NET_MOVERESIZE_WINDOW and _NET_WM_MOVERESIZE. Other miscellaneous
+hints we should implement include _NET_CLOSE_WINDOW, _NET_RESTACK_WINDOW,
+_NET_REQUEST_FRAME_EXTENTS.
+
+Happily, the EWMH was designed to be implemented piecemeal. It defines a
+property that a conforming window manager should place on the root window
+(_NET_SUPPORTED) which lists all of the hints that it supports. Clients may
+use this property to decide which hints to use. If a hint does not appear
+in the list, it must be assumed to be unsupported.
+
+Our implementation strategy for supporting EWMH hints is to use individual
+classes (or small groups of related classes) to support each hint or feature,
+and then to mix all of these classes together at the end. We call a subclass
+of WindowManager that implements an EWMH hint (or set of related hints) a
+"capability". Such classes may also depend on related subclasses of Client
+or specific auxiliary classes, but should, in general, be independent of
+one another. One exception is the _NET_SUPPORTED hint, which is implemented
+so that capability classes can advertise the hints they support in an
+almost totally automatic fasion."""
 
 import logging
 
@@ -19,6 +62,9 @@ from xutil import *
 log = logging.getLogger("net")
 
 class EWMHCapability(WindowManager):
+    """Automatically advertise EWMH hints via the _NET_SUPPORTED property.
+    A single capability may involve multiple hints."""
+
     net_supported = PropertyDescriptor("_NET_SUPPORTED", AtomList, [])
 
     def start(self):
@@ -38,11 +84,13 @@ class EWMHCapability(WindowManager):
         super(EWMHCapability, self).start()
 
 class CheckWindowProperties(PropertyManager):
+    """A property manager for the EWMH supporting WM check window."""
     net_wm_name = PropertyDescriptor("_NET_WM_NAME", UTF8StringProperty, "")
     net_supporting_wm_check = PropertyDescriptor("_NET_SUPPORTING_WM_CHECK",
                                                  WindowProperty)
 
 class NetSupportingWMCheck(EWMHCapability, FocusPolicy):
+    """Advertise support for the EWMH via a check window."""
     net_supporting_wm_check = PropertyDescriptor("_NET_SUPPORTING_WM_CHECK",
                                                  WindowProperty)
 
@@ -58,6 +106,7 @@ class NetSupportingWMCheck(EWMHCapability, FocusPolicy):
         super(NetSupportingWMCheck, self).start()
 
 class NetClientList(EWMHCapability):
+    """Advertise a list of managed clients."""
     net_client_list = PropertyDescriptor("_NET_CLIENT_LIST", WindowList, [])
 
     def start(self):
@@ -77,6 +126,7 @@ class NetClientList(EWMHCapability):
         super(NetClientList, self).unmanage(client, **kwargs)
 
 class NetActiveWindow(EWMHCapability, FocusPolicy):
+    """Advertise the currently active (focused) window."""
     net_active_window = PropertyDescriptor("_NET_ACTIVE_WINDOW", WindowProperty)
 
     def focus(self, *args, **kwargs):
@@ -90,6 +140,7 @@ class NetActiveWindow(EWMHCapability, FocusPolicy):
                 self.net_active_window = self.current_focus.window
 
 class NetWMNameClient(Client):
+    """Unicode versions of the window and icon names."""
     net_wm_name = PropertyDescriptor("_NET_WM_NAME", UTF8StringProperty, "")
     net_wm_icon_name = PropertyDescriptor("_NET_WM_ICON_NAME",
                                           UTF8StringProperty, "")
