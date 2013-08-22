@@ -329,6 +329,14 @@ and modify (carefully, please!) internal data structures.
     def start_focus_cycle_warp(self, event):
         self.start_focus_cycle(event, 0).warp_to_target()
 
+class UserManager(BaseWM):
+    """This manager class is defined with the sole purpose of being redefined
+    by the user for their own purposes (e.g., in ~/.dim.py). In particular,
+    it provides a convenient place to hang hooks and handlers of various
+    kinds. It will be mixed in to the ultimately instantiated window manager
+    class along with other classes selected via various options."""
+    pass
+
 titlebar_button_bindings = {
     1: BaseWM.raise_and_move,
     2: BaseWM.change_tags
@@ -387,7 +395,6 @@ if __name__ == "__main__":
     setlocale(LC_ALL, "")
 
     # Execute user code.
-    def pre_start_hook(wm): pass
     try:
         execfile(os.path.expanduser("~/.dim.py"))
     except IOError:
@@ -500,7 +507,7 @@ if __name__ == "__main__":
     wm_class = type("WM",
                     tuple(([focus_modes[options.focus_mode]]) +
                           ([FocusNewWindows] if options.focus_new else []) +
-                          ([BaseWM])),
+                          ([UserManager, BaseWM])),
                     {})
 
     # Instantiate the window manager and start it up.
@@ -511,7 +518,6 @@ if __name__ == "__main__":
                   title_font=options.title_font,
                   minibuffer_font=options.minibuffer_font)
     try:
-        pre_start_hook(wm)
         wm.start()
     except KeyboardInterrupt:
         wm.shutdown()
