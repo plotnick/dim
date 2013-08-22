@@ -150,7 +150,7 @@ def configure_notify(connection, window, x, y, width, height, border_width,
                      override_redirect=False,
                      formatter=Struct("bx2xIIIhhHHHB5x"),
                      code=22): # ConfigureNotify
-    """Send a synthetic ConfigureNotify event to a window."""
+    """Send a synthetic ConfigureNotify event to a window (ICCCM §4.2.3)."""
     return connection.core.SendEvent(False, window, EventMask.StructureNotify,
                                      formatter.pack(code,
                                                     window,
