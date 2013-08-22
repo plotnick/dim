@@ -61,11 +61,19 @@ from xutil import *
 
 log = logging.getLogger("net")
 
-class EWMHCapability(WindowManager):
+class NetClient(Client):
+    def net_supported_extras(self):
+        """Return a list of non-property atoms that should be advertised
+        in the _NET_SUPPORTED property."""
+        return []
+
+class NetCapability(WindowManager):
     """Automatically advertise EWMH hints via the _NET_SUPPORTED property.
     A single capability may involve multiple hints."""
 
     net_supported = PropertyDescriptor("_NET_SUPPORTED", AtomList, [])
+
+    default_client_class = NetClient
 
     def start(self):
         properties = (set(self.properties) |
@@ -81,7 +89,7 @@ class EWMHCapability(WindowManager):
         self.net_supported = [self.atoms[name]
                               for name in sorted(properties)
                               if name.startswith("_NET")]
-        super(EWMHCapability, self).start()
+        super(NetCapability, self).start()
 
 class CheckWindowProperties(PropertyManager):
     """A property manager for the EWMH supporting WM check window."""
@@ -89,7 +97,7 @@ class CheckWindowProperties(PropertyManager):
     net_supporting_wm_check = PropertyDescriptor("_NET_SUPPORTING_WM_CHECK",
                                                  WindowProperty)
 
-class NetSupportingWMCheck(EWMHCapability, FocusPolicy):
+class NetSupportingWMCheck(NetCapability, FocusPolicy):
     """Advertise support for the EWMH via a check window."""
     net_supporting_wm_check = PropertyDescriptor("_NET_SUPPORTING_WM_CHECK",
                                                  WindowProperty)
@@ -105,7 +113,7 @@ class NetSupportingWMCheck(EWMHCapability, FocusPolicy):
 
         super(NetSupportingWMCheck, self).start()
 
-class NetClientList(EWMHCapability):
+class NetClientList(NetCapability):
     """Advertise a list of managed clients."""
     net_client_list = PropertyDescriptor("_NET_CLIENT_LIST", WindowList, [])
 
@@ -125,7 +133,7 @@ class NetClientList(EWMHCapability):
                                 if window != client.window]
         super(NetClientList, self).unmanage(client, **kwargs)
 
-class NetActiveWindow(EWMHCapability, FocusPolicy):
+class NetActiveWindow(NetCapability, FocusPolicy):
     """Advertise the currently active (focused) window."""
     net_active_window = PropertyDescriptor("_NET_ACTIVE_WINDOW", WindowProperty)
 
@@ -139,7 +147,7 @@ class NetActiveWindow(EWMHCapability, FocusPolicy):
             else:
                 self.net_active_window = self.current_focus.window
 
-class NetWMNameClient(Client):
+class NetWMNameClient(NetClient):
     """Unicode versions of the window and icon names."""
     net_wm_name = PropertyDescriptor("_NET_WM_NAME", UTF8StringProperty, "")
     net_wm_icon_name = PropertyDescriptor("_NET_WM_ICON_NAME",
@@ -214,14 +222,14 @@ class NetWMStateChange(object):
 
     def remove(self, state, source):
         if self.in_state(state) and self.disable(state, source):
-            self.log.debug("Removing EWMH state %s.", self.atoms.name(state))
+            self.log.debug("Removing state %s.", self.atoms.name(state))
             self.client.net_wm_state = [atom
                                         for atom in self.client.net_wm_state
                                         if atom != state]
 
     def add(self, state, source):
         if not self.in_state(state) and self.enable(state, source):
-            self.log.debug("Adding EWMH state %s.", self.atoms.name(state))
+            self.log.debug("Adding state %s.", self.atoms.name(state))
             self.client.net_wm_state += [state]
 
     def toggle(self, state, source):
@@ -273,7 +281,7 @@ class GeometryProperty(PropertyValueStruct):
               ("height", CARD16),
               ("border_width", CARD16))
 
-class NetWMStateClient(Client):
+class NetWMStateClient(NetClient):
     net_wm_state = PropertyDescriptor("_NET_WM_STATE", AtomList, [])
     dim_saved_geometry = PropertyDescriptor("_DIM_SAVED_GEOMETRY",
                                             GeometryProperty)
@@ -431,7 +439,7 @@ class NetWMStateClient(Client):
                 if handler:
                     handler(self.manager, self, action, atom, source)
 
-class NetWMState(EWMHCapability):
+class NetWMState(NetCapability):
     default_client_class = NetWMStateClient
 
 # Top-level classes: combine all of the above.
