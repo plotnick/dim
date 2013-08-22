@@ -319,6 +319,15 @@ class NetWMStateClient(NetClient):
         return (self.is_maximized_horizontally() or
                 self.is_maximized_vertically())
 
+    def withdraw(self):
+        """According to the EWMH, the _NET_WM_STATE property should be removed
+        whenever a window is withdrawn. This can lead to funny results, such
+        as being able to obtain a window only a fullscreen decorator if it's
+        re-normalized before being unmanaged. But that's probably not a common
+        thing to do."""
+        del self.net_wm_state
+        super(NetWMStateClient, self).withdraw()
+
     def fullscreen(self):
         """Fill the screen with the trivially-decorated client window."""
         decorator = FullscreenDecorator(self.conn, self)
