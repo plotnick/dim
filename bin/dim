@@ -22,7 +22,7 @@ from dim.cycle import CycleFocus
 from dim.daemon import daemon
 from dim.decorator import TitlebarConfig, TitlebarDecorator
 from dim.event import handler
-from dim.ewmh import EWMHManager
+from dim.ewmh import EWMHManager, NetWMStateChange
 from dim.focus import FocusNewWindows, SloppyFocus, ClickToFocus
 from dim.keysym import *
 from dim.minibuffer import *
@@ -329,6 +329,16 @@ and modify (carefully, please!) internal data structures.
     def start_focus_cycle_warp(self, event):
         self.start_focus_cycle(event, 0).warp_to_target()
 
+    def toggle_vmax(self, event):
+        "Toggle vertical maximization."
+        send_client_message(self.conn, self.screen.root, False,
+                            (EventMask.SubstructureRedirect |
+                             EventMask.SubstructureNotify),
+                            event_window(event), self.atoms["_NET_WM_STATE"],
+                            32, [NetWMStateChange._NET_WM_STATE_TOGGLE,
+                                 self.atoms["_NET_WM_STATE_MAXIMIZED_VERT"],
+                                 0, 0, 0])
+
 class UserManager(BaseWM):
     """This manager class is defined with the sole purpose of being redefined
     by the user for their own purposes (e.g., in ~/.dim.py). In particular,
@@ -346,6 +356,7 @@ global_key_bindings = {
     ("control", "meta", XK_Next): BaseWM.start_focus_cycle_next,
     ("control", "meta", XK_Prior): BaseWM.start_focus_cycle_prev,
     ("control", "meta", XK_Home): BaseWM.start_focus_cycle_warp,
+    ("control", "meta", XK_End): BaseWM.toggle_vmax,
     ("control", "meta", XK_Return): BaseWM.terminal,
     ("control", "meta", XK_Tab): BaseWM.change_tagset,
     ("control", "meta", XK_Escape): BaseWM.delete_window,
