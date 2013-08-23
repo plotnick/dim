@@ -52,7 +52,7 @@ from xcb.xproto import *
 
 from client import Client
 from decorator import Decorator
-from event import handler
+from event import StopPropagation, handler
 from focus import FocusPolicy
 from geometry import Position, Rectangle, Geometry
 from manager import WindowManager
@@ -166,7 +166,7 @@ class NetWMNameClient(NetClient):
         self.unregister_property_change_handler("_NET_WM_NAME", handler)
 
 @client_message("_NET_WM_STATE")
-class NetWMState(ClientMessage):
+class NetWMStateMessage(ClientMessage):
     """A request to change the state of a mapped window."""
     pass
 
@@ -436,7 +436,7 @@ class NetWMStateClient(NetClient):
             self.log.debug("Clearing saved geometry.")
             del self.dim_saved_geometry
 
-    @handler(NetWMState)
+    @handler(NetWMStateMessage)
     def handle_state_change(self, client_message):
         # A state change message consists of an action (add, remove, toggle),
         # one or two states, and a source indication (application or user).
@@ -445,8 +445,10 @@ class NetWMStateClient(NetClient):
         for atom in first, second:
             if atom:
                 handler = net_wm_state_classes.get(self.atoms.name(atom))
+                assert issubclass(handler, NetWMStateChange)
                 if handler:
                     handler(self.manager, self, action, atom, source)
+        raise StopPropagation
 
 class NetWMState(NetCapability):
     default_client_class = NetWMStateClient

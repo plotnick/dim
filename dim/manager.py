@@ -640,6 +640,7 @@ class WindowManager(EventHandler, PropertyManager):
             message_type = client_message_type(event_type)
         except KeyError:
             return
+        assert issubclass(message_type, ClientMessage)
         self.handle_event(message_type(event.window, event.format, event.data))
 
     @handler(WMExit)
