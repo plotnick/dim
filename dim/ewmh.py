@@ -59,6 +59,9 @@ from manager import WindowManager
 from properties import *
 from xutil import *
 
+__all__ = ["_NET_WM_STATE_REMOVE", "_NET_WM_STATE_ADD", "_NET_WM_STATE_TOGGLE",
+           "EWMHClient", "EWMHManager"]
+
 log = logging.getLogger("net")
 
 class NetClient(Client):
@@ -180,6 +183,11 @@ def net_wm_state(state_name):
         return cls
     return register_state_class
 
+# Valid actions in a _NET_WM_STATE client message.
+_NET_WM_STATE_REMOVE = 0
+_NET_WM_STATE_ADD = 1
+_NET_WM_STATE_TOGGLE = 2
+
 class NetWMStateChange(object):
     """Changes to the _NET_WM_STATE property take one of three basic forms:
     remove, add, or toggle a state or set of (at most two) states. In almost
@@ -197,20 +205,15 @@ class NetWMStateChange(object):
     may also be rejected, so enable and disable should return boolean
     success values."""
 
-    # Valid actions in a _NET_WM_STATE client message.
-    _NET_WM_STATE_REMOVE = 0
-    _NET_WM_STATE_ADD = 1
-    _NET_WM_STATE_TOGGLE = 2
-
     def __init__(self, manager, client, action, state, source):
         self.manager = manager
         self.client = client
         self.log = client.log
         self.atoms = manager.atoms
 
-        method = {self._NET_WM_STATE_REMOVE: self.remove,
-                  self._NET_WM_STATE_ADD: self.add,
-                  self._NET_WM_STATE_TOGGLE: self.toggle}.get(action)
+        method = {_NET_WM_STATE_REMOVE: self.remove,
+                  _NET_WM_STATE_ADD: self.add,
+                  _NET_WM_STATE_TOGGLE: self.toggle}.get(action)
         if method:
             method(state, source)
         else:
@@ -462,6 +465,17 @@ class NetWMStateClient(NetClient):
 
 class NetWMState(NetCapability):
     default_client_class = NetWMStateClient
+
+    def send_net_wm_state(self, window, action, first, second=0, source=0):
+        "Send a _NET_WM_STATE client message to the root window."
+        if isinstance(window, Client):
+            window = client.window
+        send_client_message(self.conn, self.screen.root, False,
+                            (EventMask.SubstructureRedirect |
+                             EventMask.SubstructureNotify),
+                            window, self.atoms["_NET_WM_STATE"],
+                            32, [action, first, second, source, 0])
+
 
 # Top-level classes: combine all of the above.
 

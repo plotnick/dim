@@ -22,7 +22,7 @@ from dim.cycle import CycleFocus
 from dim.daemon import daemon
 from dim.decorator import TitlebarConfig, TitlebarDecorator
 from dim.event import handler
-from dim.ewmh import EWMHManager, NetWMStateChange
+from dim.ewmh import *
 from dim.focus import FocusNewWindows, SloppyFocus, ClickToFocus
 from dim.keysym import *
 from dim.minibuffer import *
@@ -331,13 +331,9 @@ and modify (carefully, please!) internal data structures.
 
     def toggle_vmax(self, event):
         "Toggle vertical maximization."
-        send_client_message(self.conn, self.screen.root, False,
-                            (EventMask.SubstructureRedirect |
-                             EventMask.SubstructureNotify),
-                            event_window(event), self.atoms["_NET_WM_STATE"],
-                            32, [NetWMStateChange._NET_WM_STATE_TOGGLE,
-                                 self.atoms["_NET_WM_STATE_MAXIMIZED_VERT"],
-                                 0, 0, 0])
+        self.send_net_wm_state(event_window(event),
+                               _NET_WM_STATE_TOGGLE,
+                               self.atoms["_NET_WM_STATE_MAXIMIZED_VERT"])
 
 class UserManager(BaseWM):
     """This manager class is defined with the sole purpose of being redefined
