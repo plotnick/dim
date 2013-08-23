@@ -363,15 +363,23 @@ class NetWMStateClient(NetClient):
                  "vertically" if vertical else
                  "trivially"))
 
-    def maximize(self, horizontal=None, vertical=None, check_fullscreen=True):
+    def maximize(self, horizontal=None, vertical=None, constrain_size=True,
+                 check_fullscreen=True):
         """Fill the screen horizontally, vertically, or completely with the
         decorated client window. If either of the horizontal or vertical
         arguments are None, they default to the current corresponding state.
 
+        If constrain_size is true (the default), then the maximum size will
+        be constrained according to the manager's constrain_size method.
+        Unless the latter is overridden, maximization will thus obey the
+        client's size hints. This behavior differs from that of some other
+        window managers, but seems to be allowed (or at least not prohibited)
+        by the EWMH specification.
+
         Maximization requests in fullscreen mode are honored, but trivially.
         When we leave fullscreen mode, we'll restore the saved geometry
-        according to the current maximization state. The last argument,
-        check_fullscreen, is used only by unfullscreen in this context."""
+        according to the current maximization state. The check_fullscreen
+        argument is used only by unfullscreen in this context."""
         if check_fullscreen and self.is_fullscreen():
             return True
 
@@ -391,7 +399,9 @@ class NetWMStateClient(NetClient):
             frame = Geometry(max.x, frame.y, max.width, frame.height, 0)
         if vertical:
             frame = Geometry(frame.x, max.y, frame.width, max.height, 0)
-        return self.configure(self.frame_to_absolute_geometry(frame))
+        geometry = self.frame_to_absolute_geometry(frame)
+        return self.configure(self.manager.constrain_size(self, geometry)
+                              if constrain_size else geometry)
 
     def unmaximize(self, horizontal=True, vertical=True):
         """Revert to the saved geometry horizontally, vertically,
