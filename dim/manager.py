@@ -67,7 +67,9 @@ class WindowManager(EventHandler, PropertyManager):
     Subclasses are expected to override or augment many of its methods and
     add their own management protocols."""
 
-    root_event_mask = (EventMask.StructureNotify |
+    root_event_mask = (EventMask.ButtonPress |
+                       EventMask.ButtonRelease |
+                       EventMask.StructureNotify |
                        EventMask.SubstructureNotify |
                        EventMask.SubstructureRedirect |
                        EventMask.PropertyChange)
