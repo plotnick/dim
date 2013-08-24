@@ -377,7 +377,7 @@ class SpecParser(object):
         self.advance()
         spec = self.spec()
         if self.token:
-            raise SpecSyntaxError("trailing garbage: '%s'" % self.token)
+            raise SpecSyntaxError("trailing garbage: '%s'" % (self.token,))
         return spec
 
     def advance(self):
@@ -400,7 +400,7 @@ class SpecParser(object):
         e = self.expr()
         if self.token == "=":
             if not isinstance(e, Tag):
-                raise SpecSyntaxError("invalid assignment lhs '%s'" % e)
+                raise SpecSyntaxError("invalid assignment lhs '%s'" % (e,))
             op = self.token
             self.advance()
             e = BinOp(op, QuotedExpr(e), self.expr())
@@ -453,7 +453,7 @@ class SpecParser(object):
             finally:
                 self.advance()
         else:
-            raise SpecSyntaxError("unexpected token '%s'" % self.token)
+            raise SpecSyntaxError("unexpected token '%s'" % (self.token,))
 
 def parse_tagset_spec(spec):
     """Tokenize and parse a tagset specification."""

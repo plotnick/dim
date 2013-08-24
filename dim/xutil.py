@@ -29,7 +29,7 @@ def int16(x):
 
 def card16(x):
     """Truncate an unsigned integer to 16 bits."""
-    assert x >= 0, "invalid cardinal %d" % x
+    assert x >= 0, "invalid cardinal %d" % (x,)
     return int(x) & 0xffff
 
 def decode_argv(argv=None, errors="replace"):

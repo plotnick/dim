@@ -65,7 +65,7 @@ def ensure_keysym(x):
     elif isinstance(x, basestring):
         return string_to_keysym(x)
     else:
-        raise exceptions.ValueError("invalid keysym designator '%s'" % x)
+        raise exceptions.ValueError("invalid keysym designator '%s'" % (x,))
 
 class BindingMap(dict):
     """A dictionary of bindings which is parsed at initialization time.
