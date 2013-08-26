@@ -360,23 +360,23 @@ titlebar_button_bindings = {
 }
 
 global_key_bindings = {
-    ("control", "meta", XK_Next): BaseWM.start_focus_cycle_next,
-    ("control", "meta", XK_Prior): BaseWM.start_focus_cycle_prev,
-    ("control", "meta", XK_Home): BaseWM.start_focus_cycle_warp,
-    ("control", "meta", XK_End): BaseWM.toggle_vmax,
-    ("control", "meta", XK_Return): BaseWM.terminal,
-    ("control", "meta", XK_Tab): BaseWM.change_tagset,
-    ("control", "meta", XK_Escape): BaseWM.delete_window,
-    ("control", "meta", XK_space): BaseWM.shell_command,
+    ("alt", XK_Tab): BaseWM.start_focus_cycle_next,
+    ("alt", XK_ISO_Left_Tab): BaseWM.start_focus_cycle_prev,
+    ("alt", XK_Return): BaseWM.start_focus_cycle_warp,
+
+    ("control", "alt", XK_Escape): BaseWM.delete_window,
+    ("control", "alt", XK_Tab): BaseWM.change_tagset,
+    ("control", "alt", XK_space): BaseWM.shell_command,
+    ("control", "alt", XK_equal): BaseWM.toggle_vmax,
     ("control", XK_Pause): BaseWM.debug,
     -XK_Pause: BaseWM.activate_screen_saver
 }
 
 global_button_bindings = {
-    ("meta", 1): MoveResize.move_window,
-    ("meta", 3): MoveResize.resize_window,
-    ("shift", "meta", 1): RaiseLower.raise_window,
-    ("shift", "meta", 3): RaiseLower.lower_window
+    ("alt", 1): MoveResize.move_window,
+    ("alt", 3): MoveResize.resize_window,
+    ("shift", "alt", 1): RaiseLower.raise_window,
+    ("shift", "alt", 3): RaiseLower.lower_window
 }
 
 # Focus cycle bindings use an implicit modifier set given by whichever
@@ -384,13 +384,13 @@ global_button_bindings = {
 # specified in the bindings of BaseWM.start_focus_cycle_* above). The
 # special key None designates the release of the last held modifier.
 focus_cycle_bindings = {
-    XK_Next: CycleFocus.cycle_focus_next,
-    XK_Prior: CycleFocus.cycle_focus_prev,
+    XK_Tab: CycleFocus.cycle_focus_next,
+    XK_ISO_Left_Tab: CycleFocus.cycle_focus_prev,
     XK_Right: CycleFocus.cycle_focus_next,
     XK_Left: CycleFocus.cycle_focus_prev,
     XK_Up: CycleFocus.raise_target_window,
     XK_Down: CycleFocus.lower_target_window,
-    XK_Home: CycleFocus.warp_to_target,
+    XK_Return: CycleFocus.warp_to_target,
     XK_Escape: CycleFocus.abort_focus_cycle,
     None: CycleFocus.accept_focus
 }

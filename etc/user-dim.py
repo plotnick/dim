@@ -69,7 +69,7 @@ class UserManager(BaseWM):
         self.ensure_focus()
 
 global_key_bindings.update({
-    ("control", "meta", XK_m): UserManager.show_mail,
+    ("control", "alt", XK_m): UserManager.show_mail,
     ("control", "shift", XK_M): UserManager.no_mail
 })
 
