@@ -74,8 +74,7 @@ class CycleFocus(Minibuffer):
 
     __log = logging.getLogger("cycle")
 
-    def __init__(self, event=None, focus_list=[], direction=+1, key_bindings={},
-                 **kwargs):
+    def __new__(cls, focus_list=[], **kwargs):
         # A focus cycle can only exist if there are clients through which to
         # cycle. This assumption, besides seeming logical enough, dramatically
         # simplifies both the code and the interface, since we can then assume
@@ -83,9 +82,14 @@ class CycleFocus(Minibuffer):
         focus_list = [client for client in focus_list
                              if client.wm_state == WMState.NormalState]
         if not focus_list:
-            self.__log.debug("Not starting empty focus cycle.")
-            return
+            cls.__log.debug("Not starting empty focus cycle.")
+            return None
+        return super(CycleFocus, cls).__new__(cls, focus_list=focus_list,
+                                              **kwargs)
 
+    def __init__(self, event=None, focus_list=[], direction=+1, key_bindings={},
+                 select=lambda client: None, abort=lambda: None,
+                 **kwargs):
         super(CycleFocus, self).__init__(**kwargs)
 
         if isinstance(event, KeyPressEvent):
@@ -98,6 +102,11 @@ class CycleFocus(Minibuffer):
             self.__log.error("Focus cycle must be initiated by a key-press.")
             return
 
+        # Cycle-end callbacks.
+        self.select = select
+        self.abort = abort
+
+        # Initialize & start the cycle.
         self.focus_list = tuple(focus_list)
         self.initial_focus = self.focus_list[0]
         self.target_index = 0 # into focus list
@@ -141,12 +150,14 @@ class CycleFocus(Minibuffer):
     def accept_focus(self, event):
         self.__log.debug("Client 0x%x selected.", self.target.window)
         self.end_focus_cycle(self.target, event.time)
+        self.select(self.target)
 
     def abort_focus_cycle(self, event):
         self.__log.debug("Focus cycle aborted.")
         if self.target != self.initial_focus:
             self.target.decorator.unfocus()
         self.end_focus_cycle(self.initial_focus, event.time)
+        self.abort()
 
     def raise_target_window(self, event=None):
         self.target.configure(sibling=self.window, stack_mode=StackMode.Below)

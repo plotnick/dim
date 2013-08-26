@@ -188,6 +188,8 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
         self.minibuffer_font = minibuffer_font
         super(BaseWM, self).__init__(**kwargs)
 
+        self.focus_cycle = None # current focus cycle; only one allowed
+
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
 
@@ -313,12 +315,20 @@ and modify (carefully, please!) internal data structures.
         spawn("xterm")
 
     def start_focus_cycle(self, event, direction):
-        return CycleFocus(manager=self,
-                          config=self.minibuffer_config,
-                          event=event,
-                          direction=direction,
-                          focus_list=self.focus_list,
-                          key_bindings=focus_cycle_bindings)
+        """Start a new focus cycle, unless there is one already running."""
+        if self.focus_cycle:
+            return
+        def clear_cycle(client=None):
+            self.focus_cycle = None
+        self.focus_cycle = CycleFocus(manager=self,
+                                      config=self.minibuffer_config,
+                                      event=event,
+                                      direction=direction,
+                                      focus_list=self.focus_list,
+                                      key_bindings=focus_cycle_bindings,
+                                      select=clear_cycle,
+                                      abort=clear_cycle)
+        return self.focus_cycle
 
     def start_focus_cycle_next(self, event):
         self.start_focus_cycle(event, +1)
@@ -327,7 +337,8 @@ and modify (carefully, please!) internal data structures.
         self.start_focus_cycle(event, -1)
 
     def start_focus_cycle_warp(self, event):
-        self.start_focus_cycle(event, 0).warp_to_target()
+        if self.start_focus_cycle(event, 0):
+            self.focus_cycle.warp_to_target()
 
     def toggle_vmax(self, event):
         "Toggle vertical maximization."
