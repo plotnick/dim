@@ -37,6 +37,8 @@ def trivial_decoration(client, class_names=["XClock", "XEyes"]):
         return Decorator
 
 class UserManager(BaseWM):
+    """Override and extend the built-in window manager functionality."""
+
     def __init__(self, *args, **kwargs):
         super(UserManager, self).__init__(*args, **kwargs)
 
@@ -53,6 +55,9 @@ class UserManager(BaseWM):
 
     def show_mail(self, event):
         """Show, focus, and raise the mail window."""
+        # I use an xterm(1) whose instance name is set to "mail".
+        # You might use something different. If so, you'll probably
+        # have to change the tag specs, too.
         def is_mail_client(client):
             return client.wm_class.instance_name == "mail"
         try:
@@ -68,11 +73,23 @@ class UserManager(BaseWM):
         self.tagset(r".\mail")
         self.ensure_focus()
 
+# You can have my genuine IBM Model M when you noisily pry it from my cold,
+# dead hands. But it has only the standard complement of modifier keys,
+# and so choosing window manager key bindings that don't interfere with
+# client applications can be tricky. Emacs, especially, seems to just
+# gobble every possible key combination involving Control and Alt/Meta.
+# Users with modifiers to spare are encouraged to experiment with the idea
+# of dedicating an entire bucky bit (Hyper or Super) to Dim, and leaving
+# Control and Alt to the clients.
 global_key_bindings.update({
+    # These bindings are obviously mnemonic ("m" for "mail"), and happen
+    # not to interfere with anything that I use, including Emacs. But
+    # they're not great, and I'm not that happy with them.
     ("control", "alt", XK_m): UserManager.show_mail,
     ("control", "shift", XK_M): UserManager.no_mail
 })
 
+# Use Unicode versions of the standard fonts for titles & minibuffers.
 default_options.update({
     "title_font": "6x13U",
     "minibuffer_font": "10x20U"
