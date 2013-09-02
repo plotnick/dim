@@ -27,12 +27,12 @@ class IgnoreBindingsClient(Client):
         pass
 
 @client_selector
-def ignore_bindings(client, class_names=["Xephyr"]):
+def ignore_bindings(client, class_names=("Vncviewer", "Xephyr")):
     if client.wm_class.class_name in class_names:
         return IgnoreBindingsClient
 
 @decorator_selector
-def trivial_decoration(client, class_names=["XClock", "XEyes"]):
+def trivial_decoration(client, class_names=("XClock", "XEyes")):
     if client.wm_class.class_name in class_names:
         return Decorator
 
