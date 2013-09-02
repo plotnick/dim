@@ -340,11 +340,43 @@ and modify (carefully, please!) internal data structures.
         if self.start_focus_cycle(event, 0):
             self.focus_cycle.warp_to_target()
 
-    def toggle_vmax(self, event):
-        "Toggle vertical maximization."
-        self.send_net_wm_state(event_window(event),
-                               _NET_WM_STATE_TOGGLE,
-                               self.atoms["_NET_WM_STATE_MAXIMIZED_VERT"])
+    def fullscreen(self, event):
+        """Toggle fullscreen mode on the event window."""
+        self.send_net_wm_state(event_window(event), _NET_WM_STATE_TOGGLE,
+                               self.atoms["_NET_WM_STATE_FULLSCREEN"])
+
+    def maximize(self, window, horz, vert):
+        """Toggle, add, or remove horizontal & vertical maximization.
+
+        The argument handling logic here is slightly subtle, but not all
+        that difficult: if exactly one of horz or vert is true, then we
+        toggle maximization along that dimension; if both are true, then
+        we either maximize in both directions or remove the maximization;
+        and if both are false, then all maximization is removed. Other
+        interpretations are certainly possible (and are supported by the
+        underlying mechanism), but are not necessarily useful on an
+        everyday basis."""
+        def is_client_maximized():
+            client = self.get_client(window)
+            if client:
+                return client.is_maximized()
+        both = (horz == vert)
+        neither = ((not horz and not vert) or (both and is_client_maximized()))
+        action = (_NET_WM_STATE_REMOVE if neither else
+                  _NET_WM_STATE_ADD if both else
+                  _NET_WM_STATE_TOGGLE)
+        states = ([self.atoms["_NET_WM_STATE_MAXIMIZED_HORZ"],
+                   self.atoms["_NET_WM_STATE_MAXIMIZED_VERT"]] if both else
+                  [self.atoms["_NET_WM_STATE_MAXIMIZED_HORZ"]] if horz else
+                  [self.atoms["_NET_WM_STATE_MAXIMIZED_VERT"]] if vert else [])
+        self.send_net_wm_state(window, action, *states)
+
+    # Event handler wrappers for maximize: horizontal, vertical,
+    # toggle (full), unmaximize.
+    def hmax(self, event): self.maximize(event_window(event), True, False)
+    def vmax(self, event): self.maximize(event_window(event), False, True)
+    def tmax(self, event): self.maximize(event_window(event), True, True)
+    def umax(self, event): self.maximize(event_window(event), False, False)
 
 class UserManager(BaseWM):
     """This manager class is defined with the sole purpose of being redefined
@@ -367,7 +399,18 @@ global_key_bindings = {
     ("control", "alt", XK_Escape): BaseWM.delete_window,
     ("control", "alt", XK_Tab): BaseWM.change_tagset,
     ("control", "alt", XK_space): BaseWM.shell_command,
-    ("control", "alt", XK_equal): BaseWM.toggle_vmax,
+
+    ("control", "alt", XK_minus): BaseWM.umax,
+    ("control", "alt", XK_equal): {
+        XK_Return: BaseWM.fullscreen,
+        XK_Right: BaseWM.hmax,
+        XK_Left: BaseWM.hmax,
+        XK_Up: BaseWM.vmax,
+        XK_Down: BaseWM.vmax,
+        XK_space: BaseWM.tmax,
+        XK_minus: BaseWM.umax,
+    },
+
     ("control", XK_Pause): BaseWM.debug,
     -XK_Pause: BaseWM.activate_screen_saver
 }
