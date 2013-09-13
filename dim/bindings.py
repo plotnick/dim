@@ -1,11 +1,13 @@
 # -*- mode: Python; coding: utf-8 -*-
 
+from collections import namedtuple
 from operator import or_
 import exceptions
 
 from xcb.xproto import *
 
 from keysym import *
+from xutil import event_window
 
 __all__ = ["keypad_aliases",
            "KeyBindingMap", "ButtonBindingMap", "event_mask",
@@ -233,24 +235,85 @@ class Bindings(object):
         pass
 
 class KeyBindings(Bindings):
-    def __init__(self, bindings, keymap, modmap):
-        bindings = (bindings
-                    if isinstance(bindings, KeyBindingMap)
-                    else KeyBindingMap(bindings))
-        super(KeyBindings, self).__init__(bindings, keymap, modmap)
+    """Support lookup of key bindings via KeyPress & KeyRelease events.
 
-    def __getitem__(self, key):
-        if isinstance(key, KeyPressEvent):
-            key = (key.detail, key.state, True)
-        elif isinstance(key, KeyReleaseEvent):
-            key = (key.detail, key.state, False)
-        keycode, state, press = key
-        keysym = self.keymap.lookup_key(keycode, state)
-        return super(KeyBindings, self).__getitem__((keysym, state, press))
+    We also support the binding of key sequences via submaps, wherein
+    prefix keys are bound to (designators for) keymaps. We actively
+    grab the keyboard on recognizing a prefix key, so the bindings in
+    the submap need not be passively grabbed. This makes it convenient
+    to use unmodified symbols in a submap without worrying about
+    interfering with client applications."""
+
+    # When we recognize a prefix key, we'll push the old binding map onto
+    # a stack. But we'll also push the symbol that corresponds to that prefix
+    # key so that we can correctly ignore the corresponding release event.
+    BindingFrame = namedtuple("BindingFrame", "bindings, symbol")
+
+    def __init__(self, bindings, keymap, modmap):
+        bindings = (bindings if isinstance(bindings, KeyBindingMap)
+                             else KeyBindingMap(bindings))
+        super(KeyBindings, self).__init__(bindings, keymap, modmap)
+        self.binding_stack = []
+
+    def push(self, bindings, symbol, window, time):
+        """Push the current bindings onto the stack and grab the keyboard."""
+        self.binding_stack.append(self.BindingFrame(self.bindings, symbol))
+        self.bindings = bindings
+        self.conn.core.GrabKeyboard(False, window, time,
+                                    GrabMode.Sync, # queue pointer events
+                                    GrabMode.Async)
+
+    def unwind(self, time):
+        """Unwind the binding stack and release the grab."""
+        self.bindings = self.binding_stack[0].bindings
+        self.binding_stack = []
+        self.conn.core.UngrabKeyboard(time)
+
+    def __getitem__(self, event):
+        """Look up and return the binding designated by the given event."""
+        assert isinstance(event, (KeyPressEvent, KeyReleaseEvent))
+        press = True if isinstance(event, KeyPressEvent) else False
+        state = event.state
+        symbol = self.keymap.lookup_key(event.detail, state)
+        time = event.time
+        key = (symbol, state, press)
+
+        # In a submap, ignore modifiers and prefix key release.
+        if (self.binding_stack and
+            (is_modifier_key(symbol) or
+             (not press and symbol == self.binding_stack[-1].symbol))):
+            raise KeyError(key)
+
+        try:
+            binding = super(KeyBindings, self).__getitem__(key)
+        except KeyError:
+            # No binding found: maybe unwind the stack and re-raise.
+            if self.binding_stack:
+                self.unwind(time)
+            raise
+        if isinstance(binding, dict):
+            # Submap designator: instantiate a submap.
+            binding = self.__class__(binding, self.keymap, self.modmap)
+        if isinstance(binding, KeyBindings):
+            # Prefix binding: push the submap & ignore the prefix key.
+            self.push(binding.bindings, symbol, event_window(event), time)
+            raise KeyError(key)
+        if binding and self.binding_stack:
+            # Found a complete binding: unwind the stack.
+            self.unwind(time)
+        return binding
 
     def establish_grabs(self, window):
+        """Establish passive grabs on the given window for our bindings."""
+        # We establish passive grabs only for the top-level bindings.
+        # This is important if an action in a submap launches a new client;
+        # we don't want that client to establish grabs for the bindings in
+        # the submap.
+        bindings = (self.bindings if not self.binding_stack
+                                  else self.binding_stack[0].bindings)
+
         def grabs():
-            for modset, symbol, press in self.bindings.keys():
+            for modset, symbol, press in bindings.keys():
                 modifiers = self.bucky_bits(modset)
                 for keycode in self.keymap.keysym_to_keycodes(symbol):
                     yield (modifiers, keycode)
