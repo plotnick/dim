@@ -82,11 +82,17 @@ class UserManager(BaseWM):
 # of dedicating an entire bucky bit (Hyper or Super) to Dim, and leaving
 # Control and Alt to the clients.
 global_key_bindings.update({
-    # These bindings are obviously mnemonic ("m" for "mail"), and happen
-    # not to interfere with anything that I use, including Emacs. But
-    # they're not great, and I'm not that happy with them.
-    ("control", "alt", XK_m): UserManager.show_mail,
-    ("control", "shift", XK_M): UserManager.no_mail
+    # Control-` serves as a prefix key for a little submap of mnemonics and
+    # miscellaneous shortcuts. The backtick is meant to suggest execution in
+    # the Unix shell; it's also a conveniently located but underutilized key.
+    ("control", XK_grave): {
+        XK_space: lambda wm, event: spawn("xterm"),
+        XK_b: lambda wm, event: spawn("xbat"),
+        XK_c: lambda wm, event: spawn("xcalc"),
+        XK_e: lambda wm, event: spawn("emacsclient -nc"),
+        XK_m: UserManager.show_mail,
+        ("shift", XK_M): UserManager.no_mail
+    }
 })
 
 # Use Unicode versions of the standard fonts for titles & minibuffers.
