@@ -457,10 +457,13 @@ class NetWMStateClient(NetClient):
         action, first, second, source, _ = client_message.data.data32
         for atom in first, second:
             if atom:
-                handler = net_wm_state_classes.get(self.atoms.name(atom))
-                assert issubclass(handler, NetWMStateChange)
+                name = self.atoms.name(atom)
+                handler = net_wm_state_classes.get(name)
                 if handler:
+                    assert issubclass(handler, NetWMStateChange)
                     handler(self.manager, self, action, atom, source)
+                else:
+                    self.log.debug("Ignoring hint %s.", name)
         raise StopPropagation
 
 class NetWMState(NetCapability):
