@@ -326,6 +326,7 @@ and modify (carefully, please!) internal data structures.
                                       direction=direction,
                                       focus_list=self.focus_list,
                                       key_bindings=focus_cycle_bindings,
+                                      aliases=focus_cycle_aliases,
                                       select=clear_cycle,
                                       abort=clear_cycle)
         return self.focus_cycle
@@ -415,6 +416,8 @@ global_key_bindings = {
     -XK_Pause: BaseWM.activate_screen_saver
 }
 
+global_key_aliases = keypad_aliases
+
 global_button_bindings = {
     ("alt", 1): MoveResize.move_window,
     ("alt", 3): MoveResize.resize_window,
@@ -437,6 +440,8 @@ focus_cycle_bindings = {
     XK_Escape: CycleFocus.abort_focus_cycle,
     None: CycleFocus.accept_focus
 }
+
+focus_cycle_aliases = keypad_aliases
 
 # We take the defaults for some command-line options from this global variable
 # so that user code may easily override them.
@@ -573,7 +578,8 @@ if __name__ == "__main__":
 
     # Instantiate the window manager and start it up.
     wm = wm_class(display=options.display,
-                  key_bindings=global_key_bindings,
+                  key_bindings=KeyBindingMap(global_key_bindings,
+                                             aliases=global_key_aliases),
                   button_bindings=global_button_bindings,
                   titlebar_bindings=titlebar_button_bindings,
                   title_font=options.title_font,

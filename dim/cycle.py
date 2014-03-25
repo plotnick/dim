@@ -87,14 +87,16 @@ class CycleFocus(Minibuffer):
         return super(CycleFocus, cls).__new__(cls, focus_list=focus_list,
                                               **kwargs)
 
-    def __init__(self, event=None, focus_list=[], direction=+1, key_bindings={},
+    def __init__(self, event=None, focus_list=[], direction=+1,
+                 key_bindings={}, aliases={},
                  select=lambda client: None, abort=lambda: None,
                  **kwargs):
         super(CycleFocus, self).__init__(**kwargs)
 
         if isinstance(event, KeyPressEvent):
             modifiers = next(self.manager.key_bindings.modsets(event.state))
-            binding_map = ModalKeyBindingMap(modifiers, key_bindings)
+            binding_map = ModalKeyBindingMap(modifiers, key_bindings,
+                                             aliases=aliases)
             self.key_bindings = KeyBindings(binding_map,
                                             self.manager.keymap,
                                             self.manager.modmap)

@@ -47,6 +47,10 @@ keypad_aliases = {XK_KP_Space: XK_space,
                   XK_KP_8: XK_8,
                   XK_KP_9: XK_9}
 
+class InvalidSymbol(Exception):
+    "Invalid key symbol, alias, or desigantor."
+    pass
+
 def all_combinations(sequences):
     """Given a sequence of sequences, recursively yield all combinations of
     each element of the first sequence with all combinations of the rest of
@@ -67,7 +71,7 @@ def ensure_keysym(x):
     elif isinstance(x, basestring):
         return string_to_keysym(x)
     else:
-        raise exceptions.ValueError("invalid keysym designator '%s'" % (x,))
+        raise InvalidSymbol("invalid keysym designator '%s'" % (x,))
 
 class BindingMap(dict):
     """A dictionary of bindings which is parsed at initialization time.
@@ -107,8 +111,12 @@ class BindingMap(dict):
             iterable = iter(bindings)
         for key, value in iterable:
             key = ensure_sequence(key)
+            value = self.normalize_value(value)
             modifiers = frozenset(mod.lower() for mod in key[:-1])
-            symbol = self.ensure_symbol(key[-1])
+            try:
+                symbol = self.ensure_symbol(key[-1])
+            except InvalidSymbol:
+                continue
             yield ((modifiers, abs(symbol), symbol > 0),
                    self.normalize_value(value))
 
@@ -311,12 +319,17 @@ class KeyBindings(Bindings):
         # the submap.
         bindings = (self.bindings if not self.binding_stack
                                   else self.binding_stack[0].bindings)
-
+        inverse_aliases = dict(zip(bindings.aliases.values(),
+                                   bindings.aliases.keys()))
         def grabs():
             for modset, symbol, press in bindings.keys():
                 modifiers = self.bucky_bits(modset)
                 for keycode in self.keymap.keysym_to_keycodes(symbol):
                     yield (modifiers, keycode)
+                alias = inverse_aliases.get(symbol, None)
+                if alias:
+                    for keycode in self.keymap.keysym_to_keycodes(alias):
+                        yield (modifiers, keycode)
         self.conn.core.UngrabKey(Grab.Any, window, ModMask.Any)
         for modifiers, key in grabs():
             for locks in self.locking_modifier_combinations():
