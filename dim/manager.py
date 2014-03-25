@@ -227,9 +227,17 @@ class WindowManager(EventHandler, PropertyManager):
         client = self.make_client(window)
         decorator = self.make_decorator(self.select_decorator_class(client),
                                         client)
-        client.frame(decorator, self.place(client, geometry, adopted))
-        client.establish_grabs(key_bindings=self.key_bindings,
-                               button_bindings=self.button_bindings)
+        try:
+            client.frame(decorator, self.place(client, geometry, adopted))
+        except BadWindow:
+            log.warning("Error framing window 0x%x.", window)
+            return
+        try:
+            client.establish_grabs(key_bindings=self.key_bindings,
+                                   button_bindings=self.button_bindings)
+        except BadWindow:
+            log.warning("Error establishing grabs for window 0x%x.", window)
+            return
         self.frames[client.frame] = client
         self.clients[window] = client
         return client
