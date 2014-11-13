@@ -396,26 +396,28 @@ class Client(EventHandler, PropertyManager):
         return geometry
 
     def set_frame_shape(self):
-        self.manager.shape.Combine(xcb.shape.SO.Set,
-                                   xcb.shape.SK.Bounding,
-                                   xcb.shape.SK.Bounding,
-                                   self.frame,
-                                   self.offset.x,
-                                   self.offset.y,
-                                   self.window)
-        self.decorator.update_frame_shape()
+        if self.frame:
+            self.manager.shape.Combine(xcb.shape.SO.Set,
+                                       xcb.shape.SK.Bounding,
+                                       xcb.shape.SK.Bounding,
+                                       self.frame,
+                                       self.offset.x,
+                                       self.offset.y,
+                                       self.window)
+            self.decorator.update_frame_shape()
 
     def reset_frame_shape(self):
-        self.manager.shape.Mask(xcb.shape.SO.Set,
-                                xcb.shape.SK.Bounding,
-                                self.frame,
-                                0, 0,
-                                Pixmap._None)
-        self.manager.shape.Mask(xcb.shape.SO.Set,
-                                xcb.shape.SK.Clip,
-                                self.frame,
-                                0, 0,
-                                Pixmap._None)
+        if self.frame:
+            self.manager.shape.Mask(xcb.shape.SO.Set,
+                                    xcb.shape.SK.Bounding,
+                                    self.frame,
+                                    0, 0,
+                                    Pixmap._None)
+            self.manager.shape.Mask(xcb.shape.SO.Set,
+                                    xcb.shape.SK.Clip,
+                                    self.frame,
+                                    0, 0,
+                                    Pixmap._None)
 
     def focus(self, time=Time.CurrentTime):
         """Offer the input focus to the client. Returns true if the client
