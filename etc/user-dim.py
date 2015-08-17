@@ -73,6 +73,12 @@ class UserManager(BaseWM):
         self.tagset(r".\mail")
         self.ensure_focus()
 
+# Use Unicode versions of the standard fonts for titles & minibuffers.
+default_options.update({
+    "title_font": "6x13U",
+    "minibuffer_font": "10x20U"
+})
+
 # You can have my genuine IBM Model M when you noisily pry it from my cold,
 # dead hands. But it has only the standard complement of modifier keys,
 # and so choosing window manager key bindings that don't interfere with
@@ -86,6 +92,7 @@ global_key_bindings.update({
     # miscellaneous shortcuts. The backtick is meant to suggest execution in
     # the Unix shell; it's also a conveniently located but underutilized key.
     ("control", XK_grave): {
+        XK_Pause: lambda wm, event: spawn("xmms2 toggle"),
         XK_space: lambda wm, event: spawn("xterm"),
         XK_b: lambda wm, event: spawn("xbat"),
         XK_c: lambda wm, event: spawn("xcalc"),
@@ -95,8 +102,45 @@ global_key_bindings.update({
     }
 })
 
-# Use Unicode versions of the standard fonts for titles & minibuffers.
-default_options.update({
-    "title_font": "6x13U",
-    "minibuffer_font": "10x20U"
+# The Logitech T650 touchpad has two physical buttons (micro-switches)
+# located beneath a big honkin' slab o' slippery glass. In addition to
+# tap-to-click, it recognizes a handful of one-, two-, and three-finger
+# gestures compatible with Windows 8; for details, see
+# <http://franklinstrube.com/blog/logitech-t650-wireless-touchpad-ubuntu/>.
+# Note that despite being a pointing device, the events generated for some
+# of those are keycodes (possibly with modifiers), not button presses.
+# Also note that I've bound keycode 206 to Hyper instead of XF86TouchpadOff.
+right_edge_swipe = ("control", "super", XK_Hyper_L)
+left_edge_swipe = ("alt", "super", XK_BackSpace)
+top_edge_swipe = ("alt", "super", XK_Hyper_L)
+two_finger_swipe_up = 4
+two_finger_swipe_down = 5
+two_finger_swipe_left = 13
+two_finger_swipe_right = 14
+three_finger_swipe_left = 8
+three_finger_swipe_right = 9
+three_finger_swipe_up = (XK_Super_L,)
+three_finger_swipe_down = ("super", XK_d)
+
+global_key_bindings.update({
+    top_edge_swipe: BaseWM.vmax,
+    right_edge_swipe: BaseWM.tmax,
+    left_edge_swipe: BaseWM.hmax,
+    three_finger_swipe_up: RaiseLower.raise_window,
+    three_finger_swipe_down: RaiseLower.lower_window,
+})
+
+global_button_bindings.update({
+    ("alt", three_finger_swipe_right): BaseWM.start_focus_cycle_next,
+    ("alt", three_finger_swipe_left): BaseWM.start_focus_cycle_prev,
+})
+
+focus_cycle_button_bindings.update({
+    three_finger_swipe_right: CycleFocus.cycle_focus_next,
+    three_finger_swipe_left: CycleFocus.cycle_focus_prev
+})
+
+focus_cycle_key_bindings.update({
+    three_finger_swipe_up: CycleFocus.raise_target_window,
+    three_finger_swipe_down: CycleFocus.lower_target_window
 })
