@@ -9,8 +9,9 @@ from xcb.xproto import *
 from keysym import *
 from xutil import event_window
 
-__all__ = ["keypad_aliases",
-           "KeyBindingMap", "ButtonBindingMap", "event_mask",
+__all__ = ["keypad_aliases", "event_mask",
+           "BindingMap", "KeyBindingMap", "ButtonBindingMap",
+           "ModalKeyBindingMap", "ModalButtonBindingMap",
            "KeyBindings", "ButtonBindings"]
 
 keypad_aliases = {XK_KP_Space: XK_space,
@@ -71,7 +72,15 @@ def ensure_keysym(x):
     elif isinstance(x, basestring):
         return string_to_keysym(x)
     else:
-        raise InvalidSymbol("invalid keysym designator '%s'" % (x,))
+        raise InvalidSymbol("invalid keysym designator %r" % (x,))
+
+def event_mask(mask):
+    """A factory for a decorator that sets the "event_mask" attribute on a
+    function for use as a bound button action."""
+    def set_event_mask(function):
+        function.event_mask = mask
+        return function
+    return set_event_mask
 
 class BindingMap(dict):
     """A dictionary of bindings which is parsed at initialization time.
@@ -148,13 +157,47 @@ class ButtonBindingMap(BindingMap):
         else:
             return (EventMask.ButtonPress, value)
 
-def event_mask(mask):
-    """A factory for a decorator that sets the "event_mask" attribute on a
-    function for use as a bound button action."""
-    def set_event_mask(function):
-        function.event_mask = mask
-        return function
-    return set_event_mask
+
+class ModalBindingMap(BindingMap):
+    """A modal binding map is a specialized mapping that automatically
+    adds a given set of modifiers to each symbol, and which provides
+    a symbol designator (None) for the release of the last of them.
+    This is (by design, of course) exactly what is needed for "Alt+Tab"-style
+    focus cycling."""
+
+    def __init__(self, modifiers, *args, **kwargs):
+        self.modifiers = modifiers
+        super(ModalBindingMap, self).__init__(*args, **kwargs)
+
+    def parse_bindings(self, bindings,
+                       mod_keys={"control": (XK_Control_L, XK_Control_R),
+                                 "alt": (XK_Alt_L, XK_Alt_R),
+                                 "meta": (XK_Meta_L, XK_Meta_R),
+                                 "super": (XK_Super_L, XK_Super_R),
+                                 "hyper": (XK_Hyper_L, XK_Hyper_R)}):
+        for key, value in bindings.iteritems():
+            value = self.normalize_value(value)
+            if key is None:
+                # None designates the release of the last held modifier.
+                for mod in self.modifiers:
+                    mods = frozenset([mod])
+                    for keysym in mod_keys.get(mod, ()):
+                        yield ((mods, keysym, False), value)
+            elif isinstance(key, tuple):
+                # Add the given modifiers to the specified set.
+                mods = self.modifiers | frozenset(key[:-1])
+                symbol = self.ensure_symbol(key[-1])
+                yield ((mods, abs(symbol), symbol > 0), value)
+            else:
+                # Keys here are just symbol designators.
+                symbol = self.ensure_symbol(key)
+                yield ((self.modifiers, abs(symbol), symbol > 0), value)
+
+class ModalKeyBindingMap(ModalBindingMap, KeyBindingMap):
+    pass
+
+class ModalButtonBindingMap(ModalBindingMap, ButtonBindingMap):
+    pass
 
 class Bindings(object):
     """We'd like key and button bindings to be specified using keysyms
@@ -367,4 +410,3 @@ class ButtonBindings(Bindings):
                                           GrabMode.Async, GrabMode.Async,
                                           Window._None, Cursor._None,
                                           button, locks | modifiers)
-

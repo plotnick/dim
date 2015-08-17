@@ -325,7 +325,8 @@ and modify (carefully, please!) internal data structures.
                                       event=event,
                                       direction=direction,
                                       focus_list=self.focus_list,
-                                      key_bindings=focus_cycle_bindings,
+                                      button_bindings=focus_cycle_button_bindings,
+                                      key_bindings=focus_cycle_key_bindings,
                                       aliases=focus_cycle_aliases,
                                       select=clear_cycle,
                                       abort=clear_cycle)
@@ -392,6 +393,7 @@ titlebar_button_bindings = {
     2: BaseWM.change_tags
 }
 
+global_key_aliases = keypad_aliases
 global_key_bindings = {
     ("alt", XK_Tab): BaseWM.start_focus_cycle_next,
     ("alt", XK_ISO_Left_Tab): BaseWM.start_focus_cycle_prev,
@@ -416,8 +418,6 @@ global_key_bindings = {
     -XK_Pause: BaseWM.activate_screen_saver
 }
 
-global_key_aliases = keypad_aliases
-
 global_button_bindings = {
     ("alt", 1): MoveResize.move_window,
     ("alt", 3): MoveResize.resize_window,
@@ -429,7 +429,8 @@ global_button_bindings = {
 # modifiers are logically down when the cycle starts (i.e., the modifiers
 # specified in the bindings of BaseWM.start_focus_cycle_* above). The
 # special key None designates the release of the last held modifier.
-focus_cycle_bindings = {
+focus_cycle_aliases = keypad_aliases
+focus_cycle_key_bindings = {
     XK_Tab: CycleFocus.cycle_focus_next,
     XK_ISO_Left_Tab: CycleFocus.cycle_focus_prev,
     XK_Right: CycleFocus.cycle_focus_next,
@@ -441,7 +442,8 @@ focus_cycle_bindings = {
     None: CycleFocus.accept_focus
 }
 
-focus_cycle_aliases = keypad_aliases
+focus_cycle_button_bindings = {
+}
 
 # We take the defaults for some command-line options from this global variable
 # so that user code may easily override them.

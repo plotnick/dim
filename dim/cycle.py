@@ -16,35 +16,6 @@ from xutil import *
 
 __all__ = ["CycleFocus"]
 
-class ModalKeyBindingMap(KeyBindingMap):
-    """A modal key binding map is a specialized mapping that automatically
-    adds a specific set of modifiers to each specified key, and which
-    provides a symbol designator (None in this class) for the release of
-    the last of those modifers."""
-
-    def __init__(self, modifiers, *args, **kwargs):
-        self.modifiers = modifiers
-        super(ModalKeyBindingMap, self).__init__(*args, **kwargs)
-
-    def parse_bindings(self, bindings,
-                       mod_keys={"control": (XK_Control_L, XK_Control_R),
-                                 "alt": (XK_Alt_L, XK_Alt_R),
-                                 "meta": (XK_Meta_L, XK_Meta_R),
-                                 "super": (XK_Super_L, XK_Super_R),
-                                 "hyper": (XK_Hyper_L, XK_Hyper_R)}):
-        for key, value in bindings.iteritems():
-            value = self.normalize_value(value)
-            if key is None:
-                # None designates the release of the last held modifier.
-                for mod in self.modifiers:
-                    mods = frozenset([mod])
-                    for keysym in mod_keys.get(mod, ()):
-                        yield ((mods, keysym, False), value)
-            else:
-                # Keys here are just symbol designators.
-                symbol = self.ensure_symbol(key)
-                yield ((self.modifiers, abs(symbol), symbol > 0), value)
-
 class CycleFocus(Minibuffer):
     """Cycle through the visible windows and give the user the opportunity
     to choose one as the current keyboard focus.
@@ -70,7 +41,8 @@ class CycleFocus(Minibuffer):
     event_mask = (EventMask.ButtonPress |
                   EventMask.ButtonRelease |
                   EventMask.KeyPress |
-                  EventMask.KeyRelease)
+                  EventMask.KeyRelease |
+                  EventMask.EnterWindow)
 
     __log = logging.getLogger("cycle")
 
@@ -88,20 +60,24 @@ class CycleFocus(Minibuffer):
                                               **kwargs)
 
     def __init__(self, event=None, focus_list=[], direction=+1,
-                 key_bindings={}, aliases={},
+                 button_bindings={}, key_bindings={}, aliases={},
                  select=lambda client: None, abort=lambda: None,
                  **kwargs):
         super(CycleFocus, self).__init__(**kwargs)
 
-        if isinstance(event, KeyPressEvent):
+        if isinstance(event, (KeyPressEvent, ButtonPressEvent)):
             modifiers = next(self.manager.key_bindings.modsets(event.state))
-            binding_map = ModalKeyBindingMap(modifiers, key_bindings,
-                                             aliases=aliases)
-            self.key_bindings = KeyBindings(binding_map,
+            key_bindings = ModalKeyBindingMap(modifiers, key_bindings,
+                                              aliases=aliases)
+            button_bindings = ModalButtonBindingMap(modifiers, button_bindings)
+            self.key_bindings = KeyBindings(key_bindings,
                                             self.manager.keymap,
                                             self.manager.modmap)
+            self.button_bindings = ButtonBindings(button_bindings,
+                                                  self.manager.keymap,
+                                                  self.manager.modmap)
         else:
-            self.__log.error("Focus cycle must be initiated by a key-press.")
+            self.__log.error("Must start with a key or button press.")
             return
 
         # Cycle-end callbacks.
@@ -150,7 +126,7 @@ class CycleFocus(Minibuffer):
         self.cycle_focus(-1)
 
     def accept_focus(self, event):
-        self.__log.debug("Client 0x%x selected.", self.target.window)
+        self.__log.debug("Client 0x%x accepted.", self.target.window)
         self.end_focus_cycle(self.target, event.time)
         self.select(self.target)
 
@@ -172,10 +148,32 @@ class CycleFocus(Minibuffer):
         self.conn.core.WarpPointer(Window._None, self.target.window,
                                    0, 0, 0, 0, int16(x), int16(y))
 
+    def map(self, time=Time.CurrentTime):
+        super(CycleFocus, self).map(time)
+        self.conn.core.GrabPointer(True, self.window,
+                                   (EventMask.ButtonPress |
+                                    EventMask.ButtonRelease),
+                                   GrabMode.Async,
+                                   GrabMode.Async,
+                                   Window._None, 0, time)
+
+    def unmap(self, time=Time.CurrentTime):
+        self.conn.core.UngrabPointer(time)
+        super(CycleFocus, self).unmap()
+
     @handler((KeyPressEvent, KeyReleaseEvent))
     def handle_key_event(self, event):
         try:
             action = self.key_bindings[event]
+        except KeyError:
+            raise UnhandledEvent(event)
+        action(self, event)
+        raise StopPropagation(event)
+
+    @handler((ButtonPressEvent, ButtonReleaseEvent))
+    def handle_button_event(self, event):
+        try:
+            action = self.button_bindings[event]
         except KeyError:
             raise UnhandledEvent(event)
         action(self, event)
