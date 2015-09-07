@@ -18,7 +18,7 @@ __all__ = ["int16", "card16",
            "event_window", "notify_detail_name", "notify_mode_name",
            "configure_notify", "send_client_message",
            "grab_server", "mask_events",
-           "get_input_focus", "get_window_geometry",
+           "get_input_focus", "get_geometry",
            "query_extension", "query_pointer",
            "select_values", "string16", "textitem16",
            "client_message_type", "client_message", "ClientMessage"]
@@ -219,10 +219,10 @@ def get_input_focus(connection, screen=None):
     else:
         return focus
 
-def get_window_geometry(connection, window):
-    """Request a window's geometry from the X server and return it as a
-    Geometry instance."""
-    cookie = connection.core.GetGeometry(window)
+def get_geometry(connection, drawable):
+    """Request the geometry of a drawable from the X server and return it as
+    a Geometry instance."""
+    cookie = connection.core.GetGeometry(drawable)
     try:
         reply = cookie.reply()
     except BadDrawable:

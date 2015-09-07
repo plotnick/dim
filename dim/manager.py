@@ -91,7 +91,7 @@ class WindowManager(EventHandler, PropertyManager):
                               else self.conn.pref_screen)
         self.screen = self.conn.get_setup().roots[self.screen_number]
         self.window = self.screen.root
-        self.screen_geometry = get_window_geometry(self.conn, self.window)
+        self.screen_geometry = get_geometry(self.conn, self.window)
         log.debug("Screen geometry: %s.", self.screen_geometry)
 
         self.events = deque([]) # event queue
@@ -220,7 +220,7 @@ class WindowManager(EventHandler, PropertyManager):
             pass
 
         log.debug("Managing client window 0x%x.", window)
-        geometry = get_window_geometry(self.conn, window)
+        geometry = get_geometry(self.conn, window)
         if not geometry:
             return None
 

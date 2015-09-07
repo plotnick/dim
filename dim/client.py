@@ -270,7 +270,7 @@ class Client(EventHandler, PropertyManager):
     def geometry(self):
         """Return the client window geometry relative to its parent's origin."""
         if self._geometry is None:
-            self._geometry = get_window_geometry(self.conn, self.window)
+            self._geometry = get_geometry(self.conn, self.window)
         return self._geometry
 
     @geometry.setter
@@ -282,7 +282,7 @@ class Client(EventHandler, PropertyManager):
     def frame_geometry(self):
         """Return the geometry of the client's frame."""
         if self._frame_geometry is None:
-            self._frame_geometry = get_window_geometry(self.conn, self.frame)
+            self._frame_geometry = get_geometry(self.conn, self.frame)
         return self._frame_geometry
 
     @frame_geometry.setter
