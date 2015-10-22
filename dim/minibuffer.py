@@ -26,8 +26,14 @@ class MinibufferConfig(FontConfig, HighlightConfig):
 class Minibuffer(InputField):
     keys = KeyBindingMap({XK_Up: "previous-history-element",
                           XK_Down: "next-history-element",
+                          ("control", "p"): "previous-history-element",
+                          ("control", "n"): "next-history-element",
                           ("meta", "p"): "previous-history-element",
-                          ("meta", "n"): "next-history-element"},
+                          ("meta", "n"): "next-history-element",
+                          ("super", "p"): "previous-history-element",
+                          ("super", "n"): "next-history-element",
+                          ("hyper", "p"): "previous-history-element",
+                          ("hyper", "n"): "next-history-element"},
                          parent=InputField.keys)
 
     # If no history ring is provided at initialization time, we'll use
