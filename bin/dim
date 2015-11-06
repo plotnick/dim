@@ -140,7 +140,7 @@ class EmergencyTTY(object):
             daemon()
             execlp("xterm", "xterm",
                    "-name", "dim",
-                   "-geometry", "-0-0",
+                   "-geometry", "100x40+0+0",
                    "-S%s/%d" % (ttyname(master), master))
         else:
             dup2(slave, sys.stdin.fileno())
