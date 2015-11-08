@@ -311,6 +311,20 @@ and modify (carefully, please!) internal data structures.
         assert isinstance(event, (KeyReleaseEvent, ButtonReleaseEvent))
         self.conn.core.ForceScreenSaverChecked(ScreenSaver.Active).check()
 
+    def inc_backlight(self, event):
+        """Make the primary output's backlight brighter."""
+        try:
+            self.heads.adjust_backlight(self.heads.primary_output, 5, "inc")
+        except AttributeError:
+            return
+
+    def dec_backlight(self, event):
+        """Make the primary output's backlight dimmer."""
+        try:
+            self.heads.adjust_backlight(self.heads.primary_output, 5, "dec")
+        except AttributeError:
+            return
+
     def terminal(self, event):
         spawn("xterm")
 

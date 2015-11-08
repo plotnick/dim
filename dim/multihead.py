@@ -2,7 +2,10 @@
 
 """Manage multiple heads (physical screens or monitors) on a single X screen."""
 
+from __future__ import division
+
 import logging
+from struct import pack, unpack_from
 
 import xcb
 from xcb.xproto import *
@@ -100,28 +103,91 @@ class RandRManager(HeadManager, EventHandler):
     def __init__(self, conn, screen, manager):
         super(RandRManager, self).__init__(conn, screen, manager)
 
-        def get_crtc_info(screen):
-            """Yield pairs of the form (CRTC, Geometry) for each CRTC
-            connected to the given screen."""
-            resources = self.ext.GetScreenResources(screen.root).reply()
-            timestamp = resources.config_timestamp
-            for crtc, cookie in [(crtc, self.ext.GetCrtcInfo(crtc, timestamp))
+        primary_cookie = self.ext.GetOutputPrimary(screen.root)
+        resources = self.ext.GetScreenResourcesCurrent(screen.root).reply()
+        timestamp = resources.config_timestamp
+        def crtcs():
+            for crtc, cookie in [(crtc,
+                                  self.ext.GetCrtcInfo(crtc, timestamp))
                                  for crtc in resources.crtcs]:
                 info = cookie.reply()
-                if info.status or not info.mode:
-                    continue
                 yield (crtc,
                        Geometry(info.x, info.y, info.width, info.height, 0))
-        self.crtcs = dict(get_crtc_info(self.screen))
-        self.log.debug("CRTC geometries: {%s}.",
-                       ", ".join("0x%x: %s" % (crtc, geometry)
-                                 for crtc, geometry in self.crtcs.items()))
+        def outputs():
+            for output, cookie in [(output,
+                                    self.ext.GetOutputInfo(output, timestamp))
+                                   for output in resources.outputs]:
+                info = cookie.reply()
+                yield (output, {"name": unicode(info.name.buf(), "UTF-8"),
+                                "crtcs": list(info.crtcs)})
+
+        self.atoms = manager.atoms
+        self.crtcs = dict(crtcs())
+        self.outputs = dict(outputs())
+        self.primary_output = primary_cookie.reply().output
+
+        self.log.debug("CRTCs: {\n %s\n}.",
+                       ",\n ".join("%d: %s" % (crtc, geometry)
+                                   for crtc, geometry in self.crtcs.items()))
+        self.log.debug("Outputs: {\n %s\n}.",
+                       ",\n ".join("%s%d: %s" % \
+                                   ("\b*" if output == self.primary_output
+                                          else "",
+                                    output,
+                                    info)
+                                   for output, info in self.outputs.items()))
+        if self.primary_output:
+            self.log.debug("Backlight level on output %d: %s",
+                           self.primary_output,
+                           self.get_backlight(self.primary_output))
 
         self.manager.register_window_handler(self.screen.root, self)
         self.ext.SelectInput(self.screen.root, xcb.randr.NotifyMask.CrtcChange)
 
     def __iter__(self):
         return self.crtcs.itervalues()
+
+    def query_backlight_range(self, output):
+        reply = self.ext.QueryOutputProperty(output,
+                                             self.atoms["Backlight"]).reply()
+        return reply.validValues if reply.range else (0, 0)
+
+    def get_backlight(self, output):
+        reply = self.ext.GetOutputProperty(output,
+                                           self.atoms["Backlight"],
+                                           self.atoms["INTEGER"],
+                                           0, 4, False, False).reply()
+        return (unpack_from("=i", reply.data.buf())[0]
+                if (reply.type == self.atoms["INTEGER"] and
+                    reply.num_items == 1 and
+                    reply.format == 32)
+                else 0)
+
+    def set_backlight(self, output, value):
+        self.log.info("Setting backlight on output %d to %d.", output, value)
+        self.ext.ChangeOutputProperty(output,
+                                      self.atoms["Backlight"],
+                                      self.atoms["INTEGER"],
+                                      32, PropMode.Replace, 1,
+                                      pack("=i", value))
+
+    def adjust_backlight(self, output, percent, op):
+        if not output:
+            return
+
+        # adapted from Keith Packard's xbacklight(1)
+        cur = self.get_backlight(output)
+        min, max = self.query_backlight_range(output)
+        try:
+            new = {"set": lambda x: min + x,
+                   "inc": lambda x: cur + x,
+                   "dec": lambda x: cur - x}[op](percent * (max - min) / 100)
+        except KeyError:
+            self.log.error("Bad backlight operation %s.", op)
+            return
+        if new > max: new = max
+        if new < min: new = min
+        self.set_backlight(output, new)
 
     @handler(xcb.randr.NotifyEvent)
     def handle_notify(self, event):
@@ -131,12 +197,12 @@ class RandRManager(HeadManager, EventHandler):
                 return
             if cc.mode:
                 new_geometry = Geometry(cc.x, cc.y, cc.width, cc.height, 0)
-                self.log.debug("CRTC 0x%x changed: %s.", cc.crtc, new_geometry)
+                self.log.debug("CRTC %d changed: %s.", cc.crtc, new_geometry)
                 old_geometry = self.crtcs.get(cc.crtc)
                 self.crtcs[cc.crtc] = new_geometry
                 self.head_geometry_changed(old_geometry, new_geometry)
             else:
-                self.log.debug("CRTC 0x%x disabled.", cc.crtc)
+                self.log.debug("CRTC %d disabled.", cc.crtc)
                 old_geometry = self.crtcs.pop(cc.crtc, None)
                 self.head_geometry_changed(old_geometry, None)
 
