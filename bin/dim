@@ -411,7 +411,7 @@ global_key_aliases = keypad_aliases
 global_key_bindings = {
     ("alt", XK_Tab): BaseWM.start_focus_cycle_next,
     ("alt", XK_ISO_Left_Tab): BaseWM.start_focus_cycle_prev,
-    ("alt", XK_Return): BaseWM.start_focus_cycle_warp,
+    ("alt", XK_period): BaseWM.start_focus_cycle_warp,
 
     ("control", "alt", XK_Escape): BaseWM.delete_window,
     ("control", "alt", XK_Tab): BaseWM.change_tagset,
@@ -451,8 +451,8 @@ focus_cycle_key_bindings = {
     XK_Left: CycleFocus.cycle_focus_prev,
     XK_Up: CycleFocus.raise_target_window,
     XK_Down: CycleFocus.lower_target_window,
-    XK_Return: CycleFocus.warp_to_target,
     XK_Escape: CycleFocus.abort_focus_cycle,
+    XK_period: CycleFocus.warp_to_target,
     None: CycleFocus.accept_focus
 }
 
