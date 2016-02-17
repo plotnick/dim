@@ -104,7 +104,9 @@ class BindingMap(dict):
     def __init__(self, mapping, parent=None, aliases={}):
         super(BindingMap, self).__init__(self.parse_bindings(mapping))
         self.parent = parent
-        self.aliases = dict(parent.aliases if parent else [])
+        self.aliases = (dict(parent.aliases)
+                        if isinstance(parent, BindingMap)
+                        else {})
         self.aliases.update(aliases)
 
     def parse_bindings(self, bindings):
