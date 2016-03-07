@@ -29,6 +29,7 @@ from dim.minibuffer import *
 from dim.moveresize import MoveResize
 from dim.properties import AtomList, WMCommand
 from dim.raiselower import RaiseLower
+from dim.selections import SelectionClient
 from dim.tags import *
 from dim.xutil import *
 
@@ -40,6 +41,10 @@ def print_caption(out=None):
         print >> out, "\033[1mDIM OF THE YARD!\033[m"
     else:
         print >> out, "DIM OF THE YARD!"
+
+def shquote(command, chars=re.compile(r'([$`"\\\n])')):
+    "Quote a string for safe inclusion in Bourne shell double quotes."
+    return chars.sub(r"\\\1", command)
 
 def spawn(command, interactive=False):
     """Execute command (a string) in the background via a shell."""
@@ -175,7 +180,7 @@ class TrivialTTY(EmergencyTTY):
     def close(self):
         pass
 
-class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
+class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
     default_decorator_class = TitlebarDecorator
 
     def __init__(self,
@@ -238,7 +243,28 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
         client.decorator.read_from_user("Tags: ", " ".join(tag_names),
                                         set_tags, time=event.time)
 
+    def mail(self, event):
+        """Show, focus, and raise the mail window."""
+        # I use an xterm(1) whose instance name is set to "mail".
+        # You might use something different. If so, you'll probably
+        # have to change the tag specs, too.
+        def is_mail_client(client):
+            return client.wm_class.instance_name == "mail"
+        try:
+            mail = next(self.find_clients(is_mail_client))
+        except StopIteration:
+            return
+        self.tagset(r".|mail")
+        self.ensure_focus(mail, event.time)
+        mail.configure(stack_mode=StackMode.TopIf)
+
+    def nomail(self, event):
+        """Hide the mail client."""
+        self.tagset(r".\mail")
+        self.ensure_focus(None, event.time)
+
     def shell_command(self, event):
+        """Prompt for a shell command and execute it."""
         def execute(command):
             spawn(command, interactive=True)
             dismiss()
@@ -253,6 +279,7 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
         minibuffer.map(event.time)
 
     def change_tagset(self, event):
+        """Prompt for a tagset expression and show it."""
         def execute(spec):
             try:
                 expr = parse_tagset_spec(spec)
@@ -275,6 +302,7 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
         minibuffer.map(event.time)
 
     def delete_window(self, event):
+        """Delete the currently focused window."""
         client = self.current_focus
         if client:
             client.delete(event.time)
@@ -282,6 +310,7 @@ class BaseWM(EWMHManager, TagManager, MoveResize, RaiseLower):
             log.warning("Can't get current input focus.")
 
     def debug(self, event):
+        """Activate the Dim debugging console."""
         self.conn.core.SetInputFocusChecked(InputFocus.PointerRoot,
                                             InputFocus.PointerRoot,
                                             event.time).check()
@@ -305,9 +334,8 @@ and modify (carefully, please!) internal data structures.
         self.ensure_focus()
 
     def activate_screen_saver(self, event):
-        # This function must be bound to a release event, since otherwise,
-        # the corresponding release event will immediately wake up the
-        # server.
+        """Activate the screen saver. Should be bound to a release event,
+        since otherwise the release will immediately wake up the server."""
         assert isinstance(event, (KeyReleaseEvent, ButtonReleaseEvent))
         self.conn.core.ForceScreenSaverChecked(ScreenSaver.Active).check()
 
@@ -325,8 +353,52 @@ and modify (carefully, please!) internal data structures.
         except AttributeError:
             return
 
+    def battery(self, event):
+        spawn("xbat -d", True) # shell function
+
+    def calculator(self, event):
+        spawn("xcalc")
+
+    def editor(self, event):
+        spawn("emacsclient -nc")
+
+    def ssh(self, event):
+        spawn("xterm -e ssh home")
+
     def terminal(self, event):
         spawn("xterm")
+
+    def top(self, event):
+        spawn("xterm -e top")
+
+    def dictionary(self, event):
+        "Look up the selected word in the dictionary."
+        def lookup(string):
+            spawn('dict "%s" 2>&1 | xmessage -nearmouse -file -' % \
+                  shquote(string.strip()))
+        self.call_with_primary_selection(lookup,
+                                         requestor=self.default_focus_window,
+                                         time=event.time)
+
+    def www(self, event,
+            scheme=re.compile(r"^(https?|ftp|file)://", re.IGNORECASE),
+            spaces=re.compile(r"\s+", re.UNICODE),
+            angles=re.compile(r"<([^>]+)>"),
+            quotes=re.compile(r'"([^"]+)"')):
+        """Invoke a web browser with the selected URI.
+        See RFC 3986, Appendix C: Delimiting a URI in Context."""
+        def browse(string):
+            string = spaces.sub("", string)
+            delims = angles.match(string) or quotes.match(string)
+            string = delims.group(1) if delims else string
+            spawn('x-www-browser "%s"' % shquote(string) if scheme.match(string)
+                  else "x-www-browser")
+        self.call_with_primary_selection(browse,
+                                         requestor=self.default_focus_window,
+                                         time=event.time)
+
+    def zzz(self, event):
+        spawn("zzz", True) # command on BSD, alias on GNU/Linux
 
     def start_focus_cycle(self, event, direction):
         """Start a new focus cycle, unless there is one already running."""

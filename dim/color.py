@@ -61,7 +61,7 @@ class HLSColor(Color, namedtuple("HLS", "hue, lightness, saturation")):
 class InvalidColorSpec(Exception):
     pass
 
-def parse_color(name, pattern=re.compile("#([0-9a-z]+)$", re.I)):
+def parse_color(name, pattern=re.compile(r"#([0-9a-z]+)$", re.IGNORECASE)):
     """Parse a device-independent hexadecimal color specification."""
     match = pattern.match(name)
     if not match:

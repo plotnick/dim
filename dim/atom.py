@@ -47,6 +47,8 @@ class AtomCache(object):
         # Maybe it's one of the pre-defined atoms.
         if name is None:
             return 0
+        elif isinstance(name, int):
+            return name
         elif isinstance(name, str):
             try:
                 return getattr(Atom, name)

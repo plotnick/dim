@@ -601,3 +601,10 @@ class TagManager(WindowManager):
         except IndexError:
             log.warning("Stack underflow while evaluating tagset expression.")
         self.ensure_focus(time=time)
+
+    def tagset(self, spec, show=True):
+        """Parse and execute a tagset specification directly.
+        Does not use or set the _DIM_TAGSET_EXPR property."""
+        expr = parse_tagset_spec(spec) + (["_DIM_TAGSET_SHOW"] if show else [])
+        self.tag_machine.run(intern_tagset_expr(self.conn, expr,
+                                                atoms=self.atoms))

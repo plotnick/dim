@@ -15,7 +15,6 @@ __author__ = "Alex Plotnick <shrike@netaxs.com>"
 from dim.client import Client
 from dim.decorator import Decorator
 from dim.manager import client_selector, decorator_selector
-from dim.tags import intern_tagset_expr, parse_tagset_spec
 
 class IgnoreBindingsClient(Client):
     """A client class that does not establish any key or button grabs.
@@ -45,34 +44,6 @@ class UserManager(BaseWM):
         # Define a tagset alias for the browser and mail windows.
         self.tagset(r"z={www|mail}", show=False)
 
-    def tagset(self, spec, show=True):
-        """Parse and execute a tagset specification directly. This method
-        does not send the expression via a property of the root window;
-        rather, it feeds it directly into the tag machine."""
-        expr = parse_tagset_spec(spec) + (["_DIM_TAGSET_SHOW"] if show else [])
-        self.tag_machine.run(intern_tagset_expr(self.conn, expr,
-                                                atoms=self.atoms))
-
-    def show_mail(self, event):
-        """Show, focus, and raise the mail window."""
-        # I use an xterm(1) whose instance name is set to "mail".
-        # You might use something different. If so, you'll probably
-        # have to change the tag specs, too.
-        def is_mail_client(client):
-            return client.wm_class.instance_name == "mail"
-        try:
-            mail = next(self.find_clients(is_mail_client))
-        except StopIteration:
-            return
-        self.tagset(r".|mail")
-        self.ensure_focus(mail, event.time)
-        mail.configure(stack_mode=StackMode.TopIf)
-
-    def no_mail(self, event):
-        """Hide the mail client."""
-        self.tagset(r".\mail")
-        self.ensure_focus()
-
 # Use Unicode versions of the standard fonts for titles & minibuffers.
 default_options.update({
     "title_font": "6x13U",
@@ -93,12 +64,12 @@ global_key_bindings.update({
     # the Unix shell; it's also a conveniently located but underutilized key.
     ("control", XK_grave): {
         XK_Pause: lambda wm, event: spawn("xmms2 toggle"),
-        XK_space: lambda wm, event: spawn("xterm"),
-        XK_b: lambda wm, event: spawn("xbat"),
-        XK_c: lambda wm, event: spawn("xcalc"),
-        XK_e: lambda wm, event: spawn("emacsclient -nc"),
-        XK_m: UserManager.show_mail,
-        ("shift", XK_M): UserManager.no_mail
+        XK_space: BaseWM.terminal,
+        XK_b: BaseWM.battery,
+        XK_c: BaseWM.calculator,
+        XK_e: BaseWM.editor,
+        XK_m: BaseWM.mail,
+        ("shift", XK_M): BaseWM.nomail
     }
 })
 
