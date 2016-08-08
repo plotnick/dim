@@ -14,11 +14,9 @@ class TitlebarConfig(FontConfig, HighlightConfig):
     def __init__(self, manager, **kwargs):
         super(TitlebarConfig, self).__init__(manager, **kwargs)
 
-        # Padding is based on the font descent, plus 2 pixels for the relief
-        # edge, with a small scaling factor.
         ascent = self.font_info.font_ascent
         descent = self.font_info.font_descent
-        pad = (descent + 2) * 6 // 5
+        pad = descent
         self.height = 2 * pad + ascent + descent
         self.baseline = pad + ascent
 
