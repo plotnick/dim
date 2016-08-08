@@ -362,6 +362,9 @@ and modify (carefully, please!) internal data structures.
     def editor(self, event):
         spawn("emacsclient -nc")
 
+    def refresh(self, event):
+        spawn("xrefresh")
+
     def ssh(self, event):
         spawn("xterm -e ssh home")
 
