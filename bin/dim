@@ -192,8 +192,12 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
         self.title_font = title_font
         self.minibuffer_font = minibuffer_font
         super(BaseWM, self).__init__(**kwargs)
-
         self.focus_cycle = None # current focus cycle; only one allowed
+
+    @property
+    def current_focus(self):
+        return (self.focus_cycle.target if self.focus_cycle
+                else super(BaseWM, self).current_focus)
 
     def init_graphics(self):
         super(BaseWM, self).init_graphics()
@@ -300,6 +304,14 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
                                 commit=execute,
                                 rollback=dismiss)
         minibuffer.map(event.time)
+
+    def next_head(self, event):
+        """Move the currently focused window to the next head."""
+        self.heads.move_client(self.current_focus, +1)
+
+    def previous_head(self, event):
+        """Move the currently focused window to the previous head."""
+        self.heads.move_client(self.current_focus, -1)
 
     def delete_window(self, event):
         """Delete the currently focused window."""

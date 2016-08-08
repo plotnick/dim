@@ -94,6 +94,22 @@ class HeadManager(object):
         return (self.client_head_geometry(self.manager.current_focus) or
                 self.pointer_head_geometry)
 
+    def move_client(self, client=None, incr=1):
+        """Move a client window to another head."""
+        client = client or self.manager.current_focus
+        if not client:
+            return
+        heads = tuple(self)
+        if len(heads) < 2:
+            return
+        cur_head = self.client_head_geometry(client)
+        new_head = heads[(heads.index(cur_head) + incr) % len(heads)]
+        position = client.manager.constrain_position(client,
+                                                     client.position() -
+                                                     cur_head.position() +
+                                                     new_head.position())
+        client.configure_request(x=position.x, y=position.y)
+
 class RandRManager(HeadManager, EventHandler):
     """Support multiple heads and root window geometry changes using the
     X Resize and Rotate extension."""

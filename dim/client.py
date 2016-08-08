@@ -289,6 +289,14 @@ class Client(EventHandler, PropertyManager):
         assert isinstance(geometry, Geometry), "invalid geometry %r" % geometry
         self._frame_geometry = geometry
 
+    def position(self):
+        """Return the position of the client's frame."""
+        return self.frame_geometry.position()
+
+    def size(self):
+        """Return the size of the client's frame."""
+        return self.frame_geometry.size()
+
     @property
     def absolute_geometry(self):
         """Return the client window geometry, relative to the root's origin,

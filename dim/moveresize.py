@@ -361,7 +361,7 @@ class ClientUpdate(object):
         client = self.client
         position = client.manager.constrain_position(client, position)
         client.configure_request(x=position.x, y=position.y)
-        return client.frame_geometry.position()
+        return client.position()
 
     def resize(self, size, gravity):
         client = self.client
