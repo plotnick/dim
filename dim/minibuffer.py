@@ -92,10 +92,13 @@ class Minibuffer(InputField):
     def destroy(self, time=Time.CurrentTime):
         super(Minibuffer, self).destroy()
 
-        # If we were the top-most minibuffer on the stack, map the next one
-        # as we pop ourselves off.
+        # If we were the top-most minibuffer on the stack,
+        # map the next one as we pop ourselves off.
         stack = self.manager.minibuffers
-        i = stack.index(self)
+        try:
+            i = stack.index(self)
+        except ValueError:
+            return
         if i == len(stack) - 1:
             stack[i - 1].map(time)
         del stack[i]
