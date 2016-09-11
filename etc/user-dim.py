@@ -46,72 +46,111 @@ class UserManager(BaseWM):
 
 # Use Unicode versions of the standard fonts for titles & minibuffers.
 default_options.update({
-    "title_font": "6x13U",
+    "title_font": "10x20U",
     "minibuffer_font": "10x20U"
 })
 
-# You can have my genuine IBM Model M when you noisily pry it from my cold,
-# dead hands. But it has only the standard complement of modifier keys,
-# and so choosing window manager key bindings that don't interfere with
-# client applications can be tricky. Emacs, especially, seems to just
-# gobble every possible key combination involving Control and Alt/Meta.
-# Users with modifiers to spare are encouraged to experiment with the idea
-# of dedicating an entire bucky bit (Hyper or Super) to Dim, and leaving
-# Control and Alt to the clients.
-global_key_bindings.update({
-    # Control-` serves as a prefix key for a little submap of mnemonics and
-    # miscellaneous shortcuts. The backtick is meant to suggest execution in
-    # the Unix shell; it's also a conveniently located but underutilized key.
-    ("control", XK_grave): {
-        XK_Pause: lambda wm, event: spawn("xmms2 toggle"),
-        XK_space: BaseWM.terminal,
-        XK_b: BaseWM.battery,
-        XK_c: BaseWM.calculator,
-        XK_e: BaseWM.editor,
-        XK_m: BaseWM.mail,
-        ("shift", XK_M): BaseWM.nomail
-    }
-})
+# Extra (inet) keys
+XK_XF86AudioMute = 0x1008ff12
+XK_XF86AudioLowerVolume = 0x1008ff11
+XK_XF86AudioRaiseVolume = 0x1008ff13
+XK_XF86AudioMicMute = 0x1008ffb2
+XK_XF86MonBrightnessDown = 0x1008ff03
+XK_XF86MonBrightnessUp = 0x1008ff02
+XK_XF86Display = 0x1008ff59
+XK_XF86WLAN = 0x1008ff95
+XK_XF86Tools = 0x1008ff81
+XK_XF86Search = 0x1008ff1b
+XK_XF86LaunchA = 0x1008ff4a
+XK_XF86Explorer = 0x1008ff5d
 
-# The Logitech T650 touchpad has two physical buttons (micro-switches)
-# located beneath a big honkin' slab o' slippery glass. In addition to
-# tap-to-click, it recognizes a handful of one-, two-, and three-finger
-# gestures compatible with Windows 8; for details, see
-# <http://franklinstrube.com/blog/logitech-t650-wireless-touchpad-ubuntu/>.
-# Note that despite being a pointing device, the events generated for some
-# of those are keycodes (possibly with modifiers), not button presses.
-# Also note that I've bound keycode 206 to Hyper instead of XF86TouchpadOff.
-right_edge_swipe = ("control", "super", XK_Hyper_L)
-left_edge_swipe = ("alt", "super", XK_BackSpace)
-top_edge_swipe = ("alt", "super", XK_Hyper_L)
+# Buttons & gestures from Logitech T650 with xinput(1).
 two_finger_swipe_up = 4
 two_finger_swipe_down = 5
-two_finger_swipe_left = 13
-two_finger_swipe_right = 14
-three_finger_swipe_left = 8
-three_finger_swipe_right = 9
-three_finger_swipe_up = (XK_Super_L,)
-three_finger_swipe_down = ("super", XK_d)
+two_finger_swipe_left = 6
+two_finger_swipe_right = 7
+three_finger_swipe_up = 10   # 8
+three_finger_swipe_down = 11 # 9
+three_finger_swipe_left = 8  # 10
+three_finger_swipe_right = 9 # 11
+four_finger_swipe_up = 16
+four_finger_swipe_down = 17
+four_finger_swipe_left = 18
+four_finger_swipe_right = 19
 
-global_key_bindings.update({
-    top_edge_swipe: BaseWM.vmax,
-    right_edge_swipe: BaseWM.tmax,
-    left_edge_swipe: BaseWM.hmax,
+def mixer(command):
+    "A trivial wrapper for amixer(1)."
+    spawn("amixer set %s" % command)
+
+global_key_bindings = {
+    ("control", XK_Pause): BaseWM.debug, # Break
+    -XK_Pause: BaseWM.activate_screen_saver,
+    XK_Menu: BaseWM.change_tagset,
+
+    ("super", XK_slash): BaseWM.change_tagset,
+    ("super", XK_space): BaseWM.shell_command,
+    ("super", XK_Tab): BaseWM.start_focus_cycle_next,
+    ("super", XK_ISO_Left_Tab): BaseWM.start_focus_cycle_prev,
+    ("super", XK_period): BaseWM.start_focus_cycle_warp,
+    ("super", XK_F11): BaseWM.fullscreen,
+    ("super", XK_Right): BaseWM.hmax,
+    ("super", XK_Left): BaseWM.hmax,
+    ("super", XK_Up): BaseWM.vmax,
+    ("super", XK_Down): BaseWM.vmax,
+    ("super", XK_equal): BaseWM.tmax,
+    ("super", XK_minus): BaseWM.umax,
+    ("super", XK_Next): BaseWM.next_head,
+    ("super", XK_Prior): BaseWM.previous_head,
+    ("super", XK_Delete): BaseWM.delete_window,
+
+    ("super", "shift", XK_Up): RaiseLower.raise_window,
+    ("super", "shift", XK_Down): RaiseLower.lower_window,
+
+    ("super", XK_x): BaseWM.terminal,
+    ("super", XK_b): BaseWM.battery,
+    ("super", XK_c): BaseWM.calculator,
+    ("super", XK_e): BaseWM.editor,
+    ("super", XK_l): BaseWM.dictionary,
+    ("super", XK_m): BaseWM.mail,
+    ("super", XK_n): BaseWM.nomail,
+    ("super", XK_r): BaseWM.refresh,
+    ("super", XK_s): BaseWM.ssh,
+    ("super", XK_t): BaseWM.top,
+    ("super", XK_w): BaseWM.www,
+    ("super", XK_z): BaseWM.zzz,
+
+    XK_Pause: lambda wm, event: spawn("xmms2 toggle"),
+    XK_XF86AudioMute: lambda wm, event: mixer("Master toggle"),
+    XK_XF86AudioLowerVolume: lambda wm, event: mixer("Master 5%-,5%-"),
+    XK_XF86AudioRaiseVolume: lambda wm, event: mixer("Master 5%+,5%+"),
+    XK_XF86AudioMicMute: lambda wm, event: mixer("Capture toggle"),
+    XK_XF86MonBrightnessUp: BaseWM.inc_backlight,
+    XK_XF86MonBrightnessDown: BaseWM.dec_backlight,
+    XK_XF86Display: lambda wm, event: spawn("cheese")
+}
+
+global_button_bindings = {
+    ("super", 1): MoveResize.move_window,
+    ("super", 3): MoveResize.resize_window,
+    ("super", 4): MoveResize.roll_window,
+    ("super", 5): MoveResize.roll_window,
+    ("super", 6): MoveResize.roll_window,
+    ("super", 7): MoveResize.roll_window,
+    ("super", "shift", 1): RaiseLower.raise_window,
+    ("super", "shift", 3): RaiseLower.lower_window,
+    ("super", three_finger_swipe_right): BaseWM.start_focus_cycle_next,
+    ("super", three_finger_swipe_left): BaseWM.start_focus_cycle_prev,
     three_finger_swipe_up: RaiseLower.raise_window,
     three_finger_swipe_down: RaiseLower.lower_window,
-})
-
-global_button_bindings.update({
-    ("alt", three_finger_swipe_right): BaseWM.start_focus_cycle_next,
-    ("alt", three_finger_swipe_left): BaseWM.start_focus_cycle_prev,
-})
+    four_finger_swipe_up: BaseWM.tmax,
+    four_finger_swipe_down: BaseWM.vmax,
+    four_finger_swipe_left: BaseWM.tmax,
+    four_finger_swipe_right: BaseWM.hmax
+}
 
 focus_cycle_button_bindings.update({
-    three_finger_swipe_right: CycleFocus.cycle_focus_next,
-    three_finger_swipe_left: CycleFocus.cycle_focus_prev
-})
-
-focus_cycle_key_bindings.update({
     three_finger_swipe_up: CycleFocus.raise_target_window,
-    three_finger_swipe_down: CycleFocus.lower_target_window
+    three_finger_swipe_down: CycleFocus.lower_target_window,
+    three_finger_swipe_left: CycleFocus.cycle_focus_prev,
+    three_finger_swipe_right: CycleFocus.cycle_focus_next
 })
