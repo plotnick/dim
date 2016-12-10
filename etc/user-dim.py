@@ -54,6 +54,10 @@ default_options.update({
 XK_XF86AudioMute = 0x1008ff12
 XK_XF86AudioLowerVolume = 0x1008ff11
 XK_XF86AudioRaiseVolume = 0x1008ff13
+XK_XF86AudioPlay = 0x1008ff14
+XK_XF86AudioStop = 0x1008ff15
+XK_XF86AudioPrev = 0x1008ff16
+XK_XF86AudioNext = 0x1008ff17
 XK_XF86AudioMicMute = 0x1008ffb2
 XK_XF86MonBrightnessDown = 0x1008ff03
 XK_XF86MonBrightnessUp = 0x1008ff02
@@ -119,7 +123,10 @@ global_key_bindings = {
     ("super", XK_w): BaseWM.www,
     ("super", XK_z): BaseWM.zzz,
 
-    XK_Pause: lambda wm, event: spawn("xmms2 toggle"),
+    XK_XF86AudioStop: lambda wm, event: spawn("xmms2 stop"),
+    XK_XF86AudioPrev: lambda wm, event: spawn("xmms2 prev"),
+    XK_XF86AudioPlay: lambda wm, event: spawn("xmms2 toggle"),
+    XK_XF86AudioNext: lambda wm, event: spawn("xmms2 next"),
     XK_XF86AudioMute: lambda wm, event: mixer("Master toggle"),
     XK_XF86AudioLowerVolume: lambda wm, event: mixer("Master 5%-,5%-"),
     XK_XF86AudioRaiseVolume: lambda wm, event: mixer("Master 5%+,5%+"),
