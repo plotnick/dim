@@ -24,6 +24,7 @@ class InputField(Widget):
     buttons = ButtonBindingMap({})
     keys = KeyBindingMap({XK_Return: "commit",
                           XK_Escape: "rollback",
+                          ("control", "g"): "rollback",
                           XK_BackSpace: "delete-backward-char",
                           ("meta", XK_BackSpace): "backward-kill-word",
                           XK_Delete: "delete-forward-char",
