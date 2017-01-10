@@ -45,6 +45,7 @@ class Client(EventHandler, PropertyManager):
     wm_transient_for = PropertyDescriptor("WM_TRANSIENT_FOR", WindowProperty)
     wm_protocols = PropertyDescriptor("WM_PROTOCOLS", AtomList, [])
     wm_state = PropertyDescriptor("WM_STATE", WMState, WMState())
+    wm_client_leader = PropertyDescriptor("WM_CLIENT_LEADER", WindowProperty)
 
     # Dim-specific properties
     dim_tags = PropertyDescriptor("_DIM_TAGS", AtomList, [])

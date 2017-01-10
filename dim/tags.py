@@ -548,17 +548,24 @@ class TagManager(WindowManager):
                 client.dim_tags = AtomList(tags)
 
     def auto_tag(self, client):
-        """Return a list of tags which should be applied to the new client."""
-        # We use a few simple heuristics to choose the default tags.
-        # (1) If there are existing tags, don't apply any new ones.
-        # (2) Try to copy the tags of the currently focused window.
-        # (3) If there is no current focus, examine the the last tagset
-        # expression; if it begins with a valid tag name but there aren't
-        # any windows so tagged, return that. The idea here is that if the
-        # user switches to a new tag, the next window created should be
-        # tagged thus.
+        """Yield tags which should be applied to the new client.
+        We use a few simple heuristics to choose the default tags:
+        (1) If there are existing tags, don't apply any new ones.
+        (2) If there is a non-trivial client leader, use its tags.
+        (3) Copy the tags of the currently focused window.
+        (3) If there is no current focus, examine the the last tagset
+            expression; if it begins with a valid tag name but there
+            are no windows so tagged, return that. The idea is that
+            if the user switches to a new tag, the next window created
+            should be so tagged."""
         if client.dim_tags:
-            return None
+            return []
+        client_leader = self.get_client(client.wm_transient_for or
+                                        client.wm_client_leader)
+        if (client_leader and
+            client_leader != client and
+            client_leader.wm_state == WMState.NormalState):
+            return client_leader.dim_tags[:]
         elif (self.current_focus and
               self.current_focus.wm_state == WMState.NormalState):
             return self.current_focus.dim_tags[:]
