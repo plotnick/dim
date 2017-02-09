@@ -33,7 +33,7 @@ class TagMachine(object):
     The operations of the machine are simply its one-argument methods.
     For flexibility and ease of testing, the format of the instruction
     stream is configurable at machine-initialization time; e.g., a window
-    manger might use atoms, whereas a test might use simple strings.
+    manager might use atoms, whereas a test might use simple strings.
     Objects in the instruction stream that are not registered as opcodes
     are taken to be tagset names, the contents of which are implicitly
     pushed onto the stack."""
@@ -161,10 +161,10 @@ class TagMachine(object):
                       for client in self.clients.values()
                       if client.wm_state == WMState.NormalState))
 
-# Sequences of tag machine instructions will generally be provided by the
-# user in the form of infix expressions which we call tagset specifications.
-# Such expressions are tokenized, parsed, converted to postfix, and then
-# encoded as operations for the tag machine.
+# Sequences of tag machine instructions will generally be given by the
+# user in the form of infix expressions we call tagset specifications.
+# They are tokenized, parsed, converted to postfix, and then encoded
+# as tag machine operations.
 
 class SpecSyntaxError(Exception):
     pass
