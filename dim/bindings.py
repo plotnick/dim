@@ -324,12 +324,14 @@ class KeyBindings(Bindings):
 
     def __getitem__(self, event):
         """Look up and return the binding designated by the given event."""
-        assert isinstance(event, (KeyPressEvent, KeyReleaseEvent))
-        press = True if isinstance(event, KeyPressEvent) else False
-        state = event.state
-        symbol = self.keymap.lookup_key(event.detail, state)
-        time = event.time
-        key = (symbol, state, press)
+        if isinstance(event, (KeyPressEvent, KeyReleaseEvent)):
+            press = True if isinstance(event, KeyPressEvent) else False
+            state = event.state
+            symbol = self.keymap.lookup_key(event.detail, state)
+            time = event.time
+            key = (symbol, state, press)
+        else:
+            key = event
 
         # In a submap, ignore modifiers and prefix key release.
         if (self.binding_stack and
