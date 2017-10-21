@@ -165,14 +165,18 @@ def send_client_message(connection, destination, propagate, event_mask,
                         formatters={8: Struct("bB2xII20B"),
                                     16: Struct("bB2xII10H"),
                                     32: Struct("bB2xII5I")},
-                        code=33): # ClientMessage
+                        code=33, # ClientMessage
+                        check=False):
     """Send a ClientMessage event to a window.
 
     The format must be one of 8, 16, or 32, and the data must be a sequence
     of exactly 20, 10, or 5 values, respectively."""
     event = formatters[format].pack(code, format, window, type, *data)
-    return connection.core.SendEvent(bool(propagate), destination,
-                                     event_mask, event)
+    return (connection.core.SendEventChecked(bool(propagate), destination,
+                                             event_mask, event).check()
+            if check
+            else connection.core.SendEvent(bool(propagate), destination,
+                                           event_mask, event))
 
 @contextmanager
 def grab_server(connection):
@@ -184,10 +188,10 @@ def grab_server(connection):
         connection.core.UngrabServer()
 
 @contextmanager
-def mask_events(connection, window, event_mask, bits, checked=False):
+def mask_events(connection, window, event_mask, bits, check=False):
     """A context manager that executes its body with certain bits masked
     out of the window's event mask."""
-    if checked:
+    if check:
         def change_event_mask(mask):
             connection.core.ChangeWindowAttributesChecked(window,
                                                           CW.EventMask,

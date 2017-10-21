@@ -474,16 +474,17 @@ def intern_tagset_expr(conn, expr, atoms=None,
 def send_tagset_expr(conn, expr, show=True, screen=None, atoms=None):
     """Given a tag machine expression, encode it as a list of atoms and
     send it to the window manager via a property on the root window."""
-    if show:
-        expr += ["_DIM_TAGSET_SHOW"]
+    assert conn
+    atoms = atoms or AtomCache(conn)
+    if show: expr += ["_DIM_TAGSET_SHOW"]
     expr = intern_tagset_expr(conn, expr, atoms)
     screen = conn.pref_screen if screen is None else screen
     root = conn.get_setup().roots[screen].root
-    conn.core.ChangeProperty(PropMode.Replace,
-                             root,
-                             atoms.intern("_DIM_TAGSET_EXPR"),
-                             atoms.intern("ATOM"),
-                             *AtomList(expr).change_property_args())
+    conn.core.ChangePropertyChecked(PropMode.Replace,
+                                    root,
+                                    atoms.intern("_DIM_TAGSET_EXPR"),
+                                    atoms.intern("ATOM"),
+                                    *AtomList(expr).change_property_args()).check()
 
 # Finally, we have a manager class that maintains the tagsets and tag machine.
 

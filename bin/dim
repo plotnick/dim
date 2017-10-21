@@ -66,7 +66,6 @@ def update_tagset(display, spec):
     """Send a tagset specification to a running window manager."""
     conn = xcb.connect(display)
     send_tagset_expr(conn, parse_tagset_spec(spec))
-    conn.flush()
     conn.disconnect()
 
 def wm_exit(display, argv=None):
@@ -109,8 +108,8 @@ def wm_exit(display, argv=None):
     send_client_message(conn, root, False,
                         EventMask.SubstructureRedirect,
                         root, atoms["_DIM_WM_EXIT"],
-                        32, [time, 0, 0, 0, 0])
-    conn.flush()
+                        32, [time, 0, 0, 0, 0],
+                        check=True)
     conn.disconnect()
 
 class EmergencyTTY(object):
@@ -329,7 +328,7 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
         with mask_events(self.conn, self.screen.root,
                          self.root_event_mask,
                          EventMask.SubstructureRedirect,
-                         checked=True):
+                         check=True):
             with EmergencyTTY():
                 print_caption()
                 print u"""\a
