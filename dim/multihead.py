@@ -99,10 +99,12 @@ class HeadManager(object):
         client = client or self.manager.current_focus
         if not client:
             return
+        cur_head = self.client_head_geometry(client)
+        if not cur_head:
+            return
         heads = tuple(self)
         if len(heads) < 2:
             return
-        cur_head = self.client_head_geometry(client)
         new_head = heads[(heads.index(cur_head) + incr) % len(heads)]
         position = client.manager.constrain_position(client,
                                                      client.position() -
