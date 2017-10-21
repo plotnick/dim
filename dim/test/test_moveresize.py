@@ -16,9 +16,13 @@ from dim.xutil import int16
 
 from test_manager import EventType, TestClient, WMTestCase, WarpedPointer
 
+class MockConnection(object):
+    def flush(self):
+        pass
+
 class MockKeyboardMap(object):
     def __init__(self):
-        self.conn = None
+        self.conn = MockConnection()
 
     def scry_modifiers(self, modmap):
         pass
@@ -46,6 +50,7 @@ class MockClient(object):
         self.screen = None
         self.window = 0
         self.wm_normal_hints = size_hints
+        self.conn = MockConnection()
         self.manager = MockManager()
         self.decorator = MockDecorator()
 
@@ -54,6 +59,9 @@ class MockClient(object):
 
     def frame_to_absolute_geometry(self, geometry):
         return geometry
+
+    def position(self):
+        return self.geometry.position()
 
     def configure_request(self, **kwargs):
         return self.configure(self.geometry._replace(**kwargs))
@@ -71,7 +79,8 @@ class TestClientMove(unittest.TestCase):
             self.assertEqual(time, Time.CurrentTime)
         def change_cursor(cursor):
             self.assertEqual(cursor, ClientMove.cursor)
-        move = ClientMove(client, Position(0, 0), cleanup, change_cursor)
+        move = ClientMove(None, client, Position(0, 0), None,
+                          cleanup, change_cursor)
 
         pointer = Position(5, 10)
         move.update(pointer)
@@ -88,7 +97,8 @@ class TestClientResize(unittest.TestCase):
             self.assertEqual(time, Time.CurrentTime)
         def change_cursor(new_cursor):
             self.assertEqual(cursor, new_cursor)
-        resize = ClientResize(client, pointer, cleanup, change_cursor)
+        resize = ClientResize(None, client, pointer, None,
+                              cleanup, change_cursor)
 
         resize.update(pointer + delta)
         d = g._asdict()

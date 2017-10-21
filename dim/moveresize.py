@@ -317,7 +317,10 @@ class ClientUpdate(object):
         self.move_delta = move_delta
         self.geometry = client.absolute_geometry
         self.frame_geometry = client.frame_geometry
-        modifiers = next(client.manager.key_bindings.modsets(event.state))
+        try:
+            modifiers = next(client.manager.key_bindings.modsets(event.state))
+        except AttributeError:
+            modifiers = frozenset()
         self.buttons = ModalButtonBindingMap(modifiers,
                                              {-self.button: self.keys[None]}
                                              if self.button < 3
@@ -342,14 +345,15 @@ class ClientUpdate(object):
     def update(self, pointer):
         pass
             
-    def commit(self, time):
+    def commit(self, time=Time.CurrentTime):
         self.cleanup(time)
         self.client.decorator.message(None)
         self.client.conn.flush()
 
-    def rollback(self, time):
+    def rollback(self, time=Time.CurrentTime):
         self.cleanup(time)
         self.client.decorator.message(None)
+        self.client.conn.flush()
 
     def display_geometry(self, geometry):
         self.client.decorator.message(unicode(geometry))
@@ -383,7 +387,7 @@ class ClientMove(ClientUpdate):
     def update(self, pointer):
         self.display_geometry(self.move(self.position + self.delta(pointer)))
 
-    def rollback(self, time):
+    def rollback(self, time=Time.CurrentTime):
         self.move(self.position)
         super(ClientMove, self).rollback(time)
 
@@ -435,7 +439,7 @@ class ClientResize(ClientUpdate):
             size = self.size_hints.size_increments(size)
         self.display_geometry(size)
 
-    def rollback(self, time):
+    def rollback(self, time=Time.CurrentTime):
         self.client.configure(self.initial_geometry)
         super(ClientResize, self).rollback(time)
 
