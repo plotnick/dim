@@ -63,7 +63,7 @@ class Decorator(object):
 
         This method may be called prior to decoration, and so can rely only
         on data collected or computed during initialization."""
-        return Geometry(0, 0, 0, 0, None)
+        return empty_geometry
 
 class BorderHighlightFocus(Decorator):
     """Indicate the current focus via changes to the border color."""

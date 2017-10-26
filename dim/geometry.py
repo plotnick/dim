@@ -8,6 +8,7 @@ from operator import add, sub, lt, le, eq, ne, gt, ge
 from xcb.xproto import BadWindow, Gravity
 
 __all__ = ["Position", "Rectangle", "Geometry", "AspectRatio",
+           "origin", "empty_rectangle", "empty_geometry", "null_aspect_ratio",
            "offset_gravity", "gravity_offset", "gravity_names"]
 
 def make_tuple_adder(op):
@@ -139,6 +140,11 @@ AspectRatio.crop = lambda self, rect: \
     Rectangle(rect.width, rect.width * self.height // self.width) \
         if self.width > self.height \
         else Rectangle(rect.height * self.width // self.height, rect.height)
+
+origin = Position(0, 0)
+empty_rectangle = Rectangle(0, 0)
+empty_geometry = Geometry(0, 0, 0, 0, 0)
+null_aspect_ratio = AspectRatio(0, 0)
 
 # When dealing with window gravity, it's sometimes more convenient to use
 # a slightly richer representation than the simple enumeration specified

@@ -337,7 +337,7 @@ class ClientUpdate(object):
         dp = pointer - self.pointer
         if self.move_delta:
             if abs(dp) < self.move_delta:
-                return Position(0, 0)
+                return origin
             else:
                 self.move_delta = 0
         return dp
