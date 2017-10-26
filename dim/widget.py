@@ -7,7 +7,7 @@ from color import *
 from event import *
 from geometry import *
 
-__all__ = ["Config", "FontConfig", "HighlightConfig", "Widget"]
+__all__ = ["Config", "FontConfig", "HighlightConfig", "TextConfig", "Widget"]
 
 class Config(object):
     """A shared configuration object used by widget instances."""
@@ -91,11 +91,25 @@ class HighlightConfig(Config):
         return (HSVColor(h, s, (2.8 + v) / 4.0),
                 HSVColor(h, s, (2.0 + v) / 5.0))
 
+class TextConfig(FontConfig, HighlightConfig):
+    def __init__(self, manager, margin=5, **kwargs):
+        super(TextConfig, self).__init__(manager, **kwargs)
+
+        ascent = self.font_info.font_ascent
+        descent = self.font_info.font_descent
+        pad = descent
+        self.height = 2 * pad + ascent + descent
+        self.baseline = pad + ascent
+        self.margin = margin
+
 class Widget(EventHandler):
+    """A manager for a window, possibly on behalf of some client."""
+
     event_mask = EventMask.Exposure
     override_redirect = False
 
-    def __init__(self, manager=None, config=None, **kwargs):
+    def __init__(self, client=None, manager=None, config=None, **kwargs):
+        self.client = client
         self.manager = manager
         self.conn = manager.conn
         self.screen = manager.screen

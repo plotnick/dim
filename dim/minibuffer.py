@@ -6,24 +6,15 @@ from xcb.xproto import *
 
 from bindings import *
 from geometry import Geometry
+from icon import Icon
 from inputfield import InputField
 from keysym import *
 from widget import *
 from xutil import query_pointer
 
-__all__ = ["MinibufferConfig", "Minibuffer"]
+__all__ = ["Minibuffer"]
 
-class MinibufferConfig(FontConfig, HighlightConfig):
-    def __init__(self, manager, **kwargs):
-        super(MinibufferConfig, self).__init__(manager, **kwargs)
-
-        ascent = self.font_info.font_ascent
-        descent = self.font_info.font_descent
-        pad = descent
-        self.height = 2 * pad + ascent + descent
-        self.baseline = pad + ascent
-
-class Minibuffer(InputField):
+class Minibuffer(Icon, InputField):
     keys = KeyBindingMap({XK_Up: "previous-history-element",
                           XK_Down: "next-history-element",
                           ("control", "p"): "previous-history-element",

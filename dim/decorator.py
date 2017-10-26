@@ -9,6 +9,7 @@ import xcb.shape
 
 from geometry import *
 from titlebar import *
+from widget import Config
 
 __all__ = ["Decorator", "BorderHighlightFocus", "TitlebarDecorator"]
 
@@ -93,13 +94,16 @@ class TitlebarDecorator(Decorator):
 
     def __init__(self, conn, client,
                  focused_config=None, unfocused_config=None,
+                 titlebar_class=SimpleTitlebar,
                  **kwargs):
         super(TitlebarDecorator, self).__init__(conn, client, **kwargs)
 
-        assert isinstance(focused_config, TitlebarConfig)
-        assert isinstance(unfocused_config, TitlebarConfig)
+        assert isinstance(focused_config, Config)
+        assert isinstance(unfocused_config, Config)
+        assert issubclass(titlebar_class, Titlebar)
         self.titlebar = None
         self.titlebar_configs = (unfocused_config, focused_config)
+        self.titlebar_class = titlebar_class
 
     def decorate(self):
         assert self.titlebar is None
@@ -107,11 +111,11 @@ class TitlebarDecorator(Decorator):
 
         config = self.titlebar_configs[0]
         geometry = Geometry(0, 0, self.client.geometry.width, config.height, 0)
-        self.titlebar = SimpleTitlebar(client=self.client,
-                                       manager=self.client.manager,
-                                       parent=self.client.frame,
-                                       geometry=geometry,
-                                       config=config)
+        self.titlebar = self.titlebar_class(client=self.client,
+                                            manager=self.client.manager,
+                                            parent=self.client.frame,
+                                            geometry=geometry,
+                                            config=config)
         if self.client.shaped:
             self.update_frame_shape()
         self.titlebar.map()

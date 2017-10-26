@@ -219,21 +219,23 @@ def get_input_focus(connection, screen=None):
     else:
         return focus
 
-def get_geometry(connection, drawable):
-    """Request the geometry of a drawable from the X server and return it as
-    a Geometry instance."""
+def get_geometry(connection, drawable, depth=False):
+    """Request the geometry of a drawable from the X server
+    and return it as a Geometry instance. If depth is true,
+    return a (geometry, depth) tuple instead."""
     cookie = connection.core.GetGeometry(drawable)
     try:
         reply = cookie.reply()
     except BadDrawable:
-        return None
-    return Geometry(reply.x, reply.y,
-                    reply.width, reply.height,
-                    reply.border_width)
+        return (empty_geometry, 0) if depth else empty_geometry
+    geometry = Geometry(reply.x, reply.y,
+                        reply.width, reply.height,
+                        reply.border_width)
+    return (geometry, reply.depth) if depth else geometry
 
 def query_extension(connection, name, key):
-    """Query the server for the extension with the given name, and, if present,
-    return the corresponding extension handle."""
+    """Query the server for the extension with the given name,
+    and, if present, return the corresponding extension handle."""
     ext = connection.core.QueryExtension(len(name), name).reply()
     return connection(key) if ext.present else None
 

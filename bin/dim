@@ -20,17 +20,19 @@ from dim.bindings import *
 from dim.color import RGBi
 from dim.cycle import CycleFocus
 from dim.daemon import daemon
-from dim.decorator import TitlebarConfig, TitlebarDecorator
+from dim.decorator import TitlebarDecorator
 from dim.event import handler
 from dim.ewmh import *
 from dim.focus import FocusNewWindows, SloppyFocus, ClickToFocus
 from dim.keysym import *
-from dim.minibuffer import *
+from dim.minibuffer import Minibuffer
 from dim.moveresize import MoveResize
 from dim.properties import AtomList, WMCommand
 from dim.raiselower import RaiseLower
 from dim.selections import SelectionClient
 from dim.tags import *
+from dim.titlebar import IconTitlebar
+from dim.widget import TextConfig
 from dim.xutil import *
 
 def print_caption(out=None):
@@ -202,26 +204,27 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
         super(BaseWM, self).init_graphics()
 
         bindings = self.titlebar_bindings
-        self.focused_config = TitlebarConfig(self,
-                                             fg_color=RGBi(1.0, 1.0, 1.0),
-                                             bg_color=RGBi(0.0, 0.0, 0.0),
-                                             font=self.title_font,
-                                             button_bindings=bindings)
-        self.unfocused_config = TitlebarConfig(self,
-                                               fg_color=RGBi(0.0, 0.0, 0.0),
-                                               bg_color=RGBi(0.75, 0.75, 0.75),
-                                               font=self.title_font,
-                                               button_bindings=bindings)
+        self.focused_config = TextConfig(self,
+                                         fg_color=RGBi(1.0, 1.0, 1.0),
+                                         bg_color=RGBi(0.0, 0.0, 0.0),
+                                         font=self.title_font,
+                                         button_bindings=bindings)
+        self.unfocused_config = TextConfig(self,
+                                           fg_color=RGBi(0.0, 0.0, 0.0),
+                                           bg_color=RGBi(0.75, 0.75, 0.75),
+                                           font=self.title_font,
+                                           button_bindings=bindings)
 
-        self.minibuffer_config = MinibufferConfig(self,
-                                                  fg_color=RGBi(0.0, 0.0, 0.0),
-                                                  bg_color=RGBi(1.0, 1.0, 1.0),
-                                                  font=self.minibuffer_font)
+        self.minibuffer_config = TextConfig(self,
+                                            fg_color=RGBi(0.0, 0.0, 0.0),
+                                            bg_color=RGBi(1.0, 1.0, 1.0),
+                                            font=self.minibuffer_font)
 
     def make_decorator(self, cls, client, **kwargs):
         return cls(self.conn, client,
                    focused_config=self.focused_config,
                    unfocused_config=self.unfocused_config,
+                   titlebar_class=IconTitlebar,
                    **kwargs)
 
     @staticmethod

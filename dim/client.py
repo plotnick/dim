@@ -267,6 +267,14 @@ class Client(EventHandler, PropertyManager):
         self.unregister_property_change_handler("WM_NAME", handler)
 
     @property
+    def icon(self):
+        """Return the client's icon pixmap, mask, geometry, and depth."""
+        return (((self.wm_hints.icon_pixmap, self.wm_hints.icon_mask) +
+                 get_geometry(self.conn, self.wm_hints.icon_pixmap, depth=True))
+                if self.wm_hints.icon_pixmap
+                else (Pixmap._None, Pixmap._None, empty_geometry, 0))
+
+    @property
     def geometry(self):
         """Return the client window geometry relative to its parent's origin."""
         if self._geometry is None:

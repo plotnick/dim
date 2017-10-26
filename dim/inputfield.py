@@ -18,7 +18,7 @@ class AbortEdit(Exception):
     pass
 
 class InputField(Widget):
-    """A one-line, editable input field with an optional prompt."""
+    """A one-line, editable input/output field with an optional prompt."""
 
     kill_ring = deque([], 10)
     buttons = ButtonBindingMap({})
@@ -69,9 +69,10 @@ class InputField(Widget):
                                               self.manager.keymap,
                                               self.manager.modmap)
 
-    def draw(self, x=5):
+    def draw(self):
         super(InputField, self).draw()
 
+        x = self.config.margin
         y = self.config.baseline
         f = self.config.font_info
         def draw_string(x, string):

@@ -3,22 +3,13 @@
 from xcb.xproto import *
 
 from event import *
+from geometry import *
+from icon import *
 from inputfield import *
 from widget import *
 from xutil import textitem16
 
-__all__ = ["TitlebarConfig", "Titlebar", "SimpleTitlebar", "InputFieldTitlebar"]
-
-
-class TitlebarConfig(FontConfig, HighlightConfig):
-    def __init__(self, manager, **kwargs):
-        super(TitlebarConfig, self).__init__(manager, **kwargs)
-
-        ascent = self.font_info.font_ascent
-        descent = self.font_info.font_descent
-        pad = descent
-        self.height = 2 * pad + ascent + descent
-        self.baseline = pad + ascent
+__all__ = ["Titlebar", "SimpleTitlebar", "IconTitlebar", "InputFieldTitlebar"]
 
 class Titlebar(Widget):
     """A widget which displays a line of text. A titlebar need not display
@@ -28,16 +19,14 @@ class Titlebar(Widget):
                   EventMask.ButtonPress)
     override_redirect = True
 
-    def __init__(self, client=None, **kwargs):
-        super(Titlebar, self).__init__(**kwargs)
-        self.client = client
-
-    def create_window(self, *args, **kwargs):
-        window = super(Titlebar, self).create_window(*args, **kwargs)
+    def create_window(self, **kwargs):
+        window = super(Titlebar, self).create_window(**kwargs)
         self.config.button_bindings.establish_grabs(window)
         return window
 
     def draw(self):
+        super(Titlebar, self).draw()
+
         # Fill the titlebar with the background color.
         w = max(self.geometry.width - 1, 0)
         h = max(self.geometry.height - 2, 0)
@@ -64,21 +53,20 @@ class SimpleTitlebar(Titlebar):
                   EventMask.Exposure |
                   EventMask.ButtonPress)
 
-    def __init__(self, title="", margin=5, **kwargs):
+    def __init__(self, title="", **kwargs):
         super(SimpleTitlebar, self).__init__(**kwargs)
         self.title = title
-        self.margin = margin
 
     def draw(self):
         super(SimpleTitlebar, self).draw()
 
         if not self.title:
             self.title = self.client.title
-        width = self.geometry.width - 2 * self.margin
+        width = self.geometry.width - 2 * self.config.margin
         title = self.config.font_info.truncate(unicode(self.title), width)
         text_items = list(textitem16(title))
         self.conn.core.PolyText16(self.window, self.config.fg_gc,
-                                  self.margin, self.config.baseline,
+                                  self.config.margin, self.config.baseline,
                                   len(text_items), "".join(text_items))
 
     def client_title_changed(self, window, *args):
@@ -93,6 +81,10 @@ class SimpleTitlebar(Titlebar):
     @handler(UnmapNotifyEvent)
     def handle_unmap_notify(self, event):
         self.client.unregister_title_change_handler(self.client_title_changed)
+
+class IconTitlebar(Icon, SimpleTitlebar):
+    """A titlebar that displays an icon along with the title."""
+    pass
 
 class InputFieldTitlebar(InputField, Titlebar):
     event_mask = (EventMask.StructureNotify |
