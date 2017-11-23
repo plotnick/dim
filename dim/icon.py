@@ -16,8 +16,33 @@ class Icon(Widget):
         assert config, "Need a widget configuration."
         super(Icon, self).__init__(client=client, config=config, **kwargs)
 
-        self.icon_gc = None
+        self.icon_gc = self.conn.generate_id()
+        self.and_gc = self.conn.generate_id()
+        self.xor_gc = self.conn.generate_id()
+        self.conn.core.CreateGC(self.icon_gc, self.screen.root,
+                                (GC.Foreground |
+                                 GC.Background),
+                                [self.screen.black_pixel,
+                                 self.screen.white_pixel])
+        self.conn.core.CreateGC(self.and_gc, self.screen.root,
+                                (GC.Function |
+                                 GC.Foreground |
+                                 GC.Background),
+                                [GX._and,
+                                 self.screen.black_pixel,
+                                 self.screen.white_pixel])
+        self.conn.core.CreateGC(self.xor_gc, self.screen.root,
+                                GC.Function,
+                                [GX.xor])
+
         self.icon = client
+
+    def destroy(self):
+        self.conn.core.FreeGC(self.icon_gc)
+        self.conn.core.FreeGC(self.and_gc)
+        self.conn.core.FreeGC(self.xor_gc)
+
+        super(Icon, self).destroy()
 
     @property
     def margin(self):
@@ -65,30 +90,13 @@ class Icon(Widget):
                 self.offset = Position(margin,
                                        (self.geometry.height - margin // 2 -
                                         self.icon_geometry.height) // 2)
-
-            # Create or change the icon GC.
-            value_mask = (GC.Foreground |
-                          GC.Background |
-                          GC.ClipOriginX |
-                          GC.ClipOriginY |
-                          GC.ClipMask)
-            value_list = [self.screen.black_pixel,
-                          self.screen.white_pixel,
-                          self.offset.x,
-                          self.offset.y,
-                          self.icon_mask]
-            if self.icon_gc:
-                self.conn.core.ChangeGC(self.icon_gc, value_mask, value_list)
-            else:
-                self.icon_gc = self.conn.generate_id()
-                self.conn.core.CreateGC(self.icon_gc, self.screen.root,
-                                        value_mask, value_list)
-
-    def destroy(self):
-        if self.icon_gc:
-            self.conn.core.FreeGC(self.icon_gc)
-
-        super(Icon, self).destroy()
+            self.conn.core.ChangeGC(self.icon_gc,
+                                    (GC.ClipOriginX |
+                                     GC.ClipOriginY |
+                                     GC.ClipMask),
+                                    [self.offset.x,
+                                     self.offset.y,
+                                     self.icon_mask])
 
     def draw(self):
         # Temporarily adjust the margin to make room for the icon
@@ -103,21 +111,29 @@ class Icon(Widget):
             self.margin = margin
 
         if self.icon_pixmap:
+            mask = self.icon_mask
+            pixmap = self.icon_pixmap
+            window = self.window
+            (x, y) = self.offset
+            (w, h) = self.icon_geometry.size()
+
             # ICCCM §4.1.2.4 requires that icon pixmaps be 1 bit deep,
             # suggesting that "[c]lients that need more capabilities
             # from the icons than a simple two-color bitmap should use
             # icon windows." Many clients (including xterm) ignore
             # both the requirement and the suggestion.
             if self.icon_depth == 1:
-                self.conn.core.CopyPlane(self.icon_pixmap, self.window,
-                                         self.icon_gc, 0, 0,
-                                         self.offset.x, self.offset.y,
-                                         self.icon_geometry.width,
-                                         self.icon_geometry.height,
-                                         1)
+                self.conn.core.CopyPlane(pixmap, window, self.icon_gc,
+                                         0, 0, x, y, w, h, 1)
             elif self.icon_depth == self.screen.root_depth:
-                self.conn.core.CopyArea(self.icon_pixmap, self.window,
-                                        self.icon_gc, 0, 0,
-                                        self.offset.x, self.offset.y,
-                                        self.icon_geometry.width,
-                                        self.icon_geometry.height)
+                # It would be nice if we could use our GC with clip mask
+                # for the non-bitmap case, too, but the Intel SNA driver's
+                # mask compositing appears to be buggy, and sometimes garbles
+                # icons with non-trivial masks. This workaround is from
+                # Anthony Thyssen's X programming hints page at
+                # <https://www.ict.griffith.edu.au/anthony/info/X/Programing.hints>.
+                xor = self.xor_gc
+                _and = self.and_gc
+                self.conn.core.CopyArea(pixmap, window, xor, 0, 0, x, y, w, h)
+                self.conn.core.CopyPlane(mask, window, _and, 0, 0, x, y, w, h, 1)
+                self.conn.core.CopyArea(pixmap, window, xor, 0, 0, x, y, w, h)
