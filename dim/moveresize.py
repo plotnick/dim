@@ -1,6 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 import logging
+from threading import Thread, Event as ThreadEvent
 
 from xcb.xproto import *
 
@@ -117,17 +118,16 @@ class Resistance(object):
         return geometry
 
     def compute_resistance(self, geometry, gravity, direction):
-        """Compute and return any applicable resistance in the given cardinal
-        direction."""
+        """Compute applicable resistance in the given cardinal direction."""
         return 0
 
-    def cleanup(self, time):
+    def cleanup(self):
         pass
 
 class ScreenEdgeResistance(Resistance):
     """Resist moving a client's external edges past the screen edges."""
 
-    def shared_init(self, client, screen_edge_resistance=40, **kwargs):
+    def shared_init(self, client, screen_edge_resistance=80, **kwargs):
         super(ScreenEdgeResistance, self).shared_init(client, **kwargs)
 
         self.screen_edge_resistance = screen_edge_resistance
@@ -180,7 +180,7 @@ class WindowEdgeResistance(Resistance):
     """Classical edge resistance: visible windows' opposite external edges
     resist moving past one another."""
 
-    def shared_init(self, client, window_edge_resistance=20, **kwargs):
+    def shared_init(self, client, window_edge_resistance=40, **kwargs):
         super(WindowEdgeResistance, self).shared_init(client, **kwargs)
 
         self.window_edge_resistance = window_edge_resistance
@@ -235,13 +235,12 @@ class WindowEdgeResistance(Resistance):
                                                                     direction)
 
 class AlignWindowEdges(WindowEdgeResistance):
+    """Resist moving past aligned edges of other clients."""
+
     def __init__(self, *args, **kwargs):
         super(AlignWindowEdges, self).__init__(*args, **kwargs)
-        self.guides = [None, None]
-
-    def resist(self, *args):
-        self.draw_guide(None, None)
-        return super(AlignWindowEdges, self).resist(*args)
+        self.guides = dict((direction, None)
+                           for direction in cardinal_directions)
 
     def compute_resistance(self, geometry, gravity, direction):
         def edge(client):
@@ -256,41 +255,91 @@ class AlignWindowEdges(WindowEdgeResistance):
                 other_edge = edge(other)
                 if (current_edge <= other_edge and
                     other_edge < requested_edge < other_edge + threshold):
-                    self.draw_guide(cardinal_axis(direction), other_edge)
+                    self.draw_guide(direction, other_edge)
                     return requested_edge - other_edge
         else:
             for other in bsearch_ceil(requested_edge,
                                       self.client_list[direction],
                                       key=edge):
                 other_edge = edge(other)
-                if (current_edge >= other_edge and
+                if (other_edge > 0 and
+                    current_edge >= other_edge and
                     other_edge - threshold < requested_edge < other_edge):
-                    self.draw_guide(cardinal_axis(direction), other_edge - 1)
+                    self.draw_guide(direction, other_edge - 1)
                     return requested_edge - other_edge
+        self.cleanup(direction)
         return super(AlignWindowEdges, self).compute_resistance(geometry,
                                                                 gravity,
                                                                 direction)
 
-    def draw_guide(self, axis, coord):
-        def draw(axis, coord):
-            if coord is not None:
-                w, h = self.client.manager.screen_geometry.size()
-                line = [[coord, 0, coord, h], [0, coord, w, coord]][axis]
-                self.client.conn.core.PolyLine(CoordMode.Origin,
-                                               self.client.screen.root,
-                                               self.client.manager.xor_gc,
-                                               1, line)
-        if axis is None and coord is None:
-            for axis in (0, 1):
-                draw(axis, self.guides[axis])
-                self.guides[axis] = None
-        elif self.guides[axis] != coord:
-            draw(axis, self.guides[axis])
-            draw(axis, coord)
-            self.guides[axis] = coord
+    def draw_guide(self, direction, coord):
+        assert direction in cardinal_directions and coord >= 0
+        if self.guides[direction]:
+            if self.guides[direction].coord == coord:
+                return
+            self.cleanup(direction)
+        self.guides[direction] = MarchingAnts(self.client, direction, coord)
+        self.guides[direction].start()
 
-    def cleanup(self, time):
-        self.draw_guide(None, None)
+    def cleanup(self, direction=None):
+        assert direction is None or direction in cardinal_directions
+        for direction in ([direction] if direction else cardinal_directions):
+            if self.guides[direction]:
+                self.guides[direction].stop()
+                self.guides[direction] = None
+
+class MarchingAnts(Thread):
+    """Display a moving dashed line indicating window edge alignment."""
+
+    def __init__(self, client, direction, coord, timeout=0.05, offset=0, dash=8):
+        super(MarchingAnts, self).__init__()
+        self.client = client
+        self.direction = direction
+        self.coord = coord
+        self.timeout = timeout
+        self.offset = offset
+        self.dash = dash
+        self.daemon = True
+        self.timer = ThreadEvent()
+        self.gc = self.client.conn.generate_id()
+        self.client.conn.core.CreateGC(self.gc, self.client.screen.root,
+                                       (GC.Function |
+                                        GC.Foreground |
+                                        GC.LineStyle |
+                                        GC.DashOffset |
+                                        GC.DashList),
+                                       [GX.xor,
+                                        self.client.colors["#808080"],
+                                        LineStyle.OnOffDash,
+                                        self.offset,
+                                        self.dash])
+        c = self.coord
+        w, h = self.client.manager.screen_geometry.size()
+        self.line = ([c, 0, c, h] if self.direction[0] else
+                     [0, c, w, c])
+
+    def draw(self):
+        self.client.conn.core.PolyLine(CoordMode.Origin,
+                                       self.client.screen.root,
+                                       self.gc, 1, self.line)
+        self.client.conn.flush()
+
+    def run(self):
+        while True:
+            self.draw()
+            self.timer.wait(self.timeout)
+            self.draw() # erase
+            if self.timer.is_set():
+                self.client.conn.core.FreeGC(self.gc)
+                return
+            self.offset += 1
+            self.offset %= self.dash * 2
+            self.client.conn.core.ChangeGC(self.gc,
+                                           GC.DashOffset,
+                                           [self.offset])
+
+    def stop(self):
+        self.timer.set()
 
 class EdgeResistance(AlignWindowEdges, HeadEdgeResistance):
     pass
@@ -512,7 +561,7 @@ class MoveResize(WindowManager):
         return requested
 
     def end_client_update(self, time):
-        self.client_update.resistance.cleanup(time)
+        self.client_update.resistance.cleanup()
         self.conn.core.UngrabPointer(time)
         self.conn.core.UngrabKeyboard(time)
         self.client_update = None

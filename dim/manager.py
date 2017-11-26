@@ -115,35 +115,8 @@ class WindowManager(EventHandler, PropertyManager):
                                               self.modmap)
         self.heads = HeadManager(self.conn, self.screen, self)
         self.shape = query_extension(self.conn, "SHAPE", xcb.shape.key)
-        self.init_graphics()
 
         super(WindowManager, self).__init__(**kwargs)
-
-    def init_graphics(self):
-        self.black_gc = self.conn.generate_id()
-        self.conn.core.CreateGC(self.black_gc, self.screen.root,
-                                GC.Foreground | GC.Background,
-                                [self.screen.black_pixel,
-                                 self.screen.white_pixel])
-
-        self.white_gc = self.conn.generate_id()
-        self.conn.core.CreateGC(self.white_gc, self.screen.root,
-                                GC.Foreground | GC.Background,
-                                [self.screen.white_pixel,
-                                 self.screen.black_pixel])
-
-        self.xor_gc = self.conn.generate_id()
-        self.conn.core.CreateGC(self.xor_gc, self.screen.root,
-                                (GC.Function |
-                                 GC.Foreground |
-                                 GC.LineStyle |
-                                 GC.SubwindowMode |
-                                 GC.GraphicsExposures),
-                                [GX.xor,
-                                 self.colors["#808080"],
-                                 LineStyle.OnOffDash,
-                                 SubwindowMode.ClipByChildren,
-                                 False])
 
     def start(self):
         """Start the window manager. This method must only be called once."""

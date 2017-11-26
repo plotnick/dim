@@ -192,33 +192,29 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
         self.titlebar_bindings = titlebar_bindings
         self.title_font = title_font
         self.minibuffer_font = minibuffer_font
+
         super(BaseWM, self).__init__(**kwargs)
+
         self.focus_cycle = None # current focus cycle; only one allowed
+        self.focused_config = TextConfig(self,
+                                         fg_color=RGBi(1.0, 1.0, 1.0),
+                                         bg_color=RGBi(0.0, 0.0, 0.0),
+                                         font=self.title_font,
+                                         button_bindings=titlebar_bindings)
+        self.unfocused_config = TextConfig(self,
+                                           fg_color=RGBi(0.0, 0.0, 0.0),
+                                           bg_color=RGBi(0.75, 0.75, 0.75),
+                                           font=self.title_font,
+                                           button_bindings=titlebar_bindings)
+        self.minibuffer_config = TextConfig(self,
+                                            fg_color=RGBi(0.0, 0.0, 0.0),
+                                            bg_color=RGBi(1.0, 1.0, 1.0),
+                                            font=self.minibuffer_font)
 
     @property
     def current_focus(self):
         return (self.focus_cycle.target if self.focus_cycle
                 else super(BaseWM, self).current_focus)
-
-    def init_graphics(self):
-        super(BaseWM, self).init_graphics()
-
-        bindings = self.titlebar_bindings
-        self.focused_config = TextConfig(self,
-                                         fg_color=RGBi(1.0, 1.0, 1.0),
-                                         bg_color=RGBi(0.0, 0.0, 0.0),
-                                         font=self.title_font,
-                                         button_bindings=bindings)
-        self.unfocused_config = TextConfig(self,
-                                           fg_color=RGBi(0.0, 0.0, 0.0),
-                                           bg_color=RGBi(0.75, 0.75, 0.75),
-                                           font=self.title_font,
-                                           button_bindings=bindings)
-
-        self.minibuffer_config = TextConfig(self,
-                                            fg_color=RGBi(0.0, 0.0, 0.0),
-                                            bg_color=RGBi(1.0, 1.0, 1.0),
-                                            font=self.minibuffer_font)
 
     def make_decorator(self, cls, client, **kwargs):
         return cls(self.conn, client,
