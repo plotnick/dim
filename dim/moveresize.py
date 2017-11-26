@@ -124,61 +124,36 @@ class Resistance(object):
     def cleanup(self):
         pass
 
-class ScreenEdgeResistance(Resistance):
-    """Resist moving a client's external edges past the screen edges."""
+class HeadEdgeResistance(Resistance):
+    """Resist moving a client's external edges past the head or screen edges."""
 
-    def shared_init(self, client, screen_edge_resistance=80, **kwargs):
-        super(ScreenEdgeResistance, self).shared_init(client, **kwargs)
-
-        self.screen_edge_resistance = screen_edge_resistance
-        screen_geometry = client.manager.screen_geometry
-        self.screen_edges = dict((direction, screen_geometry.edge(direction))
-                                 for direction in cardinal_directions)
-
-    def edge_resistance(self, edge, geometry, gravity, direction):
-        requested_edge = geometry.edge(direction)
-        current_edge = self.client.frame_geometry.edge(direction)
-        threshold = self.screen_edge_resistance
-        if ((is_positive_direction(direction) and
-             current_edge <= edge and
-             edge < requested_edge < edge + threshold) or
-            (is_negative_direction(direction) and
-             current_edge >= edge and
-             edge - threshold < requested_edge < edge)):
-            return requested_edge - edge
-
-    def compute_resistance(self, geometry, gravity, direction):
-        resistance = self.edge_resistance(self.screen_edges[direction],
-                                          geometry, gravity, direction)
-        if resistance:
-            return resistance
-        return super(ScreenEdgeResistance, self).compute_resistance(geometry,
-                                                                    gravity,
-                                                                    direction)
-
-class HeadEdgeResistance(ScreenEdgeResistance):
-    """Treat head (monitor) edges like screen edges."""
-
-    def shared_init(self, client, **kwargs):
+    def shared_init(self, client, head_edge_resistance=80, **kwargs):
         super(HeadEdgeResistance, self).shared_init(client, **kwargs)
 
-        self.head_edges = [dict((direction, head.edge(direction))
-                                for direction in cardinal_directions)
-                           for head in client.manager.heads]
+        self.head_edge_resistance = head_edge_resistance
+        head_geometry = (client.manager.heads.client_head_geometry(client) or
+                         client.manager.screen_geometry)
+        self.head_edges = dict((direction, head_geometry.edge(direction))
+                                 for direction in cardinal_directions)
 
     def compute_resistance(self, geometry, gravity, direction):
-        for edges in self.head_edges:
-            resistance = self.edge_resistance(edges[direction],
-                                              geometry, gravity, direction)
-            if resistance:
-                return resistance
+        requested_edge = geometry.edge(direction)
+        current_edge = self.client.frame_geometry.edge(direction)
+        head_edge = self.head_edges[direction]
+        threshold = self.head_edge_resistance
+        if ((is_positive_direction(direction) and
+             current_edge <= head_edge and
+             head_edge < requested_edge < head_edge + threshold) or
+            (is_negative_direction(direction) and
+             current_edge >= head_edge and
+             head_edge - threshold < requested_edge < head_edge)):
+            return requested_edge - head_edge
         return super(HeadEdgeResistance, self).compute_resistance(geometry,
                                                                   gravity,
                                                                   direction)
 
 class WindowEdgeResistance(Resistance):
-    """Classical edge resistance: visible windows' opposite external edges
-    resist moving past one another."""
+    """Resist moving past opposite external edges of other clients."""
 
     def shared_init(self, client, window_edge_resistance=40, **kwargs):
         super(WindowEdgeResistance, self).shared_init(client, **kwargs)
@@ -245,6 +220,9 @@ class AlignWindowEdges(WindowEdgeResistance):
     def compute_resistance(self, geometry, gravity, direction):
         def edge(client):
             return client.frame_geometry.edge(direction)
+        def on_same_head(client, other):
+            return (self.client.manager.heads.client_head_geometry(client) ==
+                    self.client.manager.heads.client_head_geometry(other))
         requested_edge = geometry.edge(direction)
         current_edge = edge(self.client)
         threshold = self.window_edge_resistance
@@ -254,7 +232,8 @@ class AlignWindowEdges(WindowEdgeResistance):
                                        key=edge):
                 other_edge = edge(other)
                 if (current_edge <= other_edge and
-                    other_edge < requested_edge < other_edge + threshold):
+                    other_edge < requested_edge < other_edge + threshold and
+                    on_same_head(self.client, other)):
                     self.draw_guide(direction, other_edge)
                     return requested_edge - other_edge
         else:
@@ -264,7 +243,8 @@ class AlignWindowEdges(WindowEdgeResistance):
                 other_edge = edge(other)
                 if (other_edge > 0 and
                     current_edge >= other_edge and
-                    other_edge - threshold < requested_edge < other_edge):
+                    other_edge - threshold < requested_edge < other_edge and
+                    on_same_head(self.client, other)):
                     self.draw_guide(direction, other_edge - 1)
                     return requested_edge - other_edge
         self.cleanup(direction)
@@ -314,9 +294,10 @@ class MarchingAnts(Thread):
                                         self.offset,
                                         self.dash])
         c = self.coord
-        w, h = self.client.manager.screen_geometry.size()
-        self.line = ([c, 0, c, h] if self.direction[0] else
-                     [0, c, w, c])
+        g = (self.client.manager.heads.client_head_geometry(self.client) or
+             self.client.manager.screen_geometry)
+        self.line = ([c, g.y, c, g.y + g.height] if self.direction[0] else
+                     [g.x, c, g.x + g.width, c])
 
     def draw(self):
         self.client.conn.core.PolyLine(CoordMode.Origin,
