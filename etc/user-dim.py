@@ -106,6 +106,7 @@ global_key_bindings = {
     ("super", XK_Next): BaseWM.next_head,
     ("super", XK_Prior): BaseWM.previous_head,
     ("super", XK_Delete): BaseWM.delete_window,
+    ("super", XK_BackSpace): BaseWM.delete_window,
 
     ("super", "shift", XK_Up): RaiseLower.raise_window,
     ("super", "shift", XK_Down): RaiseLower.lower_window,
