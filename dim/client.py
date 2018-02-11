@@ -247,7 +247,7 @@ class Client(EventHandler, PropertyManager):
 
     def establish_grabs(self, key_bindings=None, button_bindings=None):
         """Establish grabs for the given bindings."""
-        # Subclasses may override this method to, e.g., inhibit bindings.
+        # Subclasses may override this method, e.g., to inhibit bindings.
         if key_bindings:
             key_bindings.establish_grabs(self.frame)
         if button_bindings:

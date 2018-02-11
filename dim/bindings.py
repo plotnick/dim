@@ -307,6 +307,7 @@ class KeyBindings(Bindings):
                              else KeyBindingMap(bindings))
         super(KeyBindings, self).__init__(bindings, keymap, modmap)
         self.binding_stack = []
+        self.grabs = {}
 
     def push(self, bindings, symbol, window, time):
         """Push the current bindings onto the stack and grab the keyboard."""
@@ -358,30 +359,38 @@ class KeyBindings(Bindings):
             self.unwind(time)
         return binding
 
-    def establish_grabs(self, window):
-        """Establish passive grabs on the given window for our bindings."""
-        # We establish passive grabs only for the top-level bindings.
-        # This is important if an action in a submap launches a new client;
-        # we don't want that client to establish grabs for the bindings in
-        # the submap.
+    def compute_grabs(self):
+        """Yield (modifiers, keycode) grab pairs for the current bindings."""
+        # We establish grabs only for top-level bindings. If an action in
+        # a submap launches a new client, we don't want the new client to
+        # establish grabs for the bindings in the submap.
         bindings = (self.bindings if not self.binding_stack
                                   else self.binding_stack[0].bindings)
         inverse_aliases = dict(zip(bindings.aliases.values(),
                                    bindings.aliases.keys()))
-        def grabs():
-            for modset, symbol, press in bindings.keys():
-                modifiers = self.bucky_bits(modset)
-                for keycode in self.keymap.keysym_to_keycodes(symbol):
+        for modset, symbol, press in bindings.keys():
+            modifiers = self.bucky_bits(modset)
+            for keycode in self.keymap.keysym_to_keycodes(symbol):
+                yield (modifiers, keycode)
+            alias = inverse_aliases.get(symbol, None)
+            if alias:
+                for keycode in self.keymap.keysym_to_keycodes(alias):
                     yield (modifiers, keycode)
-                alias = inverse_aliases.get(symbol, None)
-                if alias:
-                    for keycode in self.keymap.keysym_to_keycodes(alias):
-                        yield (modifiers, keycode)
-        self.conn.core.UngrabKey(Grab.Any, window, ModMask.Any)
-        for modifiers, key in grabs():
+
+    def update_grabs(self, window, grabs):
+        """Update grabs that have changed since the previous update."""
+        prev_grabs = self.grabs.get(window) or frozenset()
+        self.grabs[window] = grabs # save for next update
+        for mods, key in prev_grabs - grabs:
             for locks in self.locking_modifier_combinations():
-                self.conn.core.GrabKey(True, window, locks | modifiers, key,
+                self.conn.core.UngrabKey(key, window, locks | mods)
+        for mods, key in grabs - prev_grabs:
+            for locks in self.locking_modifier_combinations():
+                self.conn.core.GrabKey(True, window, locks | mods, key,
                                        GrabMode.Async, GrabMode.Async)
+
+    def establish_grabs(self, window):
+        self.update_grabs(window, frozenset(self.compute_grabs()))
 
 class ButtonBindings(Bindings):
     def __init__(self, bindings, keymap, modmap):
