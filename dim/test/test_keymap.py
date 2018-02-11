@@ -1,7 +1,7 @@
 # -*- mode: Python; coding: utf-8 -*-
 
 import unittest
-from operator import itemgetter
+from operator import and_, itemgetter
 from random import choice, shuffle
 
 import xcb
@@ -237,7 +237,8 @@ class TestKeyboardMap(MappingTestCase):
                 # re-initialize the whole mapping.
                 self.keymap.refresh()
                 self.assertTrue(self.keymap.keysyms_per_keycode >= m + 2)
-                self.assertEqual([list(self.keymap[keycode][:m + 2])], new)
+                cur = list(self.keymap[keycode][:m + 2])
+                self.assertEqual(cur, map(and_, cur, new[0]))
             else:
                 self.fail("partial refresh unexpectedly succeeded")
         finally:

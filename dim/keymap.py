@@ -43,6 +43,7 @@ class KeyboardMap(InputDeviceMapping):
         setup = conn.get_setup()
         self.min_keycode = setup.min_keycode
         self.max_keycode = setup.max_keycode
+        self.keycodes = {} # frozen sets, indexed by keysym
         super(KeyboardMap, self).__init__(conn, cookie,
                                           self.min_keycode, len(self))
 
@@ -53,6 +54,7 @@ class KeyboardMap(InputDeviceMapping):
 
     def refresh(self, first_keycode=None, count=None):
         """Request an updated keyboard mapping for the specified keycodes."""
+        self.keycodes = {} # flush the cache
         if first_keycode is None:
             first_keycode = self.min_keycode
         if count is None:
@@ -209,20 +211,26 @@ class KeyboardMap(InputDeviceMapping):
         return (self.max_keycode - self.min_keycode) + 1
 
     def keysym_to_keycodes(self, keysym):
-        """Return the set of keycodes that generate the given symbol."""
-        keycodes = set()
-        for j in range(self.keysyms_per_keycode):
-            for i in range(self.min_keycode, self.max_keycode + 1):
-                if self[(i, j)] == keysym:
-                    keycodes.add(i)
-        return keycodes
+        """Return the set of keycodes that generate the given symbol.
+        These sets are fairly expensive to compute, so we cache them."""
+        try:
+            return self.keycodes[keysym]
+        except KeyError:
+            keycodes = frozenset(i
+                                 for j in range(self.keysyms_per_keycode)
+                                 for i in range(self.min_keycode,
+                                                self.max_keycode + 1)
+                                 if self[(i, j)] == keysym)
+            self.keycodes[keysym] = keycodes
+            return keycodes
 
     def keysym_to_keycode(self, keysym):
-        """Return an arbitrary keycode that generates the given symbol, or None
-        if there is no such keycode."""
-        try:
-            return self.keysym_to_keycodes(keysym).pop()
-        except KeyError:
+        """Return an arbitrary keycode that generates the given symbol,
+        or None if there is no such keycode."""
+        keycodes = self.keysym_to_keycodes(keysym)
+        if keycodes:
+            return tuple(keycodes)[0]
+        else:
             return None
 
     def clear_modifiers(self):
