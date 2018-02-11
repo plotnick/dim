@@ -637,6 +637,10 @@ class WindowManager(EventHandler, PropertyManager):
             argv = self.wm_command
         raise ExitWindowManager(*argv)
 
+    @handler((GraphicsExposureEvent, NoExposureEvent))
+    def handle_graphics_exposure(self, event):
+        pass
+
 def client_selector(f, wm_class=WindowManager):
     """Register the given function as a client selector function for the
     given manager class.
