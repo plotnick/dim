@@ -91,6 +91,16 @@ class StringBuffer(Sequence):
         self.insert(char * n)
 
     @command
+    def transpose_chars(self):
+        if self.point == 0:
+            self.forward_char()
+        elif self.point == len(self.buffer):
+            self.backward_char()
+        (self.buffer[self.point-1], self.buffer[self.point]) = \
+        (self.buffer[self.point], self.buffer[self.point-1])
+        self.forward_char()
+
+    @command
     def yank(self):
         self.insert(self.kill_ring[-1])
 
