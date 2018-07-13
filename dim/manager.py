@@ -238,11 +238,9 @@ class WindowManager(EventHandler, PropertyManager):
 
     def place(self, client, geometry, adopted=False):
         """Determine and return a suitable geometry for a client window.
-
-        By default, the requested size is always used. If a non-trivial
-        position which is on-screen is requested, it is used as well;
-        otherwise, the upper left corner of the head currently containing
-        the pointer is used."""
+        Use the requested size by default. If a non-trivial, on-screen
+        position is requested, use that; otherwise, use the upper left
+        corner of the head containing the pointer."""
         return (geometry
                 if (adopted or
                     (geometry.position() and geometry & self.screen_geometry))
