@@ -446,15 +446,17 @@ class WindowManager(EventHandler, PropertyManager):
 
     @handler(ConfigureRequestEvent)
     def handle_configure_request(self, event,
-                                 move_mask=ConfigWindow.X | ConfigWindow.Y):
-        """Handle a ConfigureWindow request from a top-level window."""
+                                 attrs=("x", "y",
+                                        "width", "height", "border_width",
+                                        "sibling", "stack_mode")):
+        """Handle a ConfigureWindow request from a top-level window
+        by pulling attributes out of the event and punting to the
+        client's configure_request method."""
         client = self.get_client(event.window, True)
         if client:
-            attrs = ["x", "y", "width", "height", "border_width",
-                     "sibling", "stack_mode"]
             arg_names = select_values(event.value_mask, attrs)
-            arg_values = select_values(event.value_mask, [getattr(event, attr)
-                                                          for attr in attrs])
+            arg_values = select_values(event.value_mask,
+                                       [getattr(event, attr) for attr in attrs])
             args = zip(arg_names, arg_values)
             log.debug("Client 0x%x requested %s.", client.window,
                       ", ".join(map(lambda arg: "%s=%s" % arg, args)))
