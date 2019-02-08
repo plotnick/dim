@@ -144,16 +144,18 @@ class RandRManager(HeadManager, EventHandler):
         self.outputs = dict(outputs())
         self.primary_output = primary_cookie.reply().output
 
-        self.log.debug("CRTCs: {\n %s\n}.",
-                       ",\n ".join("%d: %s" % (crtc, geometry)
-                                   for crtc, geometry in self.crtcs.items()))
-        self.log.debug("Outputs: {\n %s\n}.",
-                       ",\n ".join("%s%d: %s" % \
-                                   ("\b*" if output == self.primary_output
-                                          else "",
-                                    output,
-                                    info)
-                                   for output, info in self.outputs.items()))
+        def join(strings): ",\n ".join(strings)
+        if self.crtcs:
+            self.log.debug("CRTCs: {\n %s\n}.",
+                           join("%d: %s" % (crtc, geometry)
+                                for crtc, geometry in self.crtcs.items()))
+        if self.outputs:
+            self.log.debug("Outputs: {\n %s\n}.",
+                           join("%s%d: %s" % \
+                                ("\b*" if output == self.primary_output else "",
+                                 output,
+                                 info)
+                                for output, info in self.outputs.items()))
         if self.primary_output:
             self.log.debug("Backlight level on output %d: %s",
                            self.primary_output,
