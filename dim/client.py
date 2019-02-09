@@ -548,6 +548,12 @@ class Client(EventHandler, PropertyManager):
         """Ask the client to delete its top-level window."""
         self.send_protocol_message(self.atoms["WM_DELETE_WINDOW"], time)
 
+    # For compatibility with NetWMStateClient.
+    def is_fullscreen(self): return False
+    def is_maximized_horizontally(self): return False
+    def is_maximized_vertically(self): return False
+    def is_maximized(self): return False
+
     @handler(DestroyNotifyEvent)
     def handle_destroy_notify(self, event):
         if event.window == self.window:

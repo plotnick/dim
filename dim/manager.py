@@ -237,14 +237,33 @@ class WindowManager(EventHandler, PropertyManager):
             client.withdraw()
 
     def place(self, client, geometry, adopted=False):
-        """Determine and return a suitable geometry for a client window.
-        Use the requested size by default. If a non-trivial, on-screen
-        position is requested, use that; otherwise, use the upper left
-        corner of the head containing the pointer."""
-        return (geometry
-                if (adopted or
-                    (geometry.position() and geometry & self.screen_geometry))
-                else geometry.move(self.heads.focus_head_geometry.position()))
+        """Compute and return a suitable geometry for a client window.
+        If we are adopting the client or it has requested a nontrivial
+        position, we return the request unaltered; otherwise, we employ
+        a few heuristics to try to place it somewhere sensible, falling
+        back to the requested geometry."""
+        if adopted or geometry.position():
+            return geometry
+
+        # Try to place the window near the current focus.
+        focus = self.current_focus
+        if (focus and focus is not client and
+            focus.wm_state == WMState.NormalState and
+            focus.visibility != Visibility.FullyObscured and
+            not focus.is_fullscreen()):
+            bw = geometry.border_width
+            offset = Position((focus.offset.width or focus.offset.height) + bw,
+                              focus.offset.height + bw)
+            return geometry.move(focus.frame_geometry + offset)
+
+        # Center the window near the pointer position.
+        pointer = query_pointer(self.conn, self.screen)
+        if pointer:
+            position = Position(max(0, pointer.x - geometry.width // 2),
+                                max(0, pointer.y - geometry.height // 2))
+            return geometry.move(position)
+
+        return geometry
 
     def constrain_position(self, client, position):
         """Compute and return a new position for the given client's frame
