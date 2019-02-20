@@ -82,4 +82,8 @@ class SelectionClient(EventHandler):
 
     @handler(SelectionNotifyEvent)
     def handle_selection_notify(self, event):
-        self.selections.pop(event.requestor)(event)
+        try:
+            requestor = self.selections.pop(event.requestor)
+        except IndexError:
+            return
+        requestor(event)
