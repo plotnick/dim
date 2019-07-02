@@ -394,10 +394,13 @@ class NetWMStateClient(NetClient):
 
         if not self.saved_geometry:
             self.saved_geometry = self.absolute_geometry
-
         frame = self.absolute_to_frame_geometry(self.saved_geometry)
-        max = (self.manager.fullscreen_geometry(self) -
-               Rectangle(2 * frame.border_width, 2 * frame.border_width))
+        full = self.manager.fullscreen_geometry(self)
+        if not frame or not full:
+            self.log.warning("Can't determine maximum geometry.")
+            return False
+
+        max = (full - Rectangle(2 * frame.border_width, 2 * frame.border_width))
         if horizontal:
             frame = Geometry(max.x, frame.y, max.width, frame.height, 0)
         if vertical:
