@@ -95,7 +95,9 @@ class HeadManager(object):
                 self.pointer_head_geometry)
 
     def move_client(self, client=None, incr=1):
-        """Move a client window to another head."""
+        """Move a client window to another head.
+        Attempts to maintain the client's head-relative geometry,
+        skipping heads for which that geometry would be invisible."""
         client = client or self.manager.current_focus
         if not client:
             return
@@ -103,13 +105,21 @@ class HeadManager(object):
         if not cur_head:
             return
         heads = tuple(self)
-        if len(heads) < 2:
-            return
-        new_head = heads[(heads.index(cur_head) + incr) % len(heads)]
-        position = client.manager.constrain_position(client,
-                                                     client.position() -
-                                                     cur_head.position() +
-                                                     new_head.position())
+        n = len(heads)
+        if n < 2:
+            return # no other head to switch to
+        assert (0 < abs(incr) < n), "Bad increment %r" % incr
+        while True:
+            new_head = heads[(heads.index(cur_head) + incr) % n]
+            if new_head == cur_head:
+                return
+            new_position = (client.position() -
+                            cur_head.position() +
+                            new_head.position()) & new_head
+            if new_position or new_position == origin:
+                break
+            incr += 1 if incr > 0 else -1
+        position = client.manager.constrain_position(client, new_position)
         client.configure_request(x=position.x, y=position.y)
 
 class RandRManager(HeadManager, EventHandler):
