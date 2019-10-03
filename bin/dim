@@ -27,7 +27,7 @@ from dim.focus import FocusNewWindows, SloppyFocus, ClickToFocus
 from dim.keysym import *
 from dim.minibuffer import Minibuffer
 from dim.moveresize import MoveResize
-from dim.properties import AtomList, WMCommand
+from dim.properties import AtomList, WMCommand, WMState
 from dim.raiselower import RaiseLower
 from dim.selections import SelectionClient
 from dim.tags import *
@@ -244,6 +244,18 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
         tag_names = [atom_name(tag) for tag in client.dim_tags]
         client.decorator.read_from_user("Tags: ", " ".join(tag_names),
                                         set_tags, time=event.time)
+
+    def browser(self, event):
+        """Focus & raise the most recently focused visible browser window."""
+        def is_visible_browser(client):
+            return (client.wm_state == WMState.NormalState and
+                    client.wm_window_role == "browser")
+        try:
+            browser = next(self.find_focus_clients(is_visible_browser))
+        except StopIteration:
+            return
+        self.ensure_focus(browser, event.time)
+        browser.configure(stack_mode=StackMode.TopIf)
 
     def mail(self, event):
         """Show, focus, and raise the mail window."""

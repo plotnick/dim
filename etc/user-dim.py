@@ -111,6 +111,7 @@ global_key_bindings = {
     ("super", "shift", XK_Up): RaiseLower.raise_window,
     ("super", "shift", XK_Down): RaiseLower.lower_window,
 
+    ("super", XK_apostrophe): BaseWM.browser,
     ("super", XK_x): BaseWM.terminal,
     ("super", XK_b): BaseWM.battery,
     ("super", XK_c): BaseWM.calculator,

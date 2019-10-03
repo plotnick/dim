@@ -115,6 +115,13 @@ class FocusPolicy(WindowManager):
                             self.screen.root, self.atoms["_DIM_ENSURE_FOCUS"],
                             32, [time, window, 0, 0, 0])
 
+    def find_focus_clients(self, test=lambda x: False):
+        """Yield clients in the focus list that satisfy the given test
+        (cf. WindowManager.find_clients)."""
+        for client in self.focus_list:
+            if test(client):
+                yield client
+
     def update_for_changed_mapping(self):
         super(FocusPolicy, self).update_for_changed_mapping()
         self.key_bindings.establish_grabs(self.default_focus_window)
