@@ -245,38 +245,6 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
         client.decorator.read_from_user("Tags: ", " ".join(tag_names),
                                         set_tags, time=event.time)
 
-    def browser(self, event):
-        """Focus & raise the most recently focused visible browser window."""
-        def is_visible_browser(client):
-            return (client.wm_state == WMState.NormalState and
-                    client.wm_window_role == "browser")
-        try:
-            browser = next(self.find_focus_clients(is_visible_browser))
-        except StopIteration:
-            return
-        self.ensure_focus(browser, event.time)
-        browser.configure(stack_mode=StackMode.TopIf)
-
-    def mail(self, event):
-        """Show, focus, and raise the mail window."""
-        # I use an xterm(1) whose instance name is set to "mail".
-        # You might use something different. If so, you'll probably
-        # have to change the tag specs, too.
-        def is_mail_client(client):
-            return client.wm_class.instance_name == "mail"
-        try:
-            mail = next(self.find_clients(is_mail_client))
-        except StopIteration:
-            return
-        self.tagset(r".|mail")
-        self.ensure_focus(mail, event.time)
-        mail.configure(stack_mode=StackMode.TopIf)
-
-    def nomail(self, event):
-        """Hide the mail client."""
-        self.tagset(r".\mail")
-        self.ensure_focus(None, event.time)
-
     def shell_command(self, event):
         """Prompt for a shell command and execute it."""
         def execute(command):
@@ -315,14 +283,6 @@ class BaseWM(EWMHManager, SelectionClient, TagManager, MoveResize, RaiseLower):
                                 rollback=dismiss)
         minibuffer.map(event.time)
 
-    def next_head(self, event):
-        """Move the currently focused window to the next head."""
-        self.heads.move_client(self.current_focus, +1)
-
-    def previous_head(self, event):
-        """Move the currently focused window to the previous head."""
-        self.heads.move_client(self.current_focus, -1)
-
     def delete_window(self, event):
         """Delete the currently focused window."""
         client = self.current_focus
@@ -360,70 +320,6 @@ and modify (carefully, please!) internal data structures.
         since otherwise the release will immediately wake up the server."""
         assert isinstance(event, (KeyReleaseEvent, ButtonReleaseEvent))
         self.conn.core.ForceScreenSaverChecked(ScreenSaver.Active).check()
-
-    def inc_backlight(self, event):
-        """Make the primary output's backlight brighter."""
-        try:
-            self.heads.adjust_backlight(self.heads.primary_output, 5, "inc")
-        except AttributeError:
-            return
-
-    def dec_backlight(self, event):
-        """Make the primary output's backlight dimmer."""
-        try:
-            self.heads.adjust_backlight(self.heads.primary_output, 5, "dec")
-        except AttributeError:
-            return
-
-    def battery(self, event):
-        spawn("xbat -d", True) # shell function
-
-    def calculator(self, event):
-        spawn("xcalc")
-
-    def editor(self, event):
-        spawn("emacsclient -nc")
-
-    def refresh(self, event):
-        spawn("xrefresh")
-
-    def ssh(self, event):
-        spawn("xterm -e ssh home")
-
-    def terminal(self, event):
-        spawn("xterm")
-
-    def top(self, event):
-        spawn("xterm -e top")
-
-    def dictionary(self, event):
-        "Look up the selected word in the dictionary."
-        def lookup(string):
-            spawn('dict "%s" 2>&1 | xmessage -nearmouse -file -' % \
-                  shquote(string.strip()))
-        self.call_with_primary_selection(lookup,
-                                         requestor=self.default_focus_window,
-                                         time=event.time)
-
-    def www(self, event,
-            scheme=re.compile(r"^(https?|ftp|file)://", re.IGNORECASE),
-            spaces=re.compile(r"\s+", re.UNICODE),
-            angles=re.compile(r"<([^>]+)>"),
-            quotes=re.compile(r'"([^"]+)"')):
-        """Invoke a web browser with the selected URI.
-        See RFC 3986, Appendix C: Delimiting a URI in Context."""
-        def browse(string):
-            string = spaces.sub("", string)
-            delims = angles.match(string) or quotes.match(string)
-            string = delims.group(1) if delims else string
-            spawn('x-www-browser "%s"' % shquote(string) if scheme.match(string)
-                  else "x-www-browser")
-        self.call_with_primary_selection(browse,
-                                         requestor=self.default_focus_window,
-                                         time=event.time)
-
-    def zzz(self, event):
-        spawn("zzz", True) # command on BSD, alias on GNU/Linux
 
     def start_focus_cycle(self, event, direction):
         """Start a new focus cycle, unless there is one already running."""
@@ -491,7 +387,7 @@ and modify (carefully, please!) internal data structures.
     def tmax(self, event): self.maximize(event_window(event), True, True)
     def umax(self, event): self.maximize(event_window(event), False, False)
 
-class UserManager(BaseWM):
+class UserWM(BaseWM):
     """This manager class is defined with the sole purpose of being redefined
     by the user for their own purposes (e.g., in ~/.dim.py). In particular,
     it provides a convenient place to hang hooks and handlers of various
@@ -526,7 +422,6 @@ global_key_bindings = {
     },
 
     ("control", XK_Pause): BaseWM.debug,
-    -XK_Pause: BaseWM.activate_screen_saver
 }
 
 global_button_bindings = {
@@ -686,7 +581,7 @@ if __name__ == "__main__":
     wm_class = type("WM",
                     tuple(([focus_modes[options.focus_mode]]) +
                           ([FocusNewWindows] if options.focus_new else []) +
-                          ([UserManager, BaseWM])),
+                          ([UserWM, BaseWM])),
                     {})
 
     # Instantiate the window manager and start it up.

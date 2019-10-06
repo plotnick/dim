@@ -35,14 +35,119 @@ def trivial_decoration(client, class_names=("XClock", "XEyes")):
     if client.wm_class.class_name in class_names:
         return Decorator
 
-class UserManager(BaseWM):
-    """Override and extend the built-in window manager functionality."""
+class UserWM(BaseWM):
+    """Override and extend the built-in window manager functionality
+    by defining new event handlers for custom commands."""
 
     def __init__(self, *args, **kwargs):
-        super(UserManager, self).__init__(*args, **kwargs)
+        super(UserWM, self).__init__(*args, **kwargs)
 
         # Define a tagset alias for the browser and mail windows.
         self.tagset(r"z={www|mail}", show=False)
+
+    def next_head(self, event):
+        """Move the currently focused window to the next head."""
+        self.heads.move_client(self.current_focus, +1)
+
+    def previous_head(self, event):
+        """Move the currently focused window to the previous head."""
+        self.heads.move_client(self.current_focus, -1)
+
+    def browser(self, event):
+        """Focus & raise the most recently focused visible browser window."""
+        def is_visible_browser(client):
+            return (client.wm_state == WMState.NormalState and
+                    client.wm_window_role == "browser")
+        try:
+            browser = next(self.find_focus_clients(is_visible_browser))
+        except StopIteration:
+            return
+        self.ensure_focus(browser, event.time)
+        browser.configure(stack_mode=StackMode.TopIf)
+
+    def mail(self, event):
+        """Show, focus, and raise the mail window."""
+        # I use an xterm(1) whose instance name is set to "mail".
+        # You might use something different. If so, you'll probably
+        # have to change the tag specs, too.
+        def is_mail_client(client):
+            return client.wm_class.instance_name == "mail"
+        try:
+            mail = next(self.find_clients(is_mail_client))
+        except StopIteration:
+            return
+        self.tagset(r".|mail")
+        self.ensure_focus(mail, event.time)
+        mail.configure(stack_mode=StackMode.TopIf)
+
+    def nomail(self, event):
+        """Hide the mail client."""
+        self.tagset(r".\mail")
+        self.ensure_focus(None, event.time)
+
+    def inc_backlight(self, event):
+        """Make the primary output's backlight brighter."""
+        try:
+            self.heads.adjust_backlight(self.heads.primary_output, 5, "inc")
+        except AttributeError:
+            return
+
+    def dec_backlight(self, event):
+        """Make the primary output's backlight dimmer."""
+        try:
+            self.heads.adjust_backlight(self.heads.primary_output, 5, "dec")
+        except AttributeError:
+            return
+
+    def battery(self, event):
+        spawn("xbat -d", True) # shell function
+
+    def calculator(self, event):
+        spawn("xcalc")
+
+    def editor(self, event):
+        spawn("emacsclient -nc")
+
+    def refresh(self, event):
+        spawn("xrefresh")
+
+    def ssh(self, event):
+        spawn("xterm -e ssh home")
+
+    def terminal(self, event):
+        spawn("xterm")
+
+    def top(self, event):
+        spawn("xterm -e top")
+
+    def dictionary(self, event):
+        "Look up the selected word in the dictionary."
+        def lookup(string):
+            spawn('dict "%s" 2>&1 | xmessage -nearmouse -file -' % \
+                  shquote(string.strip()))
+        self.call_with_primary_selection(lookup,
+                                         requestor=self.default_focus_window,
+                                         time=event.time)
+
+    def www(self, event,
+            scheme=re.compile(r"^(https?|ftp|file)://", re.IGNORECASE),
+            spaces=re.compile(r"\s+", re.UNICODE),
+            angles=re.compile(r"<([^>]+)>"),
+            quotes=re.compile(r'"([^"]+)"')):
+        """Invoke a web browser with the selected URI.
+        See RFC 3986, Appendix C: Delimiting a URI in Context."""
+        def browse(string):
+            string = spaces.sub("", string)
+            delims = angles.match(string) or quotes.match(string)
+            string = delims.group(1) if delims else string
+            spawn('x-www-browser "%s"' % shquote(string) if scheme.match(string)
+                  else "x-www-browser")
+        self.call_with_primary_selection(browse,
+                                         requestor=self.default_focus_window,
+                                         time=event.time)
+
+    def zzz(self, event):
+        spawn("zzz", True) # command on BSD, alias on GNU/Linux
 
 # Use Unicode versions of the standard fonts for titles & minibuffers.
 default_options.update({
@@ -87,43 +192,43 @@ def mixer(command):
     spawn("amixer set %s" % command)
 
 global_key_bindings = {
-    ("control", XK_Pause): BaseWM.debug, # Break
-    -XK_Pause: BaseWM.activate_screen_saver,
-    XK_Menu: BaseWM.change_tagset,
+    ("control", XK_Pause): UserWM.debug, # Break
+    -XK_Pause: UserWM.activate_screen_saver,
+    XK_Menu: UserWM.change_tagset,
 
-    ("super", XK_slash): BaseWM.change_tagset,
-    ("super", XK_space): BaseWM.shell_command,
-    ("super", XK_Tab): BaseWM.start_focus_cycle_next,
-    ("super", XK_ISO_Left_Tab): BaseWM.start_focus_cycle_prev,
-    ("super", XK_period): BaseWM.start_focus_cycle_warp,
-    ("super", XK_F11): BaseWM.fullscreen,
-    ("super", XK_Right): BaseWM.hmax,
-    ("super", XK_Left): BaseWM.hmax,
-    ("super", XK_Up): BaseWM.vmax,
-    ("super", XK_Down): BaseWM.vmax,
-    ("super", XK_equal): BaseWM.tmax,
-    ("super", XK_minus): BaseWM.umax,
-    ("super", XK_Next): BaseWM.next_head,
-    ("super", XK_Prior): BaseWM.previous_head,
-    ("super", XK_Delete): BaseWM.delete_window,
-    ("super", XK_BackSpace): BaseWM.delete_window,
+    ("super", XK_slash): UserWM.change_tagset,
+    ("super", XK_space): UserWM.shell_command,
+    ("super", XK_Tab): UserWM.start_focus_cycle_next,
+    ("super", XK_ISO_Left_Tab): UserWM.start_focus_cycle_prev,
+    ("super", XK_period): UserWM.start_focus_cycle_warp,
+    ("super", XK_F11): UserWM.fullscreen,
+    ("super", XK_Right): UserWM.hmax,
+    ("super", XK_Left): UserWM.hmax,
+    ("super", XK_Up): UserWM.vmax,
+    ("super", XK_Down): UserWM.vmax,
+    ("super", XK_equal): UserWM.tmax,
+    ("super", XK_minus): UserWM.umax,
+    ("super", XK_Next): UserWM.next_head,
+    ("super", XK_Prior): UserWM.previous_head,
+    ("super", XK_Delete): UserWM.delete_window,
+    ("super", XK_BackSpace): UserWM.delete_window,
 
     ("super", "shift", XK_Up): RaiseLower.raise_window,
     ("super", "shift", XK_Down): RaiseLower.lower_window,
 
-    ("super", XK_apostrophe): BaseWM.browser,
-    ("super", XK_x): BaseWM.terminal,
-    ("super", XK_b): BaseWM.battery,
-    ("super", XK_c): BaseWM.calculator,
-    ("super", XK_e): BaseWM.editor,
-    ("super", XK_l): BaseWM.dictionary,
-    ("super", XK_m): BaseWM.mail,
-    ("super", XK_n): BaseWM.nomail,
-    ("super", XK_r): BaseWM.refresh,
-    ("super", XK_s): BaseWM.ssh,
-    ("super", XK_t): BaseWM.top,
-    ("super", XK_w): BaseWM.www,
-    ("super", XK_z): BaseWM.zzz,
+    ("super", XK_apostrophe): UserWM.browser,
+    ("super", XK_x): UserWM.terminal,
+    ("super", XK_b): UserWM.battery,
+    ("super", XK_c): UserWM.calculator,
+    ("super", XK_e): UserWM.editor,
+    ("super", XK_l): UserWM.dictionary,
+    ("super", XK_m): UserWM.mail,
+    ("super", XK_n): UserWM.nomail,
+    ("super", XK_r): UserWM.refresh,
+    ("super", XK_s): UserWM.ssh,
+    ("super", XK_t): UserWM.top,
+    ("super", XK_w): UserWM.www,
+    ("super", XK_z): UserWM.zzz,
 
     XK_XF86AudioStop: lambda wm, event: spawn("xmms2 stop"),
     XK_XF86AudioPrev: lambda wm, event: spawn("xmms2 prev"),
@@ -133,8 +238,8 @@ global_key_bindings = {
     XK_XF86AudioLowerVolume: lambda wm, event: mixer("Master 5%-,5%-"),
     XK_XF86AudioRaiseVolume: lambda wm, event: mixer("Master 5%+,5%+"),
     XK_XF86AudioMicMute: lambda wm, event: mixer("Capture toggle"),
-    XK_XF86MonBrightnessUp: BaseWM.inc_backlight,
-    XK_XF86MonBrightnessDown: BaseWM.dec_backlight,
+    XK_XF86MonBrightnessUp: UserWM.inc_backlight,
+    XK_XF86MonBrightnessDown: UserWM.dec_backlight,
     XK_XF86Display: lambda wm, event: spawn("cheese")
 }
 
@@ -147,14 +252,14 @@ global_button_bindings = {
     ("super", 7): MoveResize.roll_window,
     ("super", "shift", 1): RaiseLower.raise_window,
     ("super", "shift", 3): RaiseLower.lower_window,
-    ("super", three_finger_swipe_right): BaseWM.start_focus_cycle_next,
-    ("super", three_finger_swipe_left): BaseWM.start_focus_cycle_prev,
+    ("super", three_finger_swipe_right): UserWM.start_focus_cycle_next,
+    ("super", three_finger_swipe_left): UserWM.start_focus_cycle_prev,
     three_finger_swipe_up: RaiseLower.raise_window,
     three_finger_swipe_down: RaiseLower.lower_window,
-    four_finger_swipe_up: BaseWM.tmax,
-    four_finger_swipe_down: BaseWM.vmax,
-    four_finger_swipe_left: BaseWM.tmax,
-    four_finger_swipe_right: BaseWM.hmax
+    four_finger_swipe_up: UserWM.tmax,
+    four_finger_swipe_down: UserWM.vmax,
+    four_finger_swipe_left: UserWM.tmax,
+    four_finger_swipe_right: UserWM.hmax
 }
 
 focus_cycle_button_bindings.update({
