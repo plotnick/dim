@@ -175,7 +175,9 @@ class RandRManager(HeadManager, EventHandler):
         self.ext.SelectInput(self.screen.root, xcb.randr.NotifyMask.CrtcChange)
 
     def __iter__(self):
-        return self.crtcs.itervalues()
+        return (self.crtcs.itervalues()
+                if self.crtcs
+                else super(RandRManager, self).__iter__())
 
     def query_backlight_range(self, output):
         reply = self.ext.QueryOutputProperty(output,
