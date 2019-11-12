@@ -97,6 +97,8 @@ class Icon(Widget):
                                     [self.offset.x,
                                      self.offset.y,
                                      self.icon_mask])
+        else:
+            self.offset = origin
 
     def draw(self):
         # Temporarily adjust the margin to make room for the icon
