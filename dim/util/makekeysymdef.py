@@ -44,6 +44,7 @@ def is_unicode_keysym(keysym):
     return (keysym & 0xff000000) == 0x01000000
 
 def make_keysym_def(input, output):
+    output.write("# -*- mode: Python; coding: utf-8 -*-")
     if input.name:
         output.write("# Automatically generated from %s.\n\n" % input.name)
 
