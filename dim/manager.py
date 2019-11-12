@@ -425,12 +425,15 @@ class WindowManager(EventHandler, PropertyManager):
                   (" on window 0x%x" % window) if window else "")
 
     def get_client(self, window, client_window_only=False):
-        """Retrieve the client with the given top-level window, or None if
-        there is no such client.
+        """Retrieve the client with the given top-level window,
+        or None if there is no such client.
 
         The second (optional) argument controls whether the window must
         be a top-level client window, or if it is permissible to return
         a client instance from its frame or a subwindow thereof."""
+        if window is None:
+            return None
+        window = int(window)
         if not client_window_only:
             # Walk up the window hierarchy until we come to a frame or a root.
             w = window

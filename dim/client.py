@@ -72,6 +72,9 @@ class Client(EventHandler, PropertyManager):
         else:
             return NotImplemented
 
+    def __hash__(self):
+        return hash(self.window)
+
     def __int__(self):
         return self.window
 
