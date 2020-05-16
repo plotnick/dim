@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- mode: Python; coding: utf-8 -*-
 
 """Distutils-based setup script for Dim.
